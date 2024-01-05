@@ -2,6 +2,14 @@
    designated as the entry point. */
 ENTRY(_entry)
  
+VERSION {
+	VERS_1.0 {
+		local:
+			stack;
+			STACK_SIZE;
+	};
+}
+
 /* Tell where the various sections of the object files will be put in the final
    kernel image. */
 SECTIONS
