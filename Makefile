@@ -26,9 +26,13 @@ run: $(ISO)
 	qemu-system-$(ARCH) -cdrom $<
 
 $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
-	zig build --prefix $(BOOTDIR) -Dname=$(notdir $(BIN)) --summary all --cache-dir $(ZIGCACHE)
-
-FORCE:
+	zig build \
+		--prefix $(BOOTDIR) \
+		-Dname=$(notdir $(BIN)) \
+		-Doptimize=ReleaseSafe \
+		--cache-dir $(ZIGCACHE) \
+		--summary all \
+		--verbose
 
 clean:
 	rm -rf $(BIN) $(ZIGCACHE)
