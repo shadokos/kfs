@@ -15,7 +15,7 @@ GRUB_CONF=$(BOOTDIR)/grub/grub.cfg
 ARCH=i386
 
 SRCDIR = src
-SRC = linker.ld ../build.zig boot.zig kernel.zig
+SRC = linker.ld ../build.zig boot.zig kernel.zig mmio_console.zig
 
 all: $(ISO)
 
