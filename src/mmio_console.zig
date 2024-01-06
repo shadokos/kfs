@@ -46,14 +46,16 @@ pub fn BufferN(comptime history_size: u32) type {
         /// current offset for view (0 mean bottom)
         scroll_offset: u32 = 0,
 
+        const Self = @This();
+
         /// clear line line in the history buffer
-        fn clear_line(self: *BufferN(history_size), line: u32) void {
+        fn clear_line(self: *Self, line: u32) void {
             for (0..width) |i|
                 self.history_buffer[line][i] = ' ';
         }
 
         /// write the character c in the buffer
-        pub fn putchar(self: *BufferN(history_size), c: u8) void {
+        pub fn putchar(self: *Self, c: u8) void {
             if (self.pos.col == 0)
                 self.clear_line(self.pos.line);
             switch (c) {
@@ -97,7 +99,7 @@ pub fn BufferN(comptime history_size: u32) type {
         }
 
         /// write the string s to the buffer and return the number of bites writen, suitable for use with std.io.Writer
-        pub fn write(self: *BufferN(history_size), s: []const u8) std.os.WriteError!usize {
+        pub fn write(self: *Self, s: []const u8) std.os.WriteError!usize {
             var ret: usize = 0;
             for (s) |c| {
                 self.putchar(c);
@@ -107,61 +109,61 @@ pub fn BufferN(comptime history_size: u32) type {
         }
 
         /// write the string s to the buffer
-        pub fn putstr(self: *BufferN(history_size), s: []const u8) void {
+        pub fn putstr(self: *Self, s: []const u8) void {
             _ = self.write(s) catch 0;
         }
 
         /// clear the buffer
-        pub fn clear(self: *BufferN(history_size)) void {
+        pub fn clear(self: *Self) void {
             for (0..history_size) |i| {
                 self.clear_line(i);
             }
         }
 
         /// set the background color for the next chars
-        pub fn set_background_color(self: *BufferN(history_size), color: Color) void {
+        pub fn set_background_color(self: *Self, color: Color) void {
             self.current_color &= 0x00ff;
             self.current_color |= @intFromEnum(color) << 4;
         }
 
         /// set the font color for the next chars
-        pub fn set_font_color(self: *BufferN(history_size), color: Color) void {
+        pub fn set_font_color(self: *Self, color: Color) void {
             self.current_color &= 0xff00;
             self.current_color |= @intFromEnum(color);
         }
 
         /// move the view to the bottom of the buffer
-        pub fn set_view_bottom(self: *BufferN(history_size)) void {
+        pub fn set_view_bottom(self: *Self) void {
             self.scroll_offset = 0;
         }
 
         /// move the view to the top of the buffer
-        pub fn set_view_top(self: *BufferN(history_size)) void {
+        pub fn set_view_top(self: *Self) void {
             self.scroll_offset = history_size - height;
         }
 
-        pub fn scroll(self: *BufferN(history_size), off: i32) void {
+        pub fn scroll(self: *Self, off: i32) void {
             if (off > 0) {
                 self.scroll_offset += @intCast(off);
             } else {
-                self.scroll_offset -|= @intCast(off);
+                self.scroll_offset -= @intCast(off);
             }
             if (self.scroll_offset >= history_size)
                 self.set_view_top();
         }
 
         /// move the view one page up
-        pub fn page_up(self: *BufferN(history_size)) void {
+        pub fn page_up(self: *Self) void {
             self.scroll(height);
         }
 
         /// move the view one page down
-        pub fn page_down(self: *BufferN(history_size)) void {
+        pub fn page_down(self: *Self) void {
             self.scroll(-height);
         }
 
         /// print the buffer to the vga buffer
-        pub fn view(self: BufferN(history_size)) void {
+        pub fn view(self: Self) void {
             for (0..height) |l| {
                 for (0..width) |c| {
                     const view_line = (history_size + history_size + self.pos.line + 1 -| height -| self.scroll_offset) % history_size;
