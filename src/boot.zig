@@ -1,8 +1,4 @@
-const kernel = @import("kernel.zig");
-
-comptime {
-   _ = kernel;
-}
+comptime { _ = @import("kernel.zig"); }
 
 export const STACK_SIZE: u32 = 16 * 1024;
 const ALIGN = 1 << 0;
