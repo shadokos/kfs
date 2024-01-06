@@ -1,4 +1,6 @@
 const std = @import("std");
+const Writer = @import("std").io.Writer;
+const fmt = @import("std").fmt;
 
 /// The colors available for the console
 pub const Color = enum(u4) {
@@ -25,6 +27,8 @@ const width = 80;
 /// screen height
 const height = 25;
 
+const BufferWriter = Writer(*Buffer, std.os.WriteError, Buffer.write);
+
 /// address of the mmio vga buffer
 var mmio_buffer: [*]u16 = @ptrFromInt(0xB8000);
 
@@ -45,6 +49,9 @@ pub fn BufferN(comptime history_size: u32) type {
 
         /// current offset for view (0 mean bottom)
         scroll_offset: u32 = 0,
+
+        /// writer for the buffer
+        writer: BufferWriter = undefined,
 
         const Self = @This();
 
@@ -111,6 +118,16 @@ pub fn BufferN(comptime history_size: u32) type {
         /// write the string s to the buffer
         pub fn putstr(self: *Self, s: []const u8) void {
             _ = self.write(s) catch 0;
+        }
+
+        /// initialize the writer field of the buffer
+        pub fn init_writer(self: *Self) void {
+            self.writer = BufferWriter{ .context = self };
+        }
+
+        /// write a formatted string to the buffer
+        pub fn printf(self: *Self, comptime format: []const u8, args: anytype) void {
+            fmt.format(self.writer, format, args) catch unreachable;
         }
 
         /// clear the buffer
