@@ -153,7 +153,7 @@ pub fn BufferN(comptime history_size: u32) type {
             var n: u32 = std.fmt.parseInt(u32, self.escape_buffer[1 .. len - 1], 10) catch 0;
         	switch (n) {
         		@intFromEnum(Attribute.reset) => {self.attributes = 0;},
-        		@intFromEnum(Attribute.bold)...@intFromEnum(Attribute.hidden) => {self.attributes |= n;},
+        		@intFromEnum(Attribute.bold)...@intFromEnum(Attribute.hidden) => {self.attributes |= @as(u16, 1) << @intCast(n);},
         		30...37 => {self.set_font_color(
         			switch (n) {
         				30 => Color.black,
@@ -328,8 +328,8 @@ pub fn BufferN(comptime history_size: u32) type {
 					.{ .prefix = "[D", .f = &handle_scroll },
 					.{ .prefix = "[M", .f = &handle_scroll },
 					.{ .prefix = "[E", .f = &handle_nothing }, // move to next line
-					.{ .prefix = "[7", .f = &handle_nothing }, // save cursor pos and attributes
-					.{ .prefix = "[8", .f = &handle_nothing }, // restore cursor pos and attributes
+					// .{ .prefix = "[7", .f = &handle_nothing }, // save cursor pos and attributes
+					// .{ .prefix = "[8", .f = &handle_nothing }, // restore cursor pos and attributes
 					.{ .prefix = "[H", .f = &handle_nothing }, // set tab at current column
 					.{ .prefix = "[g", .f = &handle_nothing }, // Clear a tab at the current column
 					.{ .prefix = "[0g", .f = &handle_nothing }, // Clear a tab at the current column
@@ -409,8 +409,20 @@ pub fn BufferN(comptime history_size: u32) type {
                 ' '...'~' => {
                 	var char : u16 = c;
                 	char |= self.current_color << 8;
-                	if (self.attributes & @intFromEnum(Attribute.blink) != 0) {
-                		char |= 1 << 15;
+                	// if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.blink)) != 0) {
+                	// 	char |= 1 << 15;
+                	// }
+                	if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.dim)) == 0) {
+                		char |= 1 << 3 << 8;
+                	}
+                	if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.reverse)) != 0) {
+						var swap = char;
+						char &= 0x00ff;
+						char |= (swap & 0x0f00) << 4;
+						char |= (swap & 0xf000) >> 4;
+                	}
+                	if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.hidden)) != 0) {
+						char = (char & 0xf0ff) | ((char & 0xf000) >> 4);
                 	}
                     self.history_buffer[self.pos.line][self.pos.col] = char;
                     self.move_cursor(0, 1);
