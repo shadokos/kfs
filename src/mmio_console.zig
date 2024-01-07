@@ -1,4 +1,4 @@
-const std = @import("std");
+const ft = @import("ft/ft.zig");
 const Writer = @import("std").io.Writer;
 const fmt = @import("std").fmt;
 
@@ -39,7 +39,7 @@ const width = 80;
 /// screen height
 const height = 25;
 
-/// std.Writer implementation for BufferN
+/// ft.Writer implementation for BufferN
 fn BufferWriter(comptime history_size: u32) type { return Writer(*BufferN(history_size), BufferN(history_size).write_error, BufferN(history_size).write); }
 
 /// address of the mmio vga buffer
@@ -136,8 +136,8 @@ pub fn BufferN(comptime history_size: u32) type {
 
 		/// handle move escape codes
         fn handle_move(self: *BufferN(history_size)) void {
-            const len = std.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
-            var n: i32 = std.fmt.parseInt(i32, self.escape_buffer[1 .. len - 1], 10) catch 0;
+            const len = ft.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
+            var n: i32 = ft.fmt.parseInt(i32, self.escape_buffer[1 .. len - 1], 10) catch 0;
             switch (self.escape_buffer[len - 1]) {
                 'A' => {self.move_cursor(-n, 0);},
                 'B' => {self.move_cursor(n, 0);},
@@ -149,8 +149,8 @@ pub fn BufferN(comptime history_size: u32) type {
 
 		/// handle set attributes escape codes
         fn handle_set_attribute(self: *BufferN(history_size)) void {
-            const len = std.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
-            var n: u32 = std.fmt.parseInt(u32, self.escape_buffer[1 .. len - 1], 10) catch 0;
+            const len = ft.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
+            var n: u32 = ft.fmt.parseInt(u32, self.escape_buffer[1 .. len - 1], 10) catch 0;
         	switch (n) {
         		@intFromEnum(Attribute.reset) => {self.attributes = 0;},
         		@intFromEnum(Attribute.bold)...@intFromEnum(Attribute.hidden) => {self.attributes |= @as(u16, 1) << @intCast(n);},
@@ -196,8 +196,8 @@ pub fn BufferN(comptime history_size: u32) type {
 
 		/// handle set clear line escape codes
         fn handle_clearline(self: *BufferN(history_size)) void {
-            const len = std.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
-            var n: i32 = std.fmt.parseInt(i32, self.escape_buffer[2 .. len - 1], 10) catch 0;
+            const len = ft.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
+            var n: i32 = ft.fmt.parseInt(i32, self.escape_buffer[2 .. len - 1], 10) catch 0;
         	switch (n)
         	{
         		0 => {
@@ -217,8 +217,8 @@ pub fn BufferN(comptime history_size: u32) type {
 
 		/// handle set clear screen escape codes
         fn handle_clearscreen(self: *BufferN(history_size)) void {
-            const len = std.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
-            var n: i32 = std.fmt.parseInt(i32, self.escape_buffer[2 .. len - 1], 10) catch 0;
+            const len = ft.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
+            var n: i32 = ft.fmt.parseInt(i32, self.escape_buffer[2 .. len - 1], 10) catch 0;
             const screen_bottom = (self.head_line + history_size - self.scroll_offset) % history_size;
             var screen_top = (screen_bottom + history_size - height + 1) % history_size;
 
@@ -255,14 +255,14 @@ pub fn BufferN(comptime history_size: u32) type {
 
 		/// handle set goto escape codes
         fn handle_goto(self: *BufferN(history_size)) void {
-            const semicolon_pos = std.mem.indexOfScalarPos(u8, &self.escape_buffer, 2, ';') orelse 0;
+            const semicolon_pos = ft.mem.indexOfScalarPos(u8, &self.escape_buffer, 2, ';') orelse 0;
             var v: u32 = 0;
             var h: u32 = 0;
             if (semicolon_pos != 0)
             {
-				const len = std.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
-				v = std.fmt.parseInt(u32, self.escape_buffer[2 .. semicolon_pos], 10) catch 0;
-				h = std.fmt.parseInt(u32, self.escape_buffer[semicolon_pos + 1 .. len - 1], 10) catch 0;
+				const len = ft.mem.indexOfSentinel(u8, 0, &self.escape_buffer);
+				v = ft.fmt.parseInt(u32, self.escape_buffer[2 .. semicolon_pos], 10) catch 0;
+				h = ft.fmt.parseInt(u32, self.escape_buffer[semicolon_pos + 1 .. len - 1], 10) catch 0;
             }
             self.escape_mode = false;
             var off_v : i32 = -@as(i32, @intCast(self.pos.line)) + @rem(@as(i32,@intCast(self.head_line)) -| @as(i32,@intCast(self.scroll_offset)) -| @as(i32,@intCast(height - 1)) + @as(i32,@intCast(v)), history_size);
@@ -279,9 +279,9 @@ pub fn BufferN(comptime history_size: u32) type {
 
             while (prefix[i] != 0 and buffer[j] != 0) {
                 if (prefix[i] == '^') {
-                	if (!std.ascii.isDigit(buffer[j]))
+                	if (!ft.ascii.isDigit(buffer[j]))
                 		return false;
-                    while (buffer[j] != 0 and std.ascii.isDigit(buffer[j])) {
+                    while (buffer[j] != 0 and ft.ascii.isDigit(buffer[j])) {
                         j += 1;
                     }
                 } else if (prefix[i] != buffer[j]) {
@@ -371,9 +371,9 @@ pub fn BufferN(comptime history_size: u32) type {
         /// write the character c in the buffer
         pub fn putchar(self: *Self, c: u8) void {
             if (self.escape_mode) {
-            	if (std.mem.len(@as([*:0]u8, &self.escape_buffer)) < self.escape_buffer.len - 1)
+            	if (ft.mem.len(@as([*:0]u8, &self.escape_buffer)) < self.escape_buffer.len - 1)
                 {
-                	self.escape_buffer[std.mem.len(@as([*:0]u8, &self.escape_buffer))] = c;
+                	self.escape_buffer[ft.mem.len(@as([*:0]u8, &self.escape_buffer))] = c;
 					self.handle_escape();
 					return;
                 }
@@ -437,7 +437,7 @@ pub fn BufferN(comptime history_size: u32) type {
                 self.pos.line = 0;
         }
 
-        /// write the string s to the buffer and return the number of bites writen, suitable for use with std.io.Writer
+        /// write the string s to the buffer and return the number of bites writen, suitable for use with ft.io.Writer
         pub fn write(self: *Self, s: []const u8) BufferN(history_size).write_error!usize {
             var ret: usize = 0;
             for (s) |c| {
