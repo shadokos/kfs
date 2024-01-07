@@ -15,7 +15,15 @@ GRUB_CONF=$(BOOTDIR)/grub/grub.cfg
 ARCH=i386
 
 SRCDIR = src
-SRC = linker.ld ../build.zig boot.zig kernel.zig
+SRC = linker.ld \
+	../build.zig \
+	boot.zig \
+	kernel.zig \
+	ft/ascii.zig \
+	ft/fmt.zig \
+	ft/ft.zig \
+	ft/mem.zig \
+	ft/meta.zig
 
 all: $(ISO)
 
