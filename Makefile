@@ -30,6 +30,9 @@ SRC = linker.ld \
 	ft/mem.zig \
 	ft/meta.zig
 
+SYMBOL_DIR = $(ZIGCACHE)/symbols
+SYMBOL_FILE = $(SYMBOL_DIR)/$(NAME).symbols
+
 all: $(ISO)
 
 $(ISO): $(BIN) $(GRUB_CONF)
@@ -47,6 +50,16 @@ $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 		--summary all \
 		--verbose
 
+debug: all $(SYMBOL_FILE)
+	( qemu-system-$(ARCH) -cdrom $(ISO) -s -S 1>/dev/null 2>/dev/null \
+	|	gdb  -ex "file $(BIN)" -ex "target remote localhost:1234" <&3 ) 3<&0
+
+$(SYMBOL_DIR):
+	mkdir -p $(SYMBOL_DIR)
+
+$(SYMBOL_FILE): | $(SYMBOL_DIR)
+	objcopy --only-keep-debug $(BIN) $(SYMBOL_FILE)
+
 clean:
 	rm -rf $(BIN) $(ZIGCACHE)
 
@@ -55,4 +68,4 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: run all clean fclean re
+.PHONY: run all clean fclean re debug
