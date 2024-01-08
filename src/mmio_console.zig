@@ -1,6 +1,6 @@
 const ft = @import("ft/ft.zig");
-const Writer = @import("std").io.Writer;
-const fmt = @import("std").fmt;
+const Writer = ft.io.Writer;
+const fmt = ft.fmt;
 
 /// The colors available for the console
 pub const Color = enum(u8) {

@@ -10,6 +10,6 @@ var console = mmio_console.BufferN(100){};
 
 export fn kernel_main() void {
 	init_console(&console);
-    console.printf("hello, \x1b[32m{}\x1b[38m", .{42});
+    console.printf("hello, \x1b[32m{d}\x1b[38m", .{42});
     console.view();
 }
