@@ -36,7 +36,7 @@ SYMBOL_FILE = $(SYMBOL_DIR)/$(NAME).symbols
 all: $(ISO)
 
 $(ISO): $(BIN) $(GRUB_CONF)
-	grub-mkrescue -o $@ $(ISODIR)
+	grub-mkrescue --compress=xz -o $@ $(ISODIR)
 
 run: $(ISO)
 	qemu-system-$(ARCH) -cdrom $<
