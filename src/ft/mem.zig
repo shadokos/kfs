@@ -27,9 +27,27 @@ pub fn indexOfScalarPos(comptime T: type, slice: []const T, start_index: usize, 
 	return null;
 }
 
+pub fn indexOfScalar(comptime T: type, slice: []const T, value: T) ?usize
+{
+	for (slice, 0..) |c, i|
+	{
+		if (c == value)
+			return i;
+	}
+	return null;
+}
+
 pub fn indexOfSentinel(comptime T: type, comptime sentinel: T, p: [*:sentinel]const T) usize
 {
 	var i : usize = 0;
 	while (p[i] != sentinel) : (i += 1) {}
 	return i;
+}
+
+pub fn eql(comptime T: type, a: []const T, b: []const T) bool {
+	var i = 0;
+	if (a.len != b.len)
+		return false;
+	while (i < a.len and i < b.len and a[i] == b[i]) : (i += 1) {}
+	return i == a.len;
 }

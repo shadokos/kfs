@@ -123,3 +123,243 @@ pub fn charToDigit(c: u8, base: u8) error{InvalidCharacter}!u8 {
         return error.InvalidCharacter;
     return ret;
 }
+
+pub fn digitToChar(digit: u8, case: Case) u8 {
+	return switch (digit) {
+		0...9 => '0' + @as(u8, digit),
+		10...35 => (if (case == Case.upper) @as(u8, 'A') else @as(u8, 'a')) + @as(u8, digit - 10),
+		else => ' '
+	};
+}
+
+const Argument = union(enum) {
+	index: u32,
+	name: []const u8,
+};
+const Specifier = enum {
+	lower_hexa,
+	upper_hexa,
+	string,
+	float,
+	decimal,
+	binary,
+	octal,
+	ascii,
+	utf,
+	optional,
+	err,
+	address,
+	any
+};
+
+pub const FormatOptions = struct {
+	precision : ?usize = null,
+	width : ?usize = null,
+	alignment : enum {
+		left,
+		center,
+		right,
+	} = .right,
+	fill : u8 = 32
+};
+
+pub const Case = enum {
+	lower,
+	upper
+};
+
+fn accept(comptime set: ?[] const u8, comptime str: *[]const u8) !?u8
+{
+	comptime {if (str.*.len == 0)
+		return error.UnexpectedChar;
+	if (set) |set_value|
+	{
+		for (set_value) |e| {
+			if (e == str.*[0]) {
+				str.* = str.*[1..];
+				return e;
+			}
+		}
+	} else {
+		const ret = str.*[0];
+		str.* = str.*[1..];
+		return ret;
+	}
+	return null;
+	}
+}
+
+fn expect(comptime set: [] const u8, comptime str: *[]const u8) !u8
+{
+	comptime return try accept(set, str) orelse error.UnexpectedChar;
+}
+
+fn get_argument(comptime fmt: *[]const u8) !?Argument
+{
+	comptime {
+		if (try accept("[", fmt)) |_|
+		{
+			const end = ft.mem.indexOfScalarPos(u8, fmt.*, 0, ']') orelse error.UnexpectedChar;
+			comptime var ret = .{.name = fmt.*[0..end]};
+			fmt.* = fmt.*[end..];
+			_ = try expect("]", fmt);
+			return ret;
+		}
+		else if (fmt.*.len > 0 and (fmt.*[0] >= '0' and fmt.*[0] <= '9'))
+		{
+			comptime var end = 0;
+			while (end < fmt.*.len and (fmt.*[end] >= '0' and fmt.*[end] <= '9')) {end += 1;}
+			const ret = Argument{.index = parseInt(u32, fmt.*[0..end], 10) catch @compileError("invalid index")};
+			fmt.* = fmt.*[end..];
+			return ret;
+		}
+	}
+	return null;
+}
+
+fn get_specifier(comptime fmt: *[]const u8) !?Specifier {
+	return switch (try accept("xXsedbocu?!*a", fmt) orelse {return null;}) {
+		'x' => .lower_hexa,
+		'X' => .upper_hexa,
+		's' => .string,
+		'e' => .float,
+		'd' => .decimal,
+		'b' => .binary,
+		'o' => .octal,
+		'c' => .ascii,
+		'u' => .utf,
+		'?' => .optional,
+		'!' => .err,
+		'*' => .address,
+		'a' => {
+			_ = try expect("n", fmt);
+			_ = try expect("y", fmt);
+			.any;
+		},
+		else => unreachable
+	};
+}
+
+
+pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
+    comptime var fmt_copy = fmt;
+    comptime var current_arg = 0;
+
+    inline while (fmt_copy.len > 0) {
+        if (comptime accept("{", &fmt_copy) catch unreachable) |_| {
+            if (comptime accept("{", &fmt_copy) catch {}) |c| {
+                try writer.writeByte(c);
+            } else {
+				comptime var argument : ?Argument = try get_argument(&fmt_copy);
+				if (argument == null)
+				{
+					current_arg += 1;
+					argument = Argument{.index = current_arg - 1};
+				}
+				comptime var specifier : Specifier = try get_specifier(&fmt_copy) orelse Specifier.any;
+				var options = FormatOptions{}; // todo
+				_ = comptime expect("}", &fmt_copy) catch @compileError("unexpected char");
+
+				comptime var arg_pos = switch(argument.?) {
+					.index => |n| n,
+					.name => |n| ft.meta.fieldIndex(@TypeOf(args), n) orelse @compileError("bonjour")
+				};
+
+				const arg_object = @field(args, @typeInfo(@TypeOf(args)).Struct.fields[arg_pos].name);
+				switch (specifier) {
+					.string => {
+								if (@typeInfo(@TypeOf(arg_object)) != .Pointer) {
+									@compileError("object is not a string");
+								}
+								const string = switch (@typeInfo(@TypeOf(arg_object)).Pointer.size) {
+									.One => arg_object.*,
+									else => arg_object
+								};
+								switch (@typeInfo(@TypeOf(string))) {
+									.Array => |p| if (p.child == u8) try formatBuf(arg_object, options, writer) else @compileError("object is not a string " ++ @typeName(@TypeOf(arg_object)) ++ " " ++ @typeName(p.child)),
+									else => @compileError("object is not a string")
+								}
+							},
+					.decimal => switch (@typeInfo(@TypeOf(arg_object))) {
+									.Int, .ComptimeInt => try formatInt(arg_object, 10, Case.lower, options, writer),
+									else => @compileError("object is not an int")
+								},
+					.lower_hexa, .upper_hexa => switch (@typeInfo(@TypeOf(arg_object))) {
+									.Int, .ComptimeInt => try formatInt(arg_object, 16, if (specifier == .lower_hexa) Case.lower else Case.upper, options, writer),
+									else => @compileError("object is not an int")
+								},
+					.octal => switch (@typeInfo(@TypeOf(arg_object))) {
+									.Int, .ComptimeInt => try formatInt(arg_object, 8, Case.lower, options, writer),
+									else => @compileError("object is not an int")
+								},
+					.binary => switch (@typeInfo(@TypeOf(arg_object))) {
+									.Int, .ComptimeInt => try formatInt(arg_object, 2, Case.lower, options, writer),
+									else => @compileError("object is not an int")
+								},
+					else => {}
+				}
+            }
+        } else if (comptime accept("}", &fmt_copy) catch unreachable) |_| {
+            if (comptime accept("}", &fmt_copy) catch null) |c| {
+                try writer.writeByte(c);
+            } else {
+            	@compileError("missing opening {");
+            }
+        } else if (comptime accept(null, &fmt_copy) catch unreachable) |c| {
+			try writer.writeByte(c);
+        }
+    }
+}
+
+pub fn formatBuf(buf: []const u8, options: FormatOptions, writer: anytype) !void
+{
+	_ = options;
+	_ = try writer.write(buf);
+}
+
+pub fn formatInt(value: anytype, base: u8, case: Case, options: FormatOptions, writer: anytype) !void
+{
+	var buffer : [30]u8 = undefined;
+	@memset(&buffer, 0);
+	var index : usize = 0;
+	var value_cpy: u32 = 0;
+	if (value < 0)
+	{
+		buffer[index] = '-';
+		index += 1;
+		value_cpy = @intCast(-value);
+	} else {
+		value_cpy = @intCast(value);
+	}
+
+	// if (base == 16)
+	// {
+	// 	buffer[index] = '0';
+	// 	buffer[index + 1] = switch (case) {.upper => 'X', .lower => 'x'};
+	// 	index += 2;
+	// }
+	// else if (base == 8)
+	// {
+	// 	buffer[index] = '0';
+	// 	index += 1;
+	// }
+	// else if (base == 2)
+	// {
+	// 	buffer[index] = '0';
+	// 	buffer[index + 1] = switch (case) {.upper => 'B', .lower => 'b'};
+	// 	index += 2;
+	// }
+
+	var tmp : u32 = value_cpy;
+	while (tmp != 0) : (tmp /= @as(u32, @intCast(base))) {
+		index += 1;
+	}
+	if (value == 0)
+		buffer[index] = '0';
+	tmp = value_cpy;
+	while (tmp != 0) : (tmp /= @as(u32, @intCast(base))) {
+		buffer[index] = digitToChar(@as(u8,@intCast(tmp % @as(u32, @intCast(base)))), case);
+		index -= 1;
+	}
+	return formatBuf(&buffer, options, writer);
+}
