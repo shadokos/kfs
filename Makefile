@@ -44,6 +44,9 @@ SYMBOL_FILE = $(SYMBOL_DIR)/$(NAME).symbols
 SYMBOL_DIR = $(ZIGCACHE)/symbols
 SYMBOL_FILE = $(SYMBOL_DIR)/$(NAME).symbols
 
+SYMBOL_DIR = $(ZIGCACHE)/symbols
+SYMBOL_FILE = $(SYMBOL_DIR)/$(NAME).symbols
+
 all: $(ISO)
 
 $(ISO): $(BIN) $(GRUB_CONF)
