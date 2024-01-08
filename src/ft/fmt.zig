@@ -319,10 +319,18 @@ pub fn formatBuf(buf: []const u8, options: FormatOptions, writer: anytype) !void
 
 pub fn formatInt(value: anytype, base: u8, case: Case, options: FormatOptions, writer: anytype) !void
 {
-	var buffer : [30]u8 = undefined;
-	@memset(&buffer, 0);
 	var index : usize = 0;
-	var value_cpy: u32 = 0;
+	const Int = switch ( @typeInfo(@TypeOf(value))) {
+		.ComptimeInt => |_| ft.math.IntFittingRange(value, value),
+		.Int => |_| @TypeOf(value),
+		else => unreachable // hopefully
+	};
+    const U = ft.meta.Int(.unsigned, @max(8, @typeInfo(Int).Int.bits + 1));
+
+	var buffer : [@typeInfo(U).Int.bits]u8 = undefined;
+	@memset(&buffer, 0);
+
+	var value_cpy: U = 0;
 	if (value < 0)
 	{
 		buffer[index] = '-';
@@ -350,15 +358,15 @@ pub fn formatInt(value: anytype, base: u8, case: Case, options: FormatOptions, w
 	// 	index += 2;
 	// }
 
-	var tmp : u32 = value_cpy;
-	while (tmp != 0) : (tmp /= @as(u32, @intCast(base))) {
+	var tmp : U = value_cpy;
+	while (tmp != 0) : (tmp = @divTrunc(tmp, @as(U, @intCast(base)))) {
 		index += 1;
 	}
 	if (value == 0)
 		buffer[index] = '0';
 	tmp = value_cpy;
-	while (tmp != 0) : (tmp /= @as(u32, @intCast(base))) {
-		buffer[index] = digitToChar(@as(u8,@intCast(tmp % @as(u32, @intCast(base)))), case);
+	while (tmp != 0) : (tmp = @divTrunc(tmp, @as(U, @intCast(base)))) {
+		buffer[index] = digitToChar(@as(u8,@intCast(@mod(tmp, @as(U, @intCast(base))))), case);
 		index -= 1;
 	}
 	return formatBuf(&buffer, options, writer);
