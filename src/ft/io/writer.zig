@@ -18,5 +18,9 @@ pub fn Writer(
 				offset += try self.write(bytes[offset..]);
 			}
 		}
+
+		pub fn writeByte(self: Self, byte: u8) Error!void {
+			_ = try callback(self.context, &([1]u8{byte}));
+		}
 	};
 }
