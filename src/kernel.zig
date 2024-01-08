@@ -1,12 +1,12 @@
-const mmio_console = @import("./mmio_console.zig");
+const tty = @import("./tty/tty.zig");
 
-fn init_console(c: *mmio_console.BufferN(100)) void {
+fn init_console(c: *tty.Tty) void {
     c.init_writer();
-    c.set_font_color(mmio_console.Color.white);
+    c.set_font_color(tty.Color.white);
     c.set_view_bottom();
 }
 
-var console = mmio_console.BufferN(100){};
+var console = tty.Tty {};
 
 export fn kernel_main() void {
 	init_console(&console);
