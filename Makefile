@@ -19,7 +19,8 @@ SRC = linker.ld \
 	../build.zig \
 	boot.zig \
 	kernel.zig \
-	mmio_console.zig \
+	tty/tty.zig \
+	tty/vt100.zig \
 	ft/ascii.zig \
 	ft/fmt.zig \
 	ft/ft.zig \
