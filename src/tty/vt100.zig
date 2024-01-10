@@ -166,65 +166,69 @@ return struct {
 	/// see https://espterm.github.io/docs/VT100%20escape%20codes.html
 	pub fn handle_escape(terminal: *tty.TtyN(history_size), buffer: [:0] u8) error{InvalidEscape}!bool {
 		const map = [_]struct { prefix: [:0]const u8, f: *const fn (*tty.TtyN(history_size), buffer: [:0]const u8) void } {
-				.{ .prefix = "^[[20h", .f = &handle_nothing }, // new line mode
-				.{ .prefix = "^[[?^h", .f = &handle_nothing }, // terminal config
-				.{ .prefix = "^[[20l", .f = &handle_nothing }, // line feed mode
-				.{ .prefix = "^[[?^l", .f = &handle_nothing }, // terminal config
-				.{ .prefix = "^[=", .f = &handle_nothing }, // alternate keypad mode
-				.{ .prefix = "^[>", .f = &handle_nothing }, // numeric keypad mode
-				.{ .prefix = "[(A", .f = &handle_nothing }, // special chars
-				.{ .prefix = "[)A", .f = &handle_nothing }, // special chars
-				.{ .prefix = "[(B", .f = &handle_nothing }, // special chars
-				.{ .prefix = "[)B", .f = &handle_nothing }, // special chars
-				.{ .prefix = "[(^", .f = &handle_nothing }, // special chars
-				.{ .prefix = "[)^", .f = &handle_nothing }, // special chars
-				.{ .prefix = "[N", .f = &handle_nothing }, // single shift 2
-				.{ .prefix = "[D", .f = &handle_nothing }, // single shift 3
+				.{ .prefix = "[20h", .f = &handle_nothing }, // new line mode
+				.{ .prefix = "[?^h", .f = &handle_nothing }, // terminal config
+				.{ .prefix = "[20l", .f = &handle_nothing }, // line feed mode
+				.{ .prefix = "[?^l", .f = &handle_nothing }, // terminal config
+				.{ .prefix = "=", .f = &handle_nothing }, // alternate keypad mode
+				.{ .prefix = ">", .f = &handle_nothing }, // numeric keypad mode
+				.{ .prefix = "(A", .f = &handle_nothing }, // special chars
+				.{ .prefix = ")A", .f = &handle_nothing }, // special chars
+				.{ .prefix = "(B", .f = &handle_nothing }, // special chars
+				.{ .prefix = ")B", .f = &handle_nothing }, // special chars
+				.{ .prefix = "(^", .f = &handle_nothing }, // special chars
+				.{ .prefix = ")^", .f = &handle_nothing }, // special chars
+				.{ .prefix = "N", .f = &handle_nothing }, // single shift 2
+				.{ .prefix = "D", .f = &handle_nothing }, // single shift 3
 				.{ .prefix = "[m", .f = &handle_set_attribute },
 				.{ .prefix = "[^m", .f = &handle_set_attribute },
-				.{ .prefix = "[[^;^r", .f = &handle_nothing }, // Set top and bottom line#s of a window
+				.{ .prefix = "[^;^r", .f = &handle_nothing }, // Set top and bottom line#s of a window
+				.{ .prefix = "[A", .f = &handle_move },
 				.{ .prefix = "[^A", .f = &handle_move },
+				.{ .prefix = "[B", .f = &handle_move },
 				.{ .prefix = "[^B", .f = &handle_move },
+				.{ .prefix = "[C", .f = &handle_move },
 				.{ .prefix = "[^C", .f = &handle_move },
+				.{ .prefix = "[D", .f = &handle_move },
 				.{ .prefix = "[^D", .f = &handle_move },
-				.{ .prefix = "[[H", .f = &handle_goto },
-				.{ .prefix = "[[;H", .f = &handle_goto },
-				.{ .prefix = "[[^;^H", .f = &handle_goto },
-				.{ .prefix = "[[f", .f = &handle_goto },
-				.{ .prefix = "[[;f", .f = &handle_goto },
-				.{ .prefix = "[[^;^f", .f = &handle_goto },
-				.{ .prefix = "[D", .f = &handle_scroll },
-				.{ .prefix = "[M", .f = &handle_scroll },
-				.{ .prefix = "[E", .f = &handle_nothing }, // move to next line
-				// .{ .prefix = "[7", .f = &handle_nothing }, // save cursor pos and attributes todo
-				// .{ .prefix = "[8", .f = &handle_nothing }, // restore cursor pos and attributes todo
-				.{ .prefix = "[H", .f = &handle_nothing }, // set tab at current column
+				.{ .prefix = "[H", .f = &handle_goto },
+				.{ .prefix = "[;H", .f = &handle_goto },
+				.{ .prefix = "[^;^H", .f = &handle_goto },
+				.{ .prefix = "[f", .f = &handle_goto },
+				.{ .prefix = "[;f", .f = &handle_goto },
+				.{ .prefix = "[^;^f", .f = &handle_goto },
+				.{ .prefix = "D", .f = &handle_scroll },
+				.{ .prefix = "M", .f = &handle_scroll },
+				.{ .prefix = "E", .f = &handle_nothing }, // move to next line
+				.{ .prefix = "7", .f = &handle_nothing }, // save cursor pos and attributes todo
+				.{ .prefix = "8", .f = &handle_nothing }, // restore cursor pos and attributes todo
+				.{ .prefix = "H", .f = &handle_nothing }, // set tab at current column
 				.{ .prefix = "[g", .f = &handle_nothing }, // Clear a tab at the current column
 				.{ .prefix = "[0g", .f = &handle_nothing }, // Clear a tab at the current column
 				.{ .prefix = "[3g", .f = &handle_nothing }, // Clear all tabs
-				.{ .prefix = "[#3", .f = &handle_nothing }, // Double-height letters, top half
-				.{ .prefix = "[#4", .f = &handle_nothing }, // Double-height letters, bottom half
-				.{ .prefix = "[#5", .f = &handle_nothing }, // Single width, single tty.height letters
-				.{ .prefix = "[#6", .f = &handle_nothing }, // Double width, single tty.height letters
-				.{ .prefix = "[[K", .f = &handle_clearline },
-				.{ .prefix = "[[^K", .f = &handle_clearline },
-				.{ .prefix = "[[J", .f = &handle_clearscreen },
-				.{ .prefix = "[[^J", .f = &handle_clearscreen },
-				.{ .prefix = "[5n", .f = &handle_nothing }, // Device status report
-				.{ .prefix = "[6n", .f = &handle_nothing }, // get cursor pos
-				.{ .prefix = "[[c", .f = &handle_nothing }, // identify terminal type
-				.{ .prefix = "[[0c", .f = &handle_nothing }, // identify terminal type
-				.{ .prefix = "[c", .f = &handle_nothing }, // Reset terminal to initial state
-				.{ .prefix = "[#8", .f = &handle_nothing }, // vt100
-				.{ .prefix = "[[2;1y", .f = &handle_nothing }, // vt100
-				.{ .prefix = "[[2;2y", .f = &handle_nothing }, // vt100
-				.{ .prefix = "[[2;9y", .f = &handle_nothing }, // vt100
-				.{ .prefix = "[[2;10y", .f = &handle_nothing }, // vt100
-				.{ .prefix = "[[0q", .f = &handle_nothing }, // vt100
-				.{ .prefix = "[[1q", .f = &handle_nothing }, // vt100
-				.{ .prefix = "[[2q", .f = &handle_nothing }, // vt100
-				.{ .prefix = "[[3q", .f = &handle_nothing }, // vt100
-				.{ .prefix = "[[4q", .f = &handle_nothing }, // vt100
+				.{ .prefix = "#3", .f = &handle_nothing }, // Double-height letters, top half
+				.{ .prefix = "#4", .f = &handle_nothing }, // Double-height letters, bottom half
+				.{ .prefix = "#5", .f = &handle_nothing }, // Single width, single tty.height letters
+				.{ .prefix = "#6", .f = &handle_nothing }, // Double width, single tty.height letters
+				.{ .prefix = "[K", .f = &handle_clearline },
+				.{ .prefix = "[^K", .f = &handle_clearline },
+				.{ .prefix = "[J", .f = &handle_clearscreen },
+				.{ .prefix = "[^J", .f = &handle_clearscreen },
+				.{ .prefix = "5n", .f = &handle_nothing }, // Device status report
+				.{ .prefix = "6n", .f = &handle_nothing }, // get cursor pos
+				.{ .prefix = "[c", .f = &handle_nothing }, // identify terminal type
+				.{ .prefix = "[0c", .f = &handle_nothing }, // identify terminal type
+				.{ .prefix = "c", .f = &handle_nothing }, // Reset terminal to initial state
+				.{ .prefix = "#8", .f = &handle_nothing }, // vt100
+				.{ .prefix = "[2;1y", .f = &handle_nothing }, // vt100
+				.{ .prefix = "[2;2y", .f = &handle_nothing }, // vt100
+				.{ .prefix = "[2;9y", .f = &handle_nothing }, // vt100
+				.{ .prefix = "[2;10y", .f = &handle_nothing }, // vt100
+				.{ .prefix = "[0q", .f = &handle_nothing }, // vt100
+				.{ .prefix = "[1q", .f = &handle_nothing }, // vt100
+				.{ .prefix = "[2q", .f = &handle_nothing }, // vt100
+				.{ .prefix = "[3q", .f = &handle_nothing }, // vt100
+				.{ .prefix = "[4q", .f = &handle_nothing }, // vt100
 			};
 		for (map) |e| {
 			if (compare_prefix(e.prefix, buffer)) {
