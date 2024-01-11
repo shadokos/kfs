@@ -2,6 +2,9 @@ const ft = @import("../ft/ft.zig");
 const Writer = ft.io.Writer;
 const fmt = ft.fmt;
 const vt100 = @import("vt100.zig").vt100;
+const termios = @import("termios.zig");
+const cc_t = termios.cc_t;
+const keyboard = @import("keyboard.zig");
 
 /// The colors available for the console
 pub const Color = enum(u8) {
@@ -34,6 +37,8 @@ pub const Attribute = enum {
 	reverse,
 	hidden
 };
+
+const MAX_INPUT = 4096;
 
 /// screen width
 pub const width = 80;
@@ -80,7 +85,36 @@ pub fn TtyN(comptime history_size: u32) type {
 		/// buffer for escape sequences
         escape_buffer: [10:0]u8 = [_:0]u8{0} ** 10,
 
-        pub const write_error = error{};
+        // current_line: [MAX_CANON]u8 = undefined,
+
+        read_buffer: [MAX_INPUT]u8 = undefined,
+
+        read_head: usize = 0,
+
+        read_tail: usize = 0,
+
+        delimited_line_end: usize = 0,
+        current_line_end: usize = 0,
+
+        unprocessed_begin: usize = 0,
+
+        config: termios.termios = .{},
+        
+        pub const Writer = ft.io.Writer(*Self, Self.WriteError, Self.write);
+
+        pub const WriteError = error{};
+        pub const ReadError = error{};
+
+        pub const Pos = struct {
+        	line: u32 = 0,
+        	col: u32 = 0
+        };
+
+        pub const State = struct {
+        	pos: Pos = .{},
+        	attributes: u32 = 0,
+        	current_color: u16 = 0,
+        };
 
         const Self = @This();
 
@@ -136,27 +170,106 @@ pub fn TtyN(comptime history_size: u32) type {
             }
         }
 
+        pub fn input(self: *Self, s: [] const u8) void {
+        	for (s) |c| {
+        		self.read_buffer[self.read_head] = c;
+        		self.read_head += 1;
+        		self.read_head %= self.read_buffer.len;
+        	}
+			if (self.read_tail == self.delimited_line_end)
+				self.process_input();
+        }
 
+        fn is_end_of_line(self: *Self, c: u8) bool {
+        	return c == '\n' or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOL)] or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)];
+        }
 
-        /// write the character c in the buffer
-        pub fn putchar(self: *Self, c: u8) void {
-            switch (self.write_state) {
-            	.Escape => if (ft.mem.len(@as([*:0]u8, &self.escape_buffer)) < self.escape_buffer.len - 1) {
-						self.escape_buffer[ft.mem.len(@as([*:0]u8, &self.escape_buffer))] = c;
-						if (vt100(history_size).handle_escape(self, &self.escape_buffer) catch true)
+        fn process_input(self: *Self) void {
+	        if (self.config.c_lflag & termios.ICANON != 0) {
+	        	if (self.delimited_line_end != self.read_tail)
+	        		return;
+	        	// self.printf("=======\n",  .{self.delimited_line_end, self.read_tail, self.read_head});
+	        	// var self.current_line_end = self.delimited_line_end;
+	        	while (self.unprocessed_begin != self.read_head) : ({self.current_line_end %= self.read_buffer.len; self.unprocessed_begin %= self.read_buffer.len;})
+	        	{
+	        	// self.printf("\tdelimited_line_end: {d} tail: {d} head: {d}, current_line_end: {d}, unprocessed_begin: {d}\n",  .{self.delimited_line_end, self.read_tail, self.read_head, self.current_line_end, self.unprocessed_begin});
+	        		if (self.is_end_of_line(self.read_buffer[self.unprocessed_begin])) {
+	        			if (self.read_buffer[self.unprocessed_begin] != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
 						{
-							@memset(&self.escape_buffer, 0);
-							self.write_state = .Normal;
+							self.putchar(self.read_buffer[self.unprocessed_begin]);
+	        			}
+						self.read_buffer[self.current_line_end] = self.read_buffer[self.unprocessed_begin];
+						self.unprocessed_begin += 1;
+						self.unprocessed_begin %= self.read_buffer.len;
+	        			self.delimited_line_end = self.current_line_end;
+	        			return;
+	        		} else if (self.read_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
+	        			if (self.current_line_end != self.delimited_line_end)
+						{
+							if (self.config.c_lflag & termios.ECHO != 0 and self.config.c_lflag & termios.ECHOE != 0)
+							{
+								self.putstr("\x08 \x08");
+							}
+							self.current_line_end -= 1;
 						}
-					} else {
-						self.write_state = .Normal;
-	            	},
-            	.Normal => switch (c) {
-					0x1b => {
-						self.write_state = .Escape;
-					},
+	        		} else if (self.read_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
+						if (self.config.c_lflag & termios.ECHO != 0) // todo ECHOK
+	        				self.putstr("\r\x1b[K"); // todo
+	        			self.current_line_end = self.delimited_line_end;
+	        		} else {
+						if (self.config.c_lflag & termios.ECHO != 0 or (self.read_buffer[self.unprocessed_begin] == '\n' and self.config.c_lflag & termios.ECHONL != 0))
+							self.putchar(self.read_buffer[self.unprocessed_begin]);
+						self.read_buffer[self.current_line_end] = self.read_buffer[self.unprocessed_begin];
+						self.current_line_end += 1;
+	        		}
+					self.unprocessed_begin += 1;
+	        	}
+	        	self.read_head = self.current_line_end;
+	        } else {
+	        	// var self.current_line_end = self.delimited_line_end;
+	        	while (self.current_line_end != self.read_head) : (self.current_line_end %= self.read_buffer.len)
+	        	{
+					if (self.config.c_lflag & termios.ECHO != 0 or (self.read_buffer[self.current_line_end] == '\n' and self.config.c_lflag & termios.ECHONL != 0))
+						self.putchar(self.read_buffer[self.current_line_end]);
+	        		self.current_line_end += 1;
+	        	}
+	        }
+        }
+
+        fn read_buffer_size(self: *Self) usize {
+        	return self.read_buffer.len - self.available_buffer_space();
+        }
+
+
+        fn put_char_to_buffer(self: *Self, c: u8) void {
+			var char : u16 = c;
+			char |= self.current_color << 8;
+			// if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.blink)) != 0) {
+			// 	char |= 1 << 15;
+			// }
+			if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.dim)) == 0) {
+				char |= 1 << 3 << 8;
+			}
+			if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.reverse)) != 0) {
+				var swap = char;
+				char &= 0x00ff;
+				char |= (swap & 0x0f00) << 4;
+				char |= (swap & 0xf000) >> 4;
+			}
+			if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.hidden)) != 0) {
+				char = (char & 0xf0ff) | ((char & 0xf000) >> 4);
+			}
+			self.history_buffer[self.pos.line][self.pos.col] = char;
+			self.move_cursor(0, 1);
+        }
+
+        pub fn process_whitespaces(self: *Self, c: u8) void {
+            	switch (c) {
 					'\n' => {
-						self.move_cursor(1, -@as(i32, @intCast(self.pos.col)));
+						if (self.config.c_oflag & termios.ONLRET != 0)
+							{self.move_cursor(1, -@as(i32, @intCast(self.pos.col)));}
+						else
+							{self.move_cursor(1, 0);}
 					},
 					'\t' => {
 						self.move_cursor(0, @as(i32, @intCast(4 -| self.pos.col % 4))); // todo: REAL tabs
@@ -175,33 +288,89 @@ pub fn TtyN(comptime history_size: u32) type {
 						// self.move_cursor(height, -@as(i32, @intCast(self.pos.col)));
 					},
 					' '...'~' => {
-						var char : u16 = c;
-						char |= self.current_color << 8;
-						// if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.blink)) != 0) {
-						// 	char |= 1 << 15;
-						// }
-						if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.dim)) == 0) {
-							char |= 1 << 3 << 8;
-						}
-						if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.reverse)) != 0) {
-							var swap = char;
-							char &= 0x00ff;
-							char |= (swap & 0x0f00) << 4;
-							char |= (swap & 0xf000) >> 4;
-						}
-						if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.hidden)) != 0) {
-							char = (char & 0xf0ff) | ((char & 0xf000) >> 4);
-						}
-						self.history_buffer[self.pos.line][self.pos.col] = char;
-						self.move_cursor(0, 1);
+						self.put_char_to_buffer(c);
 					},
 					else => {}, // todo
 				}
-            }
+        }
+
+        /// write the character c in the buffer after mapping
+        pub fn output_processing(self: *Self, c: u8) void {
+        	if (self.config.c_oflag & termios.OPOST != 0)
+        	{
+           		switch (self.write_state) {
+					.Escape => if (ft.mem.len(@as([*:0]u8, &self.escape_buffer)) < self.escape_buffer.len - 1) {
+						var buffer_save: @TypeOf(self.escape_buffer) = undefined;
+						self.escape_buffer[ft.mem.len(@as([*:0]u8, &self.escape_buffer))] = c;
+						self.write_state = .Normal;
+						@memcpy(&buffer_save, &self.escape_buffer);
+						@memset(&self.escape_buffer, 0);
+						if (!(vt100(history_size).handle_escape(self, &buffer_save) catch true)) {
+							@memcpy(&self.escape_buffer, &buffer_save);
+							self.write_state = .Escape;
+						}
+					},
+					.Normal => {
+						if (self.config.c_oflag & termios.ONLCR != 0 and c == '\n')
+						{
+							self.process_whitespaces('\r');
+							self.process_whitespaces('\n');
+						}
+						else if (self.config.c_oflag & termios.OCRNL != 0 and c == '\r')
+						{
+							self.process_whitespaces('\n');
+						}
+						else if (self.config.c_oflag & termios.OCRNL != 0 and c == '\r' and self.pos.col == 0)
+						{}
+						else if (c == 0x1b) {
+							self.write_state = .Escape;
+						} else {
+							self.process_whitespaces(c);
+						}
+					},
+				}
+			} else {
+				self.process_whitespaces(c);
+			}
+        }
+        
+        /// write the character c to the terminal
+        pub fn putchar(self: *Self, c: u8) void {
+			self.output_processing(c);
+        }
+
+        pub fn read(self: *Self, s: [] u8) Self.ReadError!usize {
+        	// todo time/min
+        	var count : usize = 0;
+        	for (s) |*c| {
+
+        		if (self.read_tail == self.delimited_line_end)
+        		{
+        			keyboard.send_to_tty();
+        			self.process_input();
+        			if (self.read_tail == self.read_head)
+        				break;
+        		}
+
+        		if (self.config.c_lflag & termios.ICANON != 0 and self.read_tail == self.delimited_line_end)
+        			break;
+        		c.* = self.read_buffer[self.read_tail];
+        		self.read_tail += 1;
+        		self.read_tail %= self.read_buffer.len;
+        		count += 1;
+	        	if (self.config.c_lflag & termios.ICANON != 0 and self.is_end_of_line(self.read_buffer[self.read_tail]))
+	        	{
+        			if (c.* == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
+        				count -= 1;
+					// self.read_tail = self.delimited_line_end;
+	        		break;
+	        	}
+        	}
+        	return count;
         }
 
         /// write the string s to the buffer and return the number of bites writen, suitable for use with ft.io.Writer
-        pub fn write(self: *Self, s: []const u8) Self.write_error!usize {
+        pub fn write(self: *Self, s: []const u8) Self.WriteError!usize {
             var ret: usize = 0;
             for (s) |c| {
                 self.putchar(c);

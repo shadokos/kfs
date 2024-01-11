@@ -21,6 +21,8 @@ SRC = linker.ld \
 	kernel.zig \
 	tty/tty.zig \
 	tty/vt100.zig \
+	tty/termios.zig \
+	tty/keyboard.zig \
 	ft/ascii.zig \
 	ft/fmt.zig \
 	ft/ft.zig \
