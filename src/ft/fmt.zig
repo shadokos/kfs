@@ -398,11 +398,11 @@ pub fn formatInt(value: anytype, base: u8, case: Case, options: FormatOptions, w
 	}
 	if (value == 0)
 	{
-		index = 1;
+		index = 0;
 		buffer[0] = '0';
 	}
 
-	const end = index;
+	const end = index + 1;
 	tmp = value_cpy;
 	while (tmp != 0) : (tmp = @divTrunc(tmp, @as(U, @intCast(base)))) {
 		buffer[index] = digitToChar(@as(u8,@intCast(@mod(tmp, @as(U, @intCast(base))))), case);
