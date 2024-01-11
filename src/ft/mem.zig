@@ -37,6 +37,13 @@ pub fn indexOfScalar(comptime T: type, slice: []const T, value: T) ?usize
 	return null;
 }
 
+pub fn indexOfLastScalar(comptime T: type, slice: []const T, value: T) ?usize
+{
+	var i: usize = slice.len - 1;
+	while (i > 0 and slice[i] != value) : (i-=1){}
+	return if (slice[i] == value) i else null;
+}
+
 pub fn indexOfSentinel(comptime T: type, comptime sentinel: T, p: [*:sentinel]const T) usize
 {
 	var i : usize = 0;
