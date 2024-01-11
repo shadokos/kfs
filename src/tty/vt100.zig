@@ -149,6 +149,13 @@ return struct {
 		terminal.move_cursor(off_v, off_h);
 	}
 
+	fn handle_get_pos(terminal: *tty.TtyN(history_size), _: [:0]const u8) void {
+		var buffer : [100]u8 = [1]u8{0} ** 100;
+		var slice = ft.fmt.bufPrint(&buffer, "\x1b{d};{d}R", .{terminal.get_state().pos.line, terminal.get_state().pos.col}) catch return;
+
+		terminal.putstr(slice);
+	}
+
 	fn handle_nothing(_: *tty.TtyN(history_size), _: [:0]const u8) void {}
 
 	/// compare the escape buffer with an escape code description (^ match any natural number)
@@ -225,10 +232,14 @@ return struct {
 				.{ .prefix = "[^K", .f = &handle_clearline },
 				.{ .prefix = "[J", .f = &handle_clearscreen },
 				.{ .prefix = "[^J", .f = &handle_clearscreen },
-				.{ .prefix = "5n", .f = &handle_nothing }, // Device status report
-				.{ .prefix = "6n", .f = &handle_nothing }, // get cursor pos
-				.{ .prefix = "[c", .f = &handle_nothing }, // identify terminal type
+				.{ .prefix = "5n", .f = &handle_nothing }, // Device status report todo
+				.{ .prefix = "0n", .f = &handle_nothing }, // Device status report response KO
+				.{ .prefix = "3n", .f = &handle_nothing }, // Device status report response OK
+				.{ .prefix = "6n", .f = &handle_get_pos }, // get cursor pos
+				.{ .prefix = "^;^R", .f = &handle_nothing }, // get cursor pos response
+				.{ .prefix = "[c", .f = &handle_nothing }, // identify terminal type todo
 				.{ .prefix = "[0c", .f = &handle_nothing }, // identify terminal type
+				.{ .prefix = "?1;^c", .f = &handle_nothing }, // identify terminal type response
 				.{ .prefix = "c", .f = &handle_nothing }, // Reset terminal to initial state
 				.{ .prefix = "#8", .f = &handle_nothing }, // vt100
 				.{ .prefix = "[2;1y", .f = &handle_nothing }, // vt100
