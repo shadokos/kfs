@@ -112,6 +112,14 @@ test "parseInt" { // stolen from zig's ft lib
     try std.testing.expectEqual(@as(i5, -16), try parseInt(i5, "-10", 16));
 }
 
+pub const BufPrintError = error{NoSpaceLeft};
+
+pub fn bufPrint(buf: []u8, comptime fmt: []const u8, args: anytype) BufPrintError![]u8 {
+	var stream = ft.io.fixedBufferStream(buf);
+	try format(stream.writer(), fmt, args);
+	return stream.getWritten();
+}
+
 pub fn charToDigit(c: u8, base: u8) error{InvalidCharacter}!u8 {
     const ret = switch (c) {
         '0'...'9' => c - '0',
