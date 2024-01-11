@@ -7,6 +7,15 @@ export fn kernel_main() void {
     console.view();
 
    	while (true) {
-		if (keyboard.is_key_available()) keyboard.handler();
+   		keyboard.simulate_keyboard_interrupt();
+   		if (keyboard.read_buffer()) |input| {
+   			console.printf("key: {d:>5} 0b{b:0>16} 0x{x:0>4} {}\n", .{
+   				input,
+   				input,
+   				input,
+   				@as(@import("scanmap.zig").InputKey, @enumFromInt(input & 0x7fff)),
+   			});
+   		}
+   		console.view();
    	}
 }
