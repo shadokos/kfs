@@ -160,7 +160,7 @@ pub const FormatOptions = struct {
 		center,
 		right,
 	} = .right,
-	fill : u8 = 32
+	fill : u8 = ' '
 };
 
 pub const Case = enum {
@@ -217,6 +217,16 @@ fn get_argument(comptime fmt: *[]const u8) !?Argument
 	return null;
 }
 
+fn get_int(comptime fmt: *[]const u8) ?usize {
+	comptime var end = 0;
+	while (end < fmt.*.len and (fmt.*[end] >= '0' and fmt.*[end] <= '9')) {end += 1;}
+	if (end == 0)
+		return null;
+	const ret = parseInt(u32, fmt.*[0..end], 10) catch unreachable;
+	fmt.* = fmt.*[end..];
+	return ret;
+}
+
 fn get_specifier(comptime fmt: *[]const u8) !?Specifier {
 	return switch (try accept("xXsedbocu?!*a", fmt) orelse {return null;}) {
 		'x' => .lower_hexa,
@@ -257,7 +267,20 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
 					argument = Argument{.index = current_arg - 1};
 				}
 				comptime var specifier : Specifier = try get_specifier(&fmt_copy) orelse Specifier.any;
-				var options = FormatOptions{}; // todo
+				comptime var options = FormatOptions{}; // todo
+				if (fmt_copy.len >= 2 and (fmt_copy[1] == '<' or fmt_copy[1] == '^' or fmt_copy[1] == '>'))
+				{
+					options.fill = comptime accept(null, &fmt_copy).?;
+					options.alignment = switch (comptime accept(null, &fmt_copy).?) {
+						'<' => .left,
+						'^' => .center,
+						'>' => .right
+					};
+				}
+				options.width = comptime get_int(&fmt_copy);
+				if (comptime accept(".", &fmt_copy) catch null) |_| {
+					options.precision = get_int(&fmt_copy);
+				}
 				_ = comptime expect("}", &fmt_copy) catch @compileError("unexpected char");
 
 				comptime var arg_pos = switch(argument.?) {
@@ -313,8 +336,25 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
 
 pub fn formatBuf(buf: []const u8, options: FormatOptions, writer: anytype) !void
 {
-	_ = options;
+	var padding = if (options.width) |w| if (buf.len < w) w - buf.len else null else null;
+	var right_padding = if (padding) |p| switch (options.alignment) {
+		.right => 0,
+		.center => p / 2,
+		.left => p,
+	} else null;
+	var left_padding = if (padding) |p| switch (options.alignment) {
+		.right => p,
+		.center => p / 2 + p % 2,
+		.left => 0,
+	} else null;
+
+	if (left_padding) |p| for (0..p) |_|
+		{_ = try writer.write(&[1]u8{options.fill});};
+
 	_ = try writer.write(buf);
+
+	if (right_padding) |p| for (0..p) |_|
+		{_ = try writer.write(&[1]u8{options.fill});};
 }
 
 pub fn formatInt(value: anytype, base: u8, case: Case, options: FormatOptions, writer: anytype) !void
