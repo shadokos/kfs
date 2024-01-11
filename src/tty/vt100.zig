@@ -63,6 +63,17 @@ return struct {
 		}
 	}
 
+	/// handle save and restore
+	fn handle_save(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
+		const saved_state = struct {var value: ?tty.TtyN(history_size).State = null;};
+		switch (buffer[0])
+		{
+			'7' => saved_state.value = terminal.get_state(),
+			'8' => if (saved_state.value) |value| terminal.set_state(value),
+			else => unreachable
+		}
+	}
+
 	/// handle set clear line escape codes
 	fn handle_clearline(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
 		const len = ft.mem.indexOfSentinel(u8, 0, buffer);
@@ -200,8 +211,8 @@ return struct {
 				.{ .prefix = "D", .f = &handle_scroll },
 				.{ .prefix = "M", .f = &handle_scroll },
 				.{ .prefix = "E", .f = &handle_nothing }, // move to next line
-				.{ .prefix = "7", .f = &handle_nothing }, // save cursor pos and attributes todo
-				.{ .prefix = "8", .f = &handle_nothing }, // restore cursor pos and attributes todo
+				.{ .prefix = "7", .f = &handle_save }, // save cursor pos and attributes
+				.{ .prefix = "8", .f = &handle_save }, // restore cursor pos and attributes
 				.{ .prefix = "H", .f = &handle_nothing }, // set tab at current column
 				.{ .prefix = "[g", .f = &handle_nothing }, // Clear a tab at the current column
 				.{ .prefix = "[0g", .f = &handle_nothing }, // Clear a tab at the current column
