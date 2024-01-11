@@ -55,27 +55,27 @@ return struct {
 
 	/// handle set scroll escape codes
 	fn handle_scroll(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
-		switch (buffer[1])
+		switch (buffer[0])
 		{
 			'D' => {terminal.scroll(1);},
 			'M' => {terminal.scroll(-1);},
-			else => {}
+			else => unreachable
 		}
 	}
 
 	/// handle set clear line escape codes
 	fn handle_clearline(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
 		const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-		var n: i32 = ft.fmt.parseInt(i32, buffer[2 .. len - 1], 10) catch 0;
+		var n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
 		switch (n)
 		{
 			0 => {
-				for (0..terminal.pos.col + 1) |i| {
+				for (terminal.pos.col..tty.width) |i| {
 					terminal.history_buffer[terminal.pos.line][i] = ' ';
 				}
 			},
 			1 => {
-				for (terminal.pos.col..tty.width) |i| {
+				for (0..terminal.pos.col + 1) |i| {
 					terminal.history_buffer[terminal.pos.line][i] = ' ';
 				}
 			},
@@ -87,7 +87,7 @@ return struct {
 	/// handle set clear screen escape codes
 	fn handle_clearscreen(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
 		const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-		var n: i32 = ft.fmt.parseInt(i32, buffer[2 .. len - 1], 10) catch 0;
+		var n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
 		const screen_bottom = (terminal.head_line + history_size - terminal.scroll_offset) % history_size;
 		var screen_top = (screen_bottom + history_size - tty.height + 1) % history_size;
 
@@ -124,16 +124,16 @@ return struct {
 
 	/// handle set goto escape codes
 	fn handle_goto(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
-		const semicolon_pos = ft.mem.indexOfScalarPos(u8, buffer, 2, ';') orelse 0;
+		const semicolon_pos = ft.mem.indexOfScalarPos(u8, buffer, 1, ';') orelse 0;
 		var v: u32 = 0;
 		var h: u32 = 0;
 		if (semicolon_pos != 0)
 		{
 			const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-			v = ft.fmt.parseInt(u32, buffer[2 .. semicolon_pos], 10) catch 0;
+			v = ft.fmt.parseInt(u32, buffer[1 .. semicolon_pos], 10) catch 0;
 			h = ft.fmt.parseInt(u32, buffer[semicolon_pos + 1 .. len - 1], 10) catch 0;
 		}
-		var off_v : i32 = -@as(i32, @intCast(terminal.pos.line)) + @rem(@as(i32,@intCast(terminal.head_line)) -| @as(i32,@intCast(terminal.scroll_offset)) -| @as(i32,@intCast(tty.height - 1)) + @as(i32,@intCast(v)), history_size);
+		var off_v : i32 = -@as(i32, @intCast(terminal.pos.line)) + @mod(@as(i32,@intCast(terminal.head_line)) - @as(i32,@intCast(terminal.scroll_offset)) - @as(i32,@intCast(tty.height - 1)) + @as(i32,@intCast(v)), history_size);
 		var off_h : i32 = -@as(i32, @intCast(terminal.pos.col)) + @as(i32, @intCast(h));
 		terminal.move_cursor(off_v, off_h);
 	}
@@ -164,7 +164,7 @@ return struct {
 
 	/// check if the escape buffer contains a full escape code and execute it
 	/// see https://espterm.github.io/docs/VT100%20escape%20codes.html
-	pub fn handle_escape(terminal: *tty.TtyN(history_size), buffer: [:0] u8) error{InvalidEscape}!bool {
+	pub fn handle_escape(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) error{InvalidEscape}!bool {
 		const map = [_]struct { prefix: [:0]const u8, f: *const fn (*tty.TtyN(history_size), buffer: [:0]const u8) void } {
 				.{ .prefix = "[20h", .f = &handle_nothing }, // new line mode
 				.{ .prefix = "[?^h", .f = &handle_nothing }, // terminal config
