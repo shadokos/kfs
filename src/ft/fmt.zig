@@ -340,34 +340,21 @@ pub fn formatInt(value: anytype, base: u8, case: Case, options: FormatOptions, w
 		value_cpy = @intCast(value);
 	}
 
-	// if (base == 16)
-	// {
-	// 	buffer[index] = '0';
-	// 	buffer[index + 1] = switch (case) {.upper => 'X', .lower => 'x'};
-	// 	index += 2;
-	// }
-	// else if (base == 8)
-	// {
-	// 	buffer[index] = '0';
-	// 	index += 1;
-	// }
-	// else if (base == 2)
-	// {
-	// 	buffer[index] = '0';
-	// 	buffer[index + 1] = switch (case) {.upper => 'B', .lower => 'b'};
-	// 	index += 2;
-	// }
-
 	var tmp : U = value_cpy;
 	while (tmp != 0) : (tmp = @divTrunc(tmp, @as(U, @intCast(base)))) {
 		index += 1;
 	}
 	if (value == 0)
-		buffer[index] = '0';
+	{
+		index = 1;
+		buffer[0] = '0';
+	}
+
+	const end = index;
 	tmp = value_cpy;
 	while (tmp != 0) : (tmp = @divTrunc(tmp, @as(U, @intCast(base)))) {
 		buffer[index] = digitToChar(@as(u8,@intCast(@mod(tmp, @as(U, @intCast(base))))), case);
 		index -= 1;
 	}
-	return formatBuf(&buffer, options, writer);
+	return formatBuf(buffer[0..end], options, writer);
 }
