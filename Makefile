@@ -24,6 +24,7 @@ SRC = linker.ld \
 	tty/termios.zig \
 	tty/keyboard.zig \
 	keyboard.zig \
+	scanmap.zig \
 	ports.zig \
 	ft/ascii.zig \
 	ft/fmt.zig \
