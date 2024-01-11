@@ -379,6 +379,23 @@ pub fn TtyN(comptime history_size: u32) type {
             return ret;
         }
 
+        pub fn get_state(self: *Self) Self.State {
+			return .{
+				.pos = .{
+					.line = @intCast(@mod(@as(i32,@intCast(self.pos.line)) - (@as(i32,@intCast(self.head_line)) - @as(i32,@intCast(self.scroll_offset)) - @as(i32,@intCast(height - 1))), history_size)),
+					.col = self.pos.col
+				},
+				.attributes = self.attributes,
+				.current_color = self.current_color
+			};
+        }
+
+        pub fn set_state(self: *Self, new_state: Self.State) void {
+        	self.pos = new_state.pos;
+        	self.attributes = new_state.attributes;
+        	self.current_color = new_state.current_color;
+        }
+
         /// write the string s to the buffer
         pub fn putstr(self: *Self, s: []const u8) void {
             _ = self.write(s) catch 0;
