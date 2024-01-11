@@ -23,6 +23,8 @@ SRC = linker.ld \
 	tty/vt100.zig \
 	tty/termios.zig \
 	tty/keyboard.zig \
+	keyboard.zig \
+	ports.zig \
 	ft/ascii.zig \
 	ft/fmt.zig \
 	ft/ft.zig \
@@ -47,9 +49,6 @@ $(ISO): $(BIN) $(GRUB_CONF)
 
 run: $(ISO)
 	qemu-system-$(ARCH) -cdrom $<
-
-run_kernel: $(BIN)
-	qemu-system-$(ARCH) -kernel $<
 
 $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 	zig build \
