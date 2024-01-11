@@ -1,5 +1,4 @@
 const ft = @import("../ft/ft.zig");
-const Writer = ft.io.Writer;
 const fmt = ft.fmt;
 const vt100 = @import("vt100.zig").vt100;
 const termios = @import("termios.zig");
@@ -45,9 +44,6 @@ pub const width = 80;
 /// screen height
 pub const height = 25;
 
-/// ft.Writer implementation for TtyN
-fn TtyWriter(comptime history_size: u32) type { return Writer(*TtyN(history_size), TtyN(history_size).write_error, TtyN(history_size).write); }
-
 /// address of the mmio vga buffer
 var mmio_buffer: [*]u16 = @ptrFromInt(0xB8000);
 
@@ -61,22 +57,19 @@ pub fn TtyN(comptime history_size: u32) type {
         history_buffer: [history_size][width]u16 = undefined,
 
         /// current color
-        current_color: u16 = 0,
+        current_color: u16 = @intFromEnum(Color.white),
 
         /// attributes ('or' of 1 << Attribute)
         attributes: u32 = 0,
 
         /// current position in the history buffer
-        pos: struct { line: u32, col: u32 } = .{ .line = 0, .col = 0 },
+        pos: Self.Pos = .{},
 
 		/// the lower line writen
         head_line: u32 = 0,
 
         /// current offset for view (0 mean bottom)
         scroll_offset: u32 = 0,
-
-        /// writer for the buffer
-        writer: TtyWriter(history_size) = undefined,
 
 		/// current writing state (either Normal or escape)
 		write_state : enum {Normal, Escape} = .Normal,
@@ -188,11 +181,8 @@ pub fn TtyN(comptime history_size: u32) type {
 	        if (self.config.c_lflag & termios.ICANON != 0) {
 	        	if (self.delimited_line_end != self.read_tail)
 	        		return;
-	        	// self.printf("=======\n",  .{self.delimited_line_end, self.read_tail, self.read_head});
-	        	// var self.current_line_end = self.delimited_line_end;
 	        	while (self.unprocessed_begin != self.read_head) : ({self.current_line_end %= self.read_buffer.len; self.unprocessed_begin %= self.read_buffer.len;})
 	        	{
-	        	// self.printf("\tdelimited_line_end: {d} tail: {d} head: {d}, current_line_end: {d}, unprocessed_begin: {d}\n",  .{self.delimited_line_end, self.read_tail, self.read_head, self.current_line_end, self.unprocessed_begin});
 	        		if (self.is_end_of_line(self.read_buffer[self.unprocessed_begin])) {
 	        			if (self.read_buffer[self.unprocessed_begin] != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
 						{
@@ -226,7 +216,6 @@ pub fn TtyN(comptime history_size: u32) type {
 	        	}
 	        	self.read_head = self.current_line_end;
 	        } else {
-	        	// var self.current_line_end = self.delimited_line_end;
 	        	while (self.current_line_end != self.read_head) : (self.current_line_end %= self.read_buffer.len)
 	        	{
 					if (self.config.c_lflag & termios.ECHO != 0 or (self.read_buffer[self.current_line_end] == '\n' and self.config.c_lflag & termios.ECHONL != 0))
@@ -244,9 +233,6 @@ pub fn TtyN(comptime history_size: u32) type {
         fn put_char_to_buffer(self: *Self, c: u8) void {
 			var char : u16 = c;
 			char |= self.current_color << 8;
-			// if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.blink)) != 0) {
-			// 	char |= 1 << 15;
-			// }
 			if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.dim)) == 0) {
 				char |= 1 << 3 << 8;
 			}
@@ -263,7 +249,7 @@ pub fn TtyN(comptime history_size: u32) type {
 			self.move_cursor(0, 1);
         }
 
-        pub fn process_whitespaces(self: *Self, c: u8) void {
+        fn process_whitespaces(self: *Self, c: u8) void {
             	switch (c) {
 					'\n' => {
 						if (self.config.c_oflag & termios.ONLRET != 0)
@@ -295,7 +281,7 @@ pub fn TtyN(comptime history_size: u32) type {
         }
 
         /// write the character c in the buffer after mapping
-        pub fn output_processing(self: *Self, c: u8) void {
+        fn output_processing(self: *Self, c: u8) void {
         	if (self.config.c_oflag & termios.OPOST != 0)
         	{
            		switch (self.write_state) {
@@ -396,19 +382,9 @@ pub fn TtyN(comptime history_size: u32) type {
         	self.current_color = new_state.current_color;
         }
 
-        /// write the string s to the buffer
-        pub fn putstr(self: *Self, s: []const u8) void {
-            _ = self.write(s) catch 0;
-        }
-
-        /// initialize the writer field of the buffer
-        pub fn init_writer(self: *Self) void {
-            self.writer = TtyWriter(history_size){ .context = self };
-        }
-
-        /// write a formatted string to the buffer
-        pub fn printf(self: *Self, comptime format: []const u8, args: anytype) void {
-            fmt.format(self.writer, format, args) catch unreachable;
+        /// get writer
+        pub fn writer(self: *Self) Writer {
+        	return Self.Writer{.context = self};
         }
 
         /// clear the buffer
@@ -478,3 +454,7 @@ pub fn TtyN(comptime history_size: u32) type {
 
 /// Tty is a specialisation of TtyN with an history size of 1000
 pub const Tty = TtyN(1000);
+
+pub var tty_array: [10]Tty = [1]Tty{Tty{}} ** 10;
+
+pub var current_tty: u8 = 0;
