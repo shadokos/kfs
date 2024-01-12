@@ -6,7 +6,7 @@ return struct {
 	/// handle move escape codes
 	fn handle_move(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
 		const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-		var n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
+		var n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 1;
 		switch (buffer[len - 1]) {
 			'A' => {terminal.move_cursor(-n, 0);},
 			'B' => {terminal.move_cursor(n, 0);},
