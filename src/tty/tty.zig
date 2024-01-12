@@ -114,7 +114,7 @@ pub fn TtyN(comptime history_size: u32) type {
         /// clear line line in the history buffer
         pub fn clear_line(self: *Self, line: u32) void {
             for (0..width) |i|
-                self.history_buffer[line][i] = ' ';
+                self.history_buffer[line][i] = ' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8);
         }
 
 		/// move the curser of line_offset vertically and col_offset horizontally
@@ -445,16 +445,43 @@ pub fn TtyN(comptime history_size: u32) type {
             self.scroll(-height);
         }
 
+        pub fn put_cursor(self: *Self) void {
+        	const pos = self.get_state().pos;
+			const number = pos.line * width + pos.col;
+			asm volatile (
+			\\ movb $0x0F, %al
+			\\ movw $0x3D4, %dx
+			\\ outb %dx
+			\\ movw %bx, %ax
+			\\ movw $0x3D5, %dx
+			\\ outb %dx
+			\\ movb $0x0E, %al
+			\\ movw $0x3D4, %dx
+			\\ outb %dx
+			\\ movw %bx, %ax
+			\\ shr $0x8, %ax
+			\\ movw $0x3D5, %dx
+			\\ outb %dx
+			:
+			: [number] "{ebx}" (number),
+			);
+        }
+
         /// print the buffer to the vga buffer
-        pub fn view(self: Self) void {
+        pub fn view(self: *Self) void {
             for (0..height) |l| {
                 for (0..width) |c| {
                     const view_line = (history_size + history_size + self.head_line + 1 -| height -| self.scroll_offset) % history_size;
                     const buffer_line = (view_line + l) % history_size;
                     mmio_buffer[l * width + c] = if (((buffer_line < self.head_line or (buffer_line == self.head_line))) or (self.head_line < view_line and buffer_line >= view_line))
-                        self.history_buffer[buffer_line][c]
+                        switch (self.history_buffer[buffer_line][c]) {
+							0 => ' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8),
+							else => |char| char
+                        }
                     else
-                        ' ';
+						' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8);
+					if (l == self.pos.line and c == self.pos.col)
+						self.put_cursor();
                 }
             }
         }
