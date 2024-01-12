@@ -22,10 +22,11 @@ SRC = linker.ld \
 	tty/tty.zig \
 	tty/vt100.zig \
 	tty/termios.zig \
+	tty/keyboard/scanmap.zig \
+	tty/keyboard/keymap.zig \
+	tty/keyboard/us-std.zig \
 	tty/keyboard.zig \
-	keyboard.zig \
-	scanmap.zig \
-	ports.zig \
+	drivers/ports.zig \
 	ft/ascii.zig \
 	ft/fmt.zig \
 	ft/ft.zig \
