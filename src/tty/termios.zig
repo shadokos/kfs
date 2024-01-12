@@ -103,6 +103,7 @@ pub const IEXTEN : tcflag_t = 32; // Enable extended input character processing.
 pub const ISIG : tcflag_t = 64; // Enable signals.
 pub const NOFLSH : tcflag_t = 128; // Disable flush after interrupt or quit.
 pub const TOSTOP : tcflag_t = 256; // Send SIGTTOU for background output.
+pub const ECHOCTL : tcflag_t = 512; // echo ctrl chars as ^X
 
 fn ctrl(c: u8) u8 {return (c & 0b00011111);}
 

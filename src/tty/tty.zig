@@ -207,7 +207,16 @@ pub fn TtyN(comptime history_size: u32) type {
 	        				_ = self.write("\r\x1b[K") catch {}; // todo
 	        			self.current_line_end = self.delimited_line_end;
 	        		} else {
-						if (self.config.c_lflag & termios.ECHO != 0 or (self.read_buffer[self.unprocessed_begin] == '\n' and self.config.c_lflag & termios.ECHONL != 0))
+						if (self.config.c_lflag & termios.ECHO != 0)
+						{
+							if (self.config.c_lflag & termios.ECHOCTL != 0 and self.read_buffer[self.unprocessed_begin] & 0b11100000 == 0) {
+								self.putchar('^');
+								self.putchar(self.read_buffer[self.unprocessed_begin] | 0b01000000);
+							} else {
+								self.putchar(self.read_buffer[self.unprocessed_begin]);
+							}
+						}
+						if (self.read_buffer[self.unprocessed_begin] == '\n' and self.config.c_lflag & termios.ECHONL != 0)
 							self.putchar(self.read_buffer[self.unprocessed_begin]);
 						self.read_buffer[self.current_line_end] = self.read_buffer[self.unprocessed_begin];
 						self.current_line_end += 1;
