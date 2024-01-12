@@ -192,19 +192,19 @@ pub fn TtyN(comptime history_size: u32) type {
 						self.unprocessed_begin += 1;
 						self.unprocessed_begin %= self.read_buffer.len;
 	        			self.delimited_line_end = self.current_line_end;
-	        			return;
+	        			continue;
 	        		} else if (self.read_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
 	        			if (self.current_line_end != self.delimited_line_end)
 						{
 							if (self.config.c_lflag & termios.ECHO != 0 and self.config.c_lflag & termios.ECHOE != 0)
 							{
-								self.putstr("\x08 \x08");
+								_ = self.write("\x08 \x08") catch {};
 							}
 							self.current_line_end -= 1;
 						}
 	        		} else if (self.read_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
 						if (self.config.c_lflag & termios.ECHO != 0) // todo ECHOK
-	        				self.putstr("\r\x1b[K"); // todo
+	        				_ = self.write("\r\x1b[K") catch {}; // todo
 	        			self.current_line_end = self.delimited_line_end;
 	        		} else {
 						if (self.config.c_lflag & termios.ECHO != 0 or (self.read_buffer[self.unprocessed_begin] == '\n' and self.config.c_lflag & termios.ECHONL != 0))
