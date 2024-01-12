@@ -52,6 +52,9 @@ $(ISO): $(BIN) $(GRUB_CONF)
 run: $(ISO)
 	qemu-system-$(ARCH) -cdrom $<
 
+run_kernel: $(BIN)
+	qemu-system-$(ARCH) -kernel $<
+
 $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 	zig build \
 		--prefix $(BOOTDIR) \
