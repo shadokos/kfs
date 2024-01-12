@@ -91,7 +91,7 @@ pub  const keymap = [_][6]u16 {
 	[6]u16 {	'*',		'*',		k.A('*'),	k.A('*'),	k.A('*'),	k.C('@')	},	// 0x55 Key KP_STAR
 	[6]u16 {	'-',		'-',		k.AMIN,		k.AMIN,		k.A('-'),	k.CNMIN		},	// 0x56 Key KP_DASH
 	[6]u16 {	'+',		'+',		k.APLUS,	k.APLUS,	k.A('+'),	k.CPLUS		},	// 0x57 Key KP_PLUS
-	[6]u16 {	k.C('M'),	k.C('M'),	k.CA('M'),	k.CA('M'),	k.CA('M'),	k.C('J')	},	// 0x58 Key KP_ENTER
+	[6]u16 {	k.C('J'),	k.C('J'),	k.CA('J'),	k.CA('J'),	k.CA('J'),	k.C('J')	},	// 0x58 Key KP_ENTER
 	[6]u16 {	k.NEND,		'1',		k.AEND,		k.AEND,		k.A('1'),	k.CEND		},	// 0x59 Key KP_1
 	[6]u16 {	k.NDOWN,	'2',		k.ADOWN,	k.ADOWN,	k.A('2'),	k.CDOWN		},	// 0x5a Key KP_2
 	[6]u16 {	k.NPGDN,	'3',		k.APGDN,	k.APGDN,	k.A('3'),	k.CPGDN		},	// 0x5b Key KP_3
