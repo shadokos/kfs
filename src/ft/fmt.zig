@@ -276,16 +276,19 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
 				}
 				comptime var specifier : Specifier = try get_specifier(&fmt_copy) orelse Specifier.any;
 				comptime var options = FormatOptions{}; // todo
-				if (fmt_copy.len >= 2 and (fmt_copy[1] == '<' or fmt_copy[1] == '^' or fmt_copy[1] == '>'))
-				{
-					options.fill = comptime accept(null, &fmt_copy).?;
-					options.alignment = switch (comptime accept(null, &fmt_copy).?) {
-						'<' => .left,
-						'^' => .center,
-						'>' => .right
-					};
+				if (comptime accept(":", &fmt_copy) catch null) |_| {
+					if (fmt_copy.len >= 2 and (fmt_copy[1] == '<' or fmt_copy[1] == '^' or fmt_copy[1] == '>'))
+					{
+						options.fill = (comptime accept(null, &fmt_copy) catch {}).?;
+						options.alignment = switch ((comptime accept(null, &fmt_copy) catch {}).?) {
+							'<' => .left,
+							'^' => .center,
+							'>' => .right,
+							else => unreachable
+						};
+					}
+					options.width = comptime get_int(&fmt_copy);
 				}
-				options.width = comptime get_int(&fmt_copy);
 				if (comptime accept(".", &fmt_copy) catch null) |_| {
 					options.precision = get_int(&fmt_copy);
 				}
@@ -377,9 +380,9 @@ pub fn formatInt(value: anytype, base: u8, case: Case, options: FormatOptions, w
 		.Int => |_| @TypeOf(value),
 		else => unreachable // hopefully
 	};
-    const U = ft.meta.Int(.unsigned, @max(8, @typeInfo(Int).Int.bits + 1));
+    const U = ft.meta.Int(.unsigned, @max(8, @typeInfo(Int).Int.bits));
 
-	var buffer : [@typeInfo(U).Int.bits]u8 = undefined;
+	var buffer : [@typeInfo(U).Int.bits + 1]u8 = undefined;
 	@memset(&buffer, 0);
 
 	var value_cpy: U = 0;
@@ -398,15 +401,15 @@ pub fn formatInt(value: anytype, base: u8, case: Case, options: FormatOptions, w
 	}
 	if (value == 0)
 	{
-		index = 0;
+		index = 1;
 		buffer[0] = '0';
 	}
 
-	const end = index + 1;
+	const end = index;
 	tmp = value_cpy;
 	while (tmp != 0) : (tmp = @divTrunc(tmp, @as(U, @intCast(base)))) {
-		buffer[index] = digitToChar(@as(u8,@intCast(@mod(tmp, @as(U, @intCast(base))))), case);
 		index -= 1;
+		buffer[index] = digitToChar(@as(u8,@intCast(@mod(tmp, @as(U, @intCast(base))))), case);
 	}
 	return formatBuf(buffer[0..end], options, writer);
 }
