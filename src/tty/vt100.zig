@@ -10,8 +10,8 @@ return struct {
 		switch (buffer[len - 1]) {
 			'A' => {terminal.move_cursor(-n, 0);},
 			'B' => {terminal.move_cursor(n, 0);},
-			'C' => {terminal.move_cursor(0, -n);},
-			'D' => {terminal.move_cursor(0, n);},
+			'C' => {terminal.move_cursor(0, n);},
+			'D' => {terminal.move_cursor(0, -n);},
 			else => {},
 		}
 	}
