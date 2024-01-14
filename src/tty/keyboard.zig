@@ -18,6 +18,10 @@ var incount: u8 = 0;
 
 var locks: u16 = 0;
 
+const escape_map: [12]u8 = [_]u8{
+	'H', 'Y', 'A', 'B', 'D', 'C', 'V', 'U', 'G', 'S', 'T', '@'
+};
+
 pub const KeyState = packed struct {
 	shift_left: bool = false,
 	shift_right: bool = false,
@@ -88,11 +92,14 @@ pub fn kb_read() void {
 	incount -|= 1;
 
 	_ = index;
-	const co = make_break(scancode);
+	const c = make_break(scancode) orelse return;
 
-	if (co) |c| if (c < 0xff) {
+	if (c <= 0xff) {
 		send_to_tty(&[1]u8 {@as(u8, @intCast(c))});
-	};
+	}
+	else if (keymap.HOME <= c and c <= keymap.INSRT) {
+		send_to_tty("\x1b[" ++ [_]u8 {escape_map[c - keymap.HOME]});
+	}
 }
 
 var kbstate : u8 = 0;
