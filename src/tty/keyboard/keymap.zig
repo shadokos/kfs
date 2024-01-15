@@ -15,6 +15,9 @@ pub const HASCAPS:		u16	= 0x8000;
 pub const NUM_LOCK:		u16 = 1 << 0x1;
 pub const CAPS_LOCK: 	u16 = 1 << 0x2;
 
+pub const escape_map: [12]u8 = [_]u8 {
+	'H', 'Y', 'A', 'B', 'D', 'C', 'V', 'U', 'G', 'S', 'T', '@'
+};
 
 /// Map to control code
 pub inline fn C(scancode: u16) u16 {

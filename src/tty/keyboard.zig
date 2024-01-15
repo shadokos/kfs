@@ -6,7 +6,6 @@ const scanmap = @import("keyboard/scanmap.zig");
 const scanmap_normal = scanmap.scanmap_normal;
 const scanmap_special = scanmap.scanmap_special;
 
-
 const SCANCODE_MASK_RELEASED =	0x80;
 const SCANCODE_MASK_INDEX =		0x7F;
 const KEYBOARD_INPUT_SIZE =		32;
@@ -16,11 +15,9 @@ var intail: u8 = 0;
 var inhead: u8 = 0;
 var incount: u8 = 0;
 
-var locks: u16 = 0;
+var kbstate : u8 = 0;
 
-const escape_map: [12]u8 = [_]u8{
-	'H', 'Y', 'A', 'B', 'D', 'C', 'V', 'U', 'G', 'S', 'T', '@'
-};
+var locks: u16 = 0;
 
 pub const KeyState = packed struct {
 	shift_left: bool = false,
@@ -101,13 +98,11 @@ pub fn kb_read() void {
 		keymap.HOME...keymap.INSRT => {
 			if (c == keymap.PGUP) { send_to_tty("\x1bD"); }
 			else if (c == keymap.PGDN) { send_to_tty("\x1bM"); }
-			else { send_to_tty("\x1b[" ++ [_]u8 {escape_map[c - keymap.HOME]}); }
+			else { send_to_tty("\x1b[" ++ [_]u8 {keymap.escape_map[c - keymap.HOME]}); }
 		},
 		else => {},
 	}
 }
-
-var kbstate : u8 = 0;
 
 fn handler() void {
 	const scan_code : u8 = ports.inb(ports.Ports.keyboard_data);
@@ -141,7 +136,7 @@ fn is_key_available() bool {
 	return ports.inb(ports.Ports.keyboard_status) & 1 == 1;
 }
 
-// Is designed to crudely simulate the keyboard interrupt handler
+/// Is designed to crudely simulate the keyboard interrupt handler
 pub fn simulate_keyboard_interrupt() void {
 	if (is_key_available()) {
 		handler();
