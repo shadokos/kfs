@@ -164,20 +164,31 @@ pub fn TtyN(comptime history_size: u32) type {
         }
 
         pub fn input(self: *Self, s: [] const u8) void {
-        	for (s) |c| {
-        		self.read_buffer[self.read_head] = c;
-        		self.read_head += 1;
-        		self.read_head %= self.read_buffer.len;
-        	}
+        	for (s) |c| self.input_char(c);
 			if (self.read_tail == self.delimited_line_end)
-				self.process_input();
+				self.local_processing();
+        }
+
+        fn input_char(self: *Self, c: u8) void {
+			if (self.input_processing(c)) |p| {
+				self.read_buffer[self.read_head] = p;
+				self.read_head += 1;
+				self.read_head %= self.read_buffer.len;
+			}
+        }
+
+        fn input_processing(self: *Self, c: u8) ?u8 {
+        	return if (self.config.c_iflag & termios.IGNCR != 0 and c == '\r') null
+        	else if (self.config.c_iflag & termios.ICRNL != 0 and c == '\r') '\n'
+        	else if (self.config.c_iflag & termios.INLCR != 0 and c == '\n') '\r'
+        	else c;
         }
 
         fn is_end_of_line(self: *Self, c: u8) bool {
         	return c == '\n' or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOL)] or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)];
         }
 
-        fn process_input(self: *Self) void {
+        fn local_processing(self: *Self) void {
 	        if (self.config.c_lflag & termios.ICANON != 0) {
 	        	if (self.delimited_line_end != self.read_tail)
 	        		return;
@@ -342,7 +353,7 @@ pub fn TtyN(comptime history_size: u32) type {
         		if (self.read_tail == self.delimited_line_end)
         		{
         			keyboard.send_to_tty();
-        			self.process_input();
+        			self.local_processing();
         			if (self.read_tail == self.read_head)
         				break;
         		}
@@ -415,16 +426,6 @@ pub fn TtyN(comptime history_size: u32) type {
             self.current_color |= @intFromEnum(color);
         }
 
-        /// move the view to the bottom of the buffer
-        pub fn set_view_bottom(self: *Self) void {
-            self.scroll_offset = 0;
-        }
-
-        /// move the view to the top of the buffer
-        pub fn set_view_top(self: *Self) void {
-            self.scroll_offset = history_size - height;
-        }
-
         pub fn scroll(self: *Self, off: i32) void {
             if (off > 0) {
                 self.scroll_offset += @intCast(off);
@@ -432,18 +433,10 @@ pub fn TtyN(comptime history_size: u32) type {
                 self.scroll_offset -|= @intCast(-off);
             }
             if (self.scroll_offset >= history_size)
-                self.set_view_top();
+            	self.scroll_offset = history_size - 1;
         }
 
-        /// move the view one page up
-        pub fn page_up(self: *Self) void {
-            self.scroll(height);
-        }
 
-        /// move the view one page down
-        pub fn page_down(self: *Self) void {
-            self.scroll(-height);
-        }
 
         pub fn put_cursor(self: *Self) void {
         	const pos = self.get_state().pos;
