@@ -1,6 +1,7 @@
 const InputKey = @import("scanmap.zig").InputKey;
 const default_map = @import("us-std.zig").keymap;
 const KeyState = @import("../keyboard.zig").KeyState;
+const KeyLocks = @import("../keyboard.zig").KeyLocks;
 
 pub const MAP_COLS:		u8	= 6;
 pub const NB_SCANCODES:	u8	= @typeInfo(InputKey).Enum.fields.len;
@@ -12,48 +13,47 @@ pub const ALT:			u16	= 0x0800;
 pub const HASNUM:		u16	= 0x4000;
 pub const HASCAPS:		u16	= 0x8000;
 
-pub const NUM_LOCK:		u16 = 1 << 0x1;
-pub const CAPS_LOCK: 	u16 = 1 << 0x2;
-
-pub const escape_map: [12]u8 = [_]u8 {
-	'H', 'Y', 'A', 'B', 'D', 'C', 'V', 'U', 'G', 'S', 'T', '@'
+pub const escape_map: [12][] const u8 = [_][] const u8 {
+	"\x1b[H", "\x1b[Y", "\x1b[A", "\x1b[B", "\x1b[D", "\x1b[C", "\x1bD", "\x1bM", "\x1b[G", "\x1b[S", "\x1b[T", "\x1b[@"
 };
 
 /// Map to control code
-pub inline fn C(scancode: u16) u16 {
+pub inline fn C(comptime scancode: u16) u16 {
 	return scancode & 0x1F;
 }
 
 /// Set eight bit (ALT)
-pub inline fn A(scancode: u16) u16 {
+pub inline fn A(comptime scancode: u16) u16 {
 	return scancode | 0x80;
 }
 
 /// Control + Alt
-pub inline fn CA(scancode: u16) u16 {
+pub inline fn CA(comptime scancode: u16) u16 {
 	return A(C(scancode));
 }
 
 /// Add "Num lock has effect" attribute
-pub inline fn N(scancode: u16) u16 {
+pub inline fn N(comptime scancode: u16) u16 {
 	return scancode | HASNUM;
 }
 
 /// Add "Caps lock has effect" attribute
-pub inline fn L(scancode: u16) u16 {
+pub inline fn L(comptime scancode: u16) u16 {
 	return scancode | HASCAPS;
 }
 
-pub fn map_key(index: u16, locks: u16, keyState: *KeyState) u16 {
+pub fn map_key(index: u16, locks: KeyLocks, keyState: KeyState) u16 {
 	var caps: bool = false;
 	var col: u8 = 0;
 	var row: [6]u16 = default_map[index];
 
-	caps = keyState.shift;
-	if ((locks & NUM_LOCK) != 0 and (row[0] & HASNUM) != 0)
-		caps = !caps;
-	if ((locks & CAPS_LOCK) != 0 and (row[0] & HASCAPS) != 0)
-		caps = !caps;
+	if (row[0] & HASNUM != 0) {
+		if (locks.num_lock) caps = true;
+	} else {
+		caps = keyState.shift;
+		if ((locks.caps_lock) and (row[0] & HASCAPS) != 0)
+			caps = !caps;
+	}
 
 	if (keyState.alt) {
 		col = 2;

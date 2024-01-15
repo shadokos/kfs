@@ -15,10 +15,6 @@ var intail: u8 = 0;
 var inhead: u8 = 0;
 var incount: u8 = 0;
 
-var kbstate : u8 = 0;
-
-var locks: u16 = 0;
-
 pub const KeyState = packed struct {
 	shift_left: bool = false,
 	shift_right: bool = false,
@@ -34,7 +30,20 @@ pub const KeyState = packed struct {
 	alt_lock: bool = false,
 };
 
+pub const KeyLocks = packed struct {
+	caps_lock: bool = false,
+	num_lock: bool = false,
+};
+
+const ScanMode = enum (u2) {
+	Normal = 0,
+	Extended = 1,
+	Pause = 2,
+};
+
 pub var keyState: KeyState = .{};
+var scan_mode: ScanMode = .Normal;
+var locks: KeyLocks = .{};
 
 pub fn send_to_tty(data: []const u8) void {
 	const current: *tty.Tty = &tty.tty_array[tty.current_tty];
@@ -54,7 +63,7 @@ fn make_break(scancode: u16) ?u16 {
 	var c = scancode & 0x7FFF;
 	var make: bool = !(scancode & 0x8000 != 0);
 
-	c = keymap.map_key(c, locks, &keyState);
+	c = keymap.map_key(c, locks, keyState);
 	switch (c) {
 		keymap.RCTRL   => { keyState.ctrl_right  = make; keyState.ctrl  = make;  },
 		keymap.LCTRL   => { keyState.ctrl_left   = make; keyState.ctrl  = make;  },
@@ -63,18 +72,19 @@ fn make_break(scancode: u16) ?u16 {
 		keymap.RALT    => { keyState.alt_right   = make; keyState.alt   = make;  },
 		keymap.LALT    => { keyState.alt_left    = make; keyState.alt   = make;  },
 		keymap.CALOCK  => {
-			if (!keyState.caps_down and make) locks ^= keymap.CAPS_LOCK;
+			if (!keyState.caps_down and make)
+				locks.caps_lock = !locks.caps_lock;
 			keyState.caps_down = make;
 		},
 		keymap.NLOCK => {
-			if (!keyState.num_down and make) locks ^= keymap.NUM_LOCK;
+			if (!keyState.num_down and make)
+				locks.num_lock = !locks.num_lock;
 			keyState.num_down = make;
 		},
-		else => {
-			if (!make) return null;
-			if (c != 0) return c;
-			return null;
-		}
+		else => if (make and c != 0)
+				return c
+			else
+				return null,
 	}
 	return null;
 }
@@ -83,22 +93,18 @@ pub fn kb_read() void {
 	if (incount == 0) return ;
 
 	const scancode: u16 = inbuf[intail];
-	const index: u16 = scancode & 0x7FFF;
 
 	intail = (intail + 1) % KEYBOARD_INPUT_SIZE;
 	incount -|= 1;
 
-	_ = index;
 	const c = make_break(scancode) orelse return;
 
 	switch (c) {
 		0...0xff =>  {
-		 	send_to_tty(&[1]u8 {@as(u8, @intCast(c))});
+		 	send_to_tty(&[1]u8 {@intCast(c)});
 		},
 		keymap.HOME...keymap.INSRT => {
-			if (c == keymap.PGUP) { send_to_tty("\x1bD"); }
-			else if (c == keymap.PGDN) { send_to_tty("\x1bM"); }
-			else { send_to_tty("\x1b[" ++ [_]u8 {keymap.escape_map[c - keymap.HOME]}); }
+			send_to_tty(keymap.escape_map[c - keymap.HOME]);
 		},
 		else => {},
 	}
@@ -108,28 +114,28 @@ fn handler() void {
 	const scan_code : u8 = ports.inb(ports.Ports.keyboard_data);
 	const index : u8 = scan_code & SCANCODE_MASK_INDEX;
 	const released : u16 = scan_code & SCANCODE_MASK_RELEASED;
-	var code : scanmap.InputKey = .NONE;
 
-	switch (kbstate) {
-		1 => if (index < scanmap_special.len) {
-			code = scanmap_special[index];
+	switch (scan_mode) {
+		.Extended => if (index < scanmap_special.len and scanmap_special[index] != .NONE) {
+			send_to_buffer(@intFromEnum(scanmap_special[index]) | (released << 8));
 		},
-		2 => { return ; }, // Skip the byte, it's a pause and i personnaly don't care yet
-		else => {
+		.Pause => {}, // Skip the byte, it's a pause and i personnaly don't care yet
+		.Normal => {
 			switch (scan_code) {
-				0xE0 => { kbstate = 1; return ;	},
-				0xE1 => { kbstate = 2; return ;	},
-				else => if (index < scanmap_normal.len) {
-					code = scanmap_normal[index];
-				}
+				0xE0 => {
+					scan_mode = .Extended;
+					return ;
+				},
+				0xE1 => {
+					scan_mode = .Pause;
+					return ;
+				},
+				else => if (index < scanmap_normal.len and scanmap_normal[index] != .NONE)
+					send_to_buffer(@intFromEnum(scanmap_normal[index]) | (released << 8))
 			}
 		},
 	}
-	kbstate = 0;
-
-	if (code != .NONE) {
-		send_to_buffer(@intFromEnum(code) | (released << 8));
-	}
+	scan_mode = .Normal;
 }
 
 fn is_key_available() bool {
