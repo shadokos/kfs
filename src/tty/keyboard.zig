@@ -94,11 +94,16 @@ pub fn kb_read() void {
 	_ = index;
 	const c = make_break(scancode) orelse return;
 
-	if (c <= 0xff) {
-		send_to_tty(&[1]u8 {@as(u8, @intCast(c))});
-	}
-	else if (keymap.HOME <= c and c <= keymap.INSRT) {
-		send_to_tty("\x1b[" ++ [_]u8 {escape_map[c - keymap.HOME]});
+	switch (c) {
+		0...0xff =>  {
+		 	send_to_tty(&[1]u8 {@as(u8, @intCast(c))});
+		},
+		keymap.HOME...keymap.INSRT => {
+			if (c == keymap.PGUP) { send_to_tty("\x1bD"); }
+			else if (c == keymap.PGDN) { send_to_tty("\x1bM"); }
+			else { send_to_tty("\x1b[" ++ [_]u8 {escape_map[c - keymap.HOME]}); }
+		},
+		else => {},
 	}
 }
 
