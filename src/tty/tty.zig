@@ -4,6 +4,7 @@ const vt100 = @import("vt100.zig").vt100;
 const termios = @import("termios.zig");
 const cc_t = termios.cc_t;
 const keyboard = @import("keyboard.zig");
+const ports = @import("../drivers/ports.zig");
 
 /// The colors available for the console
 pub const Color = enum(u8) {
@@ -46,6 +47,10 @@ pub const height = 25;
 
 /// address of the mmio vga buffer
 var mmio_buffer: [*]u16 = @ptrFromInt(0xB8000);
+
+/// wether or not the cursor is on the screen.
+/// initialized to false because we need to change its size on boot
+var cursor_enabled: bool = false;
 
 /// TtyN is a generic struct that represent a vt100-like terminal, it can be written and can
 /// be shown on the screen with the view function, TtyN include a scrollable
@@ -425,27 +430,47 @@ pub fn TtyN(comptime history_size: u32) type {
         }
 
 
+		/// enable vga cursor
+		pub fn enable_cursor(_: *Self) void {
+        	const cursor_start : u8 = 0;
+        	const cursor_end : u8 = 15;
+        	ports.outb(.vga_idx_reg, 0x0A);
+        	ports.outb(.vga_io_reg, (ports.inb(.vga_io_reg) & 0xC0) | cursor_start);
+        	ports.outb(.vga_idx_reg, 0x0B);
+        	ports.outb(.vga_io_reg, (ports.inb(.vga_io_reg) & 0xE0) | cursor_end);
+			cursor_enabled = true;
+        }
 
-        pub fn put_cursor(self: *Self) void {
-        	const pos = self.get_state().pos;
-			const number = pos.line * width + pos.col;
-			asm volatile (
-			\\ movb $0x0F, %al
-			\\ movw $0x3D4, %dx
-			\\ outb %dx
-			\\ movw %bx, %ax
-			\\ movw $0x3D5, %dx
-			\\ outb %dx
-			\\ movb $0x0E, %al
-			\\ movw $0x3D4, %dx
-			\\ outb %dx
-			\\ movw %bx, %ax
-			\\ shr $0x8, %ax
-			\\ movw $0x3D5, %dx
-			\\ outb %dx
-			:
-			: [number] "{ebx}" (number),
-			);
+		/// disable vga cursor
+        pub fn disable_cursor(_: *Self) void {
+			ports.outb(.vga_idx_reg, 0x0A);
+			ports.outb(.vga_io_reg, 0x20);
+			cursor_enabled = false;
+        }
+
+		/// print the cursor at the current position on the screen
+        fn put_cursor(self: *Self) void {
+        	const is_visible : bool = if (self.head_line < height)
+					self.pos.line > ((self.head_line + history_size - height) % history_size) or self.pos.line <= self.head_line
+				else
+					self.pos.line > (self.head_line - height) and self.pos.line <= self.head_line;
+			if (is_visible)
+			{
+				if (!cursor_enabled)
+					self.enable_cursor();
+
+				const pos = self.get_state().pos;
+				const index: u32 = pos.line * width + pos.col;
+				ports.outb(.vga_idx_reg, 0x0F);
+				ports.outb(.vga_io_reg, @intCast(index & 0xff));
+				ports.outb(.vga_idx_reg, 0x0E);
+				ports.outb(.vga_io_reg, @intCast((index >> 8) & 0xff));
+			}
+			else
+			{
+				if (cursor_enabled)
+					self.disable_cursor();
+			}
         }
 
         /// print the buffer to the vga buffer
@@ -461,10 +486,9 @@ pub fn TtyN(comptime history_size: u32) type {
                         }
                     else
 						' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8);
-					if (l == self.pos.line and c == self.pos.col)
-						self.put_cursor();
                 }
             }
+			self.put_cursor();
         }
     };
 }
