@@ -309,10 +309,10 @@ pub fn TtyN(comptime history_size: u32) type {
 						// todo?
 						// self.move_cursor(height, -@as(i32, @intCast(self.pos.col)));
 					},
-					' '...'~' => {
+					' '...'~', 0x80...0xfe => {
 						self.put_char_to_buffer(c);
 					},
-					else => {}, // todo
+					else => {}, // unknown characters are discarded
 				}
         }
 
