@@ -1,6 +1,8 @@
-pub const Ports = enum(u8) {
+pub const Ports = enum(u16) {
 	keyboard_data = 0x60,
 	keyboard_status = 0x64,
+	vga_idx_reg = 0x03d4,
+	vga_io_reg = 0x03d5
 };
 
 pub fn inb(port: Ports) u8 {
