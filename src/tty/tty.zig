@@ -195,9 +195,9 @@ pub fn TtyN(comptime history_size: u32) type {
 
 		/// perform input processing as defined by POSIX and according to the current termios configuration
         fn input_processing(self: *Self, c: u8) ?u8 {
-        	return if (self.config.c_iflag & termios.IGNCR != 0 and c == '\r') null
-        	else if (self.config.c_iflag & termios.ICRNL != 0 and c == '\r') '\n'
-        	else if (self.config.c_iflag & termios.INLCR != 0 and c == '\n') '\r'
+        	return if (self.config.c_iflag.IGNCR and c == '\r') null
+        	else if (self.config.c_iflag.ICRNL and c == '\r') '\n'
+        	else if (self.config.c_iflag.INLCR and c == '\n') '\r'
         	else c;
         }
 
@@ -208,7 +208,7 @@ pub fn TtyN(comptime history_size: u32) type {
 
 		/// perform local processing as defined by POSIX and according to the current termios configuration
         fn local_processing(self: *Self) void {
-	        if (self.config.c_lflag & termios.ICANON != 0) {
+	        if (self.config.c_lflag.ICANON) {
 	        	while (self.unprocessed_begin != self.read_head) : ({self.current_line_end %= self.input_buffer.len; self.unprocessed_begin %= self.input_buffer.len;})
 	        	{
 	        		if (self.is_end_of_line(self.input_buffer[self.unprocessed_begin])) {
@@ -225,27 +225,27 @@ pub fn TtyN(comptime history_size: u32) type {
 	        		} else if (self.input_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
 	        			if (self.current_line_end != self.current_line_begin)
 						{
-							if (self.config.c_lflag & termios.ECHO != 0 and self.config.c_lflag & termios.ECHOE != 0)
+							if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE)
 							{
 								_ = self.write("\x08 \x08") catch {};
 							}
 							self.current_line_end -= 1;
 						}
 	        		} else if (self.input_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
-						if (self.config.c_lflag & termios.ECHO != 0) // todo ECHOK
+						if (self.config.c_lflag.ECHO) // todo ECHOK
 	        				_ = self.write("\r\x1b[K") catch {}; // todo
 	        			self.current_line_end = self.current_line_begin;
 	        		} else {
-						if (self.config.c_lflag & termios.ECHO != 0)
+						if (self.config.c_lflag.ECHO)
 						{
-							if (self.config.c_lflag & termios.ECHOCTL != 0 and self.input_buffer[self.unprocessed_begin] & 0b11100000 == 0) {
+							if (self.config.c_lflag.ECHOCTL and self.input_buffer[self.unprocessed_begin] & 0b11100000 == 0) {
 								self.putchar('^');
 								self.putchar(self.input_buffer[self.unprocessed_begin] | 0b01000000);
 							} else {
 								self.putchar(self.input_buffer[self.unprocessed_begin]);
 							}
 						}
-						if (self.input_buffer[self.unprocessed_begin] == '\n' and self.config.c_lflag & termios.ECHONL != 0)
+						if (self.input_buffer[self.unprocessed_begin] == '\n' and self.config.c_lflag.ECHONL)
 							self.putchar(self.input_buffer[self.unprocessed_begin]);
 						self.input_buffer[self.current_line_end] = self.input_buffer[self.unprocessed_begin];
 						self.current_line_end += 1;
@@ -257,7 +257,7 @@ pub fn TtyN(comptime history_size: u32) type {
 	        } else {
 	        	while (self.current_line_end != self.read_head) : (self.current_line_end %= self.input_buffer.len)
 	        	{
-					if (self.config.c_lflag & termios.ECHO != 0 or (self.input_buffer[self.current_line_end] == '\n' and self.config.c_lflag & termios.ECHONL != 0))
+					if (self.config.c_lflag.ECHO or (self.input_buffer[self.current_line_end] == '\n' and self.config.c_lflag.ECHONL))
 						self.putchar(self.input_buffer[self.current_line_end]);
 	        		self.current_line_end += 1;
 	        	}
@@ -288,7 +288,7 @@ pub fn TtyN(comptime history_size: u32) type {
         fn process_whitespaces(self: *Self, c: u8) void {
             	switch (c) {
 					'\n' => {
-						if (self.config.c_oflag & termios.ONLRET != 0)
+						if (self.config.c_oflag.ONLRET)
 							{self.move_cursor(1, -@as(i32, @intCast(self.pos.col)));}
 						else
 							{self.move_cursor(1, 0);}
@@ -318,7 +318,7 @@ pub fn TtyN(comptime history_size: u32) type {
 
 		/// perform output processing as defined by POSIX and according to the current termios configuration
         fn output_processing(self: *Self, c: u8) void {
-        	if (self.config.c_oflag & termios.OPOST != 0)
+        	if (self.config.c_oflag.OPOST)
         	{
            		switch (self.write_state) {
 					.Escape => if (ft.mem.len(@as([*:0]u8, &self.escape_buffer)) < self.escape_buffer.len - 1) {
@@ -336,16 +336,16 @@ pub fn TtyN(comptime history_size: u32) type {
 						self.write_state = .Normal;
 					},
 					.Normal => {
-						if (self.config.c_oflag & termios.ONLCR != 0 and c == '\n')
+						if (self.config.c_oflag.ONLCR and c == '\n')
 						{
 							self.process_whitespaces('\r');
 							self.process_whitespaces('\n');
 						}
-						else if (self.config.c_oflag & termios.OCRNL != 0 and c == '\r')
+						else if (self.config.c_oflag.OCRNL and c == '\r')
 						{
 							self.process_whitespaces('\n');
 						}
-						else if (self.config.c_oflag & termios.OCRNL != 0 and c == '\r' and self.pos.col == 0)
+						else if (self.config.c_oflag.OCRNL and c == '\r' and self.pos.col == 0)
 						{}
 						else if (c == 0x1b) {
 							self.write_state = .Escape;
@@ -358,7 +358,7 @@ pub fn TtyN(comptime history_size: u32) type {
 				self.process_whitespaces(c);
 			}
         }
-        
+
         /// write the character c to the terminal without flush
         fn putchar_no_flush(self: *Self, c: u8) void {
 			self.output_processing(c);
@@ -383,7 +383,7 @@ pub fn TtyN(comptime history_size: u32) type {
         		self.read_tail += 1;
         		self.read_tail %= self.input_buffer.len;
         		count += 1;
-	        	if (self.config.c_lflag & termios.ICANON != 0 and self.is_end_of_line(c.*))
+	        	if (self.config.c_lflag.ICANON and self.is_end_of_line(c.*))
 	        	{
         			if (c.* == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
         				count -= 1;
