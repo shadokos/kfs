@@ -24,7 +24,7 @@ pub fn Reader(
 		}
 
 		pub fn readByte(self: Self, byte: u8) Error!void {
-			_ = try callback(self.context, &byte);
+			_ = try readFn(self.context, &byte);
 		}
 	};
 }
