@@ -308,6 +308,9 @@ pub fn TtyN(comptime history_size: u32) type {
 							@memcpy(&self.escape_buffer, &buffer_save);
 							self.write_state = .Escape;
 						}
+					} else {
+						@memset(&self.escape_buffer, 0);
+						self.write_state = .Normal;
 					},
 					.Normal => {
 						if (self.config.c_oflag & termios.ONLCR != 0 and c == '\n')
