@@ -305,18 +305,16 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
 								if (@typeInfo(@TypeOf(arg_object)) != .Pointer and @typeInfo(@TypeOf(arg_object)) != .Array) {
 									@compileError("object is not a string");
 								}
-								const string = switch (@typeInfo(@TypeOf(arg_object))) {
+								const slice = switch (@typeInfo(@TypeOf(arg_object))) {
 									 .Pointer => |p| switch (p.size) {
-										.One => arg_object.*,
+										.One => arg_object.*[0..],
+										.Slice => arg_object,
 										else => arg_object
 									},
-									.Array => |_| arg_object,
+									.Array => |_| arg_object[0..],
 									else => unreachable
 								};
-								switch (@typeInfo(@TypeOf(string))) {
-									.Array => |p| if (p.child == u8) try formatBuf(arg_object[0..], options, writer) else @compileError("object is not a string " ++ @typeName(@TypeOf(arg_object)) ++ " " ++ @typeName(p.child)),
-									else => @compileError("object is not a string")
-								}
+								try formatBuf(slice, options, writer);
 							},
 					.decimal => switch (@typeInfo(@TypeOf(arg_object))) {
 									.Int, .ComptimeInt => try formatInt(arg_object, 10, Case.lower, options, writer),
