@@ -141,17 +141,17 @@ pub fn TtyN(comptime history_size: u32) type {
                     self.head_line = self.pos.line;
 					self.clear();
                 } else {
-                	var truc : u32 = 0;
+                	var pos_to_headline : u32 = 0;
                 	if (self.pos.line <= self.head_line) {
-                		truc = self.head_line - self.pos.line;
+                		pos_to_headline = self.head_line - self.pos.line;
                 	} else {
-                		truc = history_size - (self.head_line - self.pos.line);
+                		pos_to_headline = history_size + (self.pos.line -  self.head_line);
                 	}
 					self.pos.line += @as(u32, @intCast(actual_line_offset));
 					self.pos.line %= history_size;
-					if (actual_line_offset > truc)
+					if (actual_line_offset > pos_to_headline)
 					{
-						for (0..(@as(u32, @intCast(actual_line_offset))-|truc)) |_|
+						for (0..(@as(u32, @intCast(actual_line_offset)) -| pos_to_headline)) |_|
 						{
 							self.head_line += 1;
 							self.head_line %= history_size;
