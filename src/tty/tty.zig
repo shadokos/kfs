@@ -1,5 +1,4 @@
 const ft = @import("../ft/ft.zig");
-const fmt = ft.fmt;
 const vt100 = @import("vt100.zig").vt100;
 const termios = @import("termios.zig");
 const cc_t = termios.cc_t;
@@ -98,6 +97,7 @@ pub fn TtyN(comptime history_size: u32) type {
         config: termios.termios = .{},
         
         pub const Writer = ft.io.Writer(*Self, Self.WriteError, Self.write);
+        pub const Reader = ft.io.Reader(*Self, Self.ReadError, Self.read);
 
         pub const WriteError = error{};
         pub const ReadError = error{};
@@ -400,6 +400,11 @@ pub fn TtyN(comptime history_size: u32) type {
         	return Self.Writer{.context = self};
         }
 
+        /// get reader
+        pub fn reader(self: *Self) Reader {
+        	return Self.Reader{.context = self};
+        }
+
         /// clear the buffer
         pub fn clear(self: *Self) void {
             for (0..history_size) |i| {
@@ -475,6 +480,8 @@ pub fn TtyN(comptime history_size: u32) type {
 
         /// print the buffer to the vga buffer
         pub fn view(self: *Self) void {
+        	if (&tty_array[current_tty] != self)
+        		return;
             for (0..height) |l| {
                 for (0..width) |c| {
                     const view_line = (history_size + history_size + self.head_line + 1 -| height -| self.scroll_offset) % history_size;
@@ -496,6 +503,34 @@ pub fn TtyN(comptime history_size: u32) type {
 /// Tty is a specialisation of TtyN with an history size of 1000
 pub const Tty = TtyN(1000);
 
-pub var tty_array: [10]Tty = [1]Tty{Tty{}} ** 10;
+/// maximum tty index for tty_array
+pub const max_tty = 9;
 
+///	array of all the available ttys
+pub var tty_array: [max_tty + 1]Tty = [1]Tty{Tty{}} ** 10;
+
+/// index of the active tty
 pub var current_tty: u8 = 0;
+
+/// set the current tty
+pub fn set_tty(n: u8) !void {
+	if (n > max_tty)
+		return error.InvalidTty;
+	current_tty = n;
+	tty_array[current_tty].view();
+}
+
+/// return the reader object of the current tty
+pub inline fn get_reader() Tty.Reader {
+	return tty_array[current_tty].reader();
+}
+
+/// return the writer object of the current tty
+pub inline fn get_writer() Tty.Writer {
+	return tty_array[current_tty].writer();
+}
+
+/// print a formatted string to the current terminal
+pub inline fn printk(comptime fmt: []const u8, args: anytype) void {
+	get_writer().print(fmt, args) catch {};
+}
