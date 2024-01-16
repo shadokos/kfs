@@ -197,7 +197,7 @@ return struct {
 				.{ .prefix = "(^", .f = &handle_nothing }, // special chars
 				.{ .prefix = ")^", .f = &handle_nothing }, // special chars
 				.{ .prefix = "N", .f = &handle_nothing }, // single shift 2
-				.{ .prefix = "D", .f = &handle_nothing }, // single shift 3
+				.{ .prefix = "O", .f = &handle_nothing }, // single shift 3
 				.{ .prefix = "[m", .f = &handle_set_attribute },
 				.{ .prefix = "[^m", .f = &handle_set_attribute },
 				.{ .prefix = "[^;^r", .f = &handle_nothing }, // Set top and bottom line#s of a window
