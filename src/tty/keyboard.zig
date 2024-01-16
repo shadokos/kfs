@@ -88,19 +88,22 @@ fn make_break(scancode: u16) ?u16 {
 }
 
 pub fn kb_read() void {
-	if (incount == 0) return ;
+	simulate_keyboard_interrupt(); // remove when we have interrupts
+	while (incount != 0) {
+		simulate_keyboard_interrupt(); // remove when we have interrupts
+		simulate_keyboard_interrupt(); // remove when we have interrupts
+		const scancode: u16 = inbuf[intail];
 
-	const scancode: u16 = inbuf[intail];
+		intail = (intail + 1) % KEYBOARD_INPUT_SIZE;
+		incount -|= 1;
 
-	intail = (intail + 1) % KEYBOARD_INPUT_SIZE;
-	incount -|= 1;
+		const c = make_break(scancode) orelse return;
 
-	const c = make_break(scancode) orelse return;
-
-	switch (c) {
-		0...0xff => send_to_tty(&[1]u8 {@intCast(c)}),
-		keymap.HOME...keymap.INSRT => send_to_tty(keymap.escape_map[c - keymap.HOME]),
-		else => {},
+		switch (c) {
+			0...0xff => send_to_tty(&[1]u8 {@intCast(c)}),
+			keymap.HOME...keymap.INSRT => send_to_tty(keymap.escape_map[c - keymap.HOME]),
+			else => {},
+		}
 	}
 }
 
