@@ -56,6 +56,8 @@ var cursor_enabled: bool = false;
 /// history and various functions to control the view displacement.
 /// The template parameter to TtyN is the size of the (statically allocated) history
 pub fn TtyN(comptime history_size: u32) type {
+	if (history_size < height)
+		@compileError("TtyN: history_size must be greater than the terminal height");
     return struct {
         /// history buffer
         history_buffer: [history_size][width]u16 = undefined,
