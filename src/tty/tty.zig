@@ -78,15 +78,14 @@ pub fn TtyN(comptime history_size: u32) type {
 		/// buffer for escape sequences
         escape_buffer: [10:0]u8 = [_:0]u8{0} ** 10,
 
-        // current_line: [MAX_CANON]u8 = undefined,
-
-        read_buffer: [MAX_INPUT]u8 = undefined,
+        input_buffer: [MAX_INPUT]u8 = undefined,
 
         read_head: usize = 0,
 
         read_tail: usize = 0,
 
-        delimited_line_end: usize = 0,
+        current_line_begin: usize = 0,
+
         current_line_end: usize = 0,
 
         unprocessed_begin: usize = 0,
@@ -165,16 +164,15 @@ pub fn TtyN(comptime history_size: u32) type {
 
         pub fn input(self: *Self, s: [] const u8) void {
         	for (s) |c| self.input_char(c);
-			if (self.read_tail == self.delimited_line_end)
-				self.local_processing();
+        	self.local_processing();
         }
 
         fn input_char(self: *Self, c: u8) void {
-			if (self.input_processing(c)) |p| {
-				self.read_buffer[self.read_head] = p;
+			if (self.input_processing(c)) |p| if ((self.read_head + 1) % self.input_buffer.len != self.read_tail) {
+				self.input_buffer[self.read_head] = p;
 				self.read_head += 1;
-				self.read_head %= self.read_buffer.len;
-			}
+				self.read_head %= self.input_buffer.len;
+			};
         }
 
         fn input_processing(self: *Self, c: u8) ?u8 {
@@ -190,22 +188,21 @@ pub fn TtyN(comptime history_size: u32) type {
 
         fn local_processing(self: *Self) void {
 	        if (self.config.c_lflag & termios.ICANON != 0) {
-	        	if (self.delimited_line_end != self.read_tail)
-	        		return;
-	        	while (self.unprocessed_begin != self.read_head) : ({self.current_line_end %= self.read_buffer.len; self.unprocessed_begin %= self.read_buffer.len;})
+	        	while (self.unprocessed_begin != self.read_head) : ({self.current_line_end %= self.input_buffer.len; self.unprocessed_begin %= self.input_buffer.len;})
 	        	{
-	        		if (self.is_end_of_line(self.read_buffer[self.unprocessed_begin])) {
-	        			if (self.read_buffer[self.unprocessed_begin] != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
+	        		if (self.is_end_of_line(self.input_buffer[self.unprocessed_begin])) {
+	        			if (self.input_buffer[self.unprocessed_begin] != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
 						{
-							self.putchar(self.read_buffer[self.unprocessed_begin]);
+							self.putchar(self.input_buffer[self.unprocessed_begin]);
 	        			}
-						self.read_buffer[self.current_line_end] = self.read_buffer[self.unprocessed_begin];
+						self.input_buffer[self.current_line_end] = self.input_buffer[self.unprocessed_begin];
 						self.unprocessed_begin += 1;
-						self.unprocessed_begin %= self.read_buffer.len;
-	        			self.delimited_line_end = self.current_line_end;
+						self.current_line_end += 1;
+						self.unprocessed_begin %= self.input_buffer.len;
+	        			self.current_line_begin = self.current_line_end;
 	        			continue;
-	        		} else if (self.read_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
-	        			if (self.current_line_end != self.delimited_line_end)
+	        		} else if (self.input_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
+	        			if (self.current_line_end != self.current_line_begin)
 						{
 							if (self.config.c_lflag & termios.ECHO != 0 and self.config.c_lflag & termios.ECHOE != 0)
 							{
@@ -213,42 +210,38 @@ pub fn TtyN(comptime history_size: u32) type {
 							}
 							self.current_line_end -= 1;
 						}
-	        		} else if (self.read_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
+	        		} else if (self.input_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
 						if (self.config.c_lflag & termios.ECHO != 0) // todo ECHOK
 	        				_ = self.write("\r\x1b[K") catch {}; // todo
-	        			self.current_line_end = self.delimited_line_end;
+	        			self.current_line_end = self.current_line_begin;
 	        		} else {
 						if (self.config.c_lflag & termios.ECHO != 0)
 						{
-							if (self.config.c_lflag & termios.ECHOCTL != 0 and self.read_buffer[self.unprocessed_begin] & 0b11100000 == 0) {
+							if (self.config.c_lflag & termios.ECHOCTL != 0 and self.input_buffer[self.unprocessed_begin] & 0b11100000 == 0) {
 								self.putchar('^');
-								self.putchar(self.read_buffer[self.unprocessed_begin] | 0b01000000);
+								self.putchar(self.input_buffer[self.unprocessed_begin] | 0b01000000);
 							} else {
-								self.putchar(self.read_buffer[self.unprocessed_begin]);
+								self.putchar(self.input_buffer[self.unprocessed_begin]);
 							}
 						}
-						if (self.read_buffer[self.unprocessed_begin] == '\n' and self.config.c_lflag & termios.ECHONL != 0)
-							self.putchar(self.read_buffer[self.unprocessed_begin]);
-						self.read_buffer[self.current_line_end] = self.read_buffer[self.unprocessed_begin];
+						if (self.input_buffer[self.unprocessed_begin] == '\n' and self.config.c_lflag & termios.ECHONL != 0)
+							self.putchar(self.input_buffer[self.unprocessed_begin]);
+						self.input_buffer[self.current_line_end] = self.input_buffer[self.unprocessed_begin];
 						self.current_line_end += 1;
 	        		}
 					self.unprocessed_begin += 1;
 	        	}
 	        	self.read_head = self.current_line_end;
+	        	self.unprocessed_begin = self.current_line_end;
 	        } else {
-	        	while (self.current_line_end != self.read_head) : (self.current_line_end %= self.read_buffer.len)
+	        	while (self.current_line_end != self.read_head) : (self.current_line_end %= self.input_buffer.len)
 	        	{
-					if (self.config.c_lflag & termios.ECHO != 0 or (self.read_buffer[self.current_line_end] == '\n' and self.config.c_lflag & termios.ECHONL != 0))
-						self.putchar(self.read_buffer[self.current_line_end]);
+					if (self.config.c_lflag & termios.ECHO != 0 or (self.input_buffer[self.current_line_end] == '\n' and self.config.c_lflag & termios.ECHONL != 0))
+						self.putchar(self.input_buffer[self.current_line_end]);
 	        		self.current_line_end += 1;
 	        	}
 	        }
         }
-
-        fn read_buffer_size(self: *Self) usize {
-        	return self.read_buffer.len - self.available_buffer_space();
-        }
-
 
         fn put_char_to_buffer(self: *Self, c: u8) void {
 			var char : u16 = c;
@@ -349,26 +342,18 @@ pub fn TtyN(comptime history_size: u32) type {
         	// todo time/min
         	var count : usize = 0;
         	for (s) |*c| {
-
-        		if (self.read_tail == self.delimited_line_end)
-        		{
-        			keyboard.send_to_tty();
-        			self.local_processing();
-        			if (self.read_tail == self.read_head)
-        				break;
+        		while  (self.read_tail == self.current_line_begin) {
+        			keyboard.kb_read();
         		}
 
-        		if (self.config.c_lflag & termios.ICANON != 0 and self.read_tail == self.delimited_line_end)
-        			break;
-        		c.* = self.read_buffer[self.read_tail];
+        		c.* = self.input_buffer[self.read_tail];
         		self.read_tail += 1;
-        		self.read_tail %= self.read_buffer.len;
+        		self.read_tail %= self.input_buffer.len;
         		count += 1;
-	        	if (self.config.c_lflag & termios.ICANON != 0 and self.is_end_of_line(self.read_buffer[self.read_tail]))
+	        	if (self.config.c_lflag & termios.ICANON != 0 and self.is_end_of_line(c.*))
 	        	{
         			if (c.* == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
         				count -= 1;
-					// self.read_tail = self.delimited_line_end;
 	        		break;
 	        	}
         	}
