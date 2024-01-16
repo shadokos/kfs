@@ -84,21 +84,30 @@ pub fn TtyN(comptime history_size: u32) type {
 		/// buffer for escape sequences
         escape_buffer: [10:0]u8 = [_:0]u8{0} ** 10,
 
+		/// buffer for input
         input_buffer: [MAX_INPUT]u8 = undefined,
 
+		/// point to the end of the input area
         read_head: usize = 0,
 
+		/// point to the beginning of the unread part of the buffer
         read_tail: usize = 0,
 
+		/// In canonical mode, point to the beginning of the active line
         current_line_begin: usize = 0,
 
+		/// point to the end of the processed area
         current_line_end: usize = 0,
 
+		/// point to the first unprocessed byte in the input buffer
         unprocessed_begin: usize = 0,
 
+		/// current termios configuration
         config: termios.termios = .{},
-        
+
+        /// Writer object type
         pub const Writer = ft.io.Writer(*Self, Self.WriteError, Self.write);
+        /// Reader object type
         pub const Reader = ft.io.Reader(*Self, Self.ReadError, Self.read);
 
         pub const WriteError = error{};
@@ -169,11 +178,13 @@ pub fn TtyN(comptime history_size: u32) type {
             }
         }
 
+		/// send keyboard input to the terminal
         pub fn input(self: *Self, s: [] const u8) void {
         	for (s) |c| self.input_char(c);
         	self.local_processing();
         }
 
+		/// send one char as input to the terminal
         fn input_char(self: *Self, c: u8) void {
 			if (self.input_processing(c)) |p| if ((self.read_head + 1) % self.input_buffer.len != self.read_tail) {
 				self.input_buffer[self.read_head] = p;
@@ -182,6 +193,7 @@ pub fn TtyN(comptime history_size: u32) type {
 			};
         }
 
+		/// perform input processing as defined by POSIX and according to the current termios configuration
         fn input_processing(self: *Self, c: u8) ?u8 {
         	return if (self.config.c_iflag & termios.IGNCR != 0 and c == '\r') null
         	else if (self.config.c_iflag & termios.ICRNL != 0 and c == '\r') '\n'
@@ -189,10 +201,12 @@ pub fn TtyN(comptime history_size: u32) type {
         	else c;
         }
 
+		/// return true if te char c is an end of line in the current termios configuration
         fn is_end_of_line(self: *Self, c: u8) bool {
         	return c == '\n' or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOL)] or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)];
         }
 
+		/// perform local processing as defined by POSIX and according to the current termios configuration
         fn local_processing(self: *Self) void {
 	        if (self.config.c_lflag & termios.ICANON != 0) {
 	        	while (self.unprocessed_begin != self.read_head) : ({self.current_line_end %= self.input_buffer.len; self.unprocessed_begin %= self.input_buffer.len;})
@@ -250,6 +264,7 @@ pub fn TtyN(comptime history_size: u32) type {
 	        }
         }
 
+		/// put the char c in the output buffer
         fn put_char_to_buffer(self: *Self, c: u8) void {
 			var char : u16 = c;
 			char |= self.current_color << 8;
@@ -269,6 +284,7 @@ pub fn TtyN(comptime history_size: u32) type {
 			self.move_cursor(0, 1);
         }
 
+		/// put a character to the ouput buffer with whitespace processing
         fn process_whitespaces(self: *Self, c: u8) void {
             	switch (c) {
 					'\n' => {
@@ -290,7 +306,7 @@ pub fn TtyN(comptime history_size: u32) type {
 						self.move_cursor(-1, 0);
 					},
 					12 => { // form feed
-						// todo
+						// todo?
 						// self.move_cursor(height, -@as(i32, @intCast(self.pos.col)));
 					},
 					' '...'~' => {
@@ -300,7 +316,7 @@ pub fn TtyN(comptime history_size: u32) type {
 				}
         }
 
-        /// write the character c in the buffer after mapping
+		/// perform output processing as defined by POSIX and according to the current termios configuration
         fn output_processing(self: *Self, c: u8) void {
         	if (self.config.c_oflag & termios.OPOST != 0)
         	{
@@ -354,6 +370,7 @@ pub fn TtyN(comptime history_size: u32) type {
 			self.view();
         }
 
+        /// read bytes from the terminal and store them in s, suitable for use with ft.io.Reader
         pub fn read(self: *Self, s: [] u8) Self.ReadError!usize {
         	// todo time/min
         	var count : usize = 0;
@@ -387,6 +404,7 @@ pub fn TtyN(comptime history_size: u32) type {
             return ret;
         }
 
+        /// return the current terminal state for save/restore
         pub fn get_state(self: *Self) Self.State {
 			return .{
 				.pos = .{
@@ -398,6 +416,7 @@ pub fn TtyN(comptime history_size: u32) type {
 			};
         }
 
+        /// set the current terminal state
         pub fn set_state(self: *Self, new_state: Self.State) void {
         	self.pos = new_state.pos;
         	self.attributes = new_state.attributes;
@@ -433,6 +452,7 @@ pub fn TtyN(comptime history_size: u32) type {
             self.current_color |= @intFromEnum(color);
         }
 
+		/// soft scroll in the terminal history
         pub fn scroll(self: *Self, off: i32) void {
             if (off > 0) {
                 self.scroll_offset += @intCast(off);
