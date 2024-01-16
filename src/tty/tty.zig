@@ -341,9 +341,15 @@ pub fn TtyN(comptime history_size: u32) type {
 			}
         }
         
-        /// write the character c to the terminal
-        pub fn putchar(self: *Self, c: u8) void {
+        /// write the character c to the terminal without flush
+        fn putchar_no_flush(self: *Self, c: u8) void {
 			self.output_processing(c);
+        }
+
+        /// write the character c to the terminal with flush
+        pub fn putchar(self: *Self, c: u8) void {
+        	self.putchar_no_flush(c);
+			self.view();
         }
 
         pub fn read(self: *Self, s: [] u8) Self.ReadError!usize {
@@ -372,9 +378,10 @@ pub fn TtyN(comptime history_size: u32) type {
         pub fn write(self: *Self, s: []const u8) Self.WriteError!usize {
             var ret: usize = 0;
             for (s) |c| {
-                self.putchar(c);
+                self.putchar_no_flush(c);
                 ret += 1;
             }
+			self.view();
             return ret;
         }
 
