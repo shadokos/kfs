@@ -82,9 +82,7 @@ fn make_break(scancode: u16) ?u16 {
 			keyState.num_down = make;
 		},
 		else => if (make and c != 0)
-				return c
-			else
-				return null,
+				return c,
 	}
 	return null;
 }
@@ -100,12 +98,8 @@ pub fn kb_read() void {
 	const c = make_break(scancode) orelse return;
 
 	switch (c) {
-		0...0xff =>  {
-		 	send_to_tty(&[1]u8 {@intCast(c)});
-		},
-		keymap.HOME...keymap.INSRT => {
-			send_to_tty(keymap.escape_map[c - keymap.HOME]);
-		},
+		0...0xff => send_to_tty(&[1]u8 {@intCast(c)}),
+		keymap.HOME...keymap.INSRT => send_to_tty(keymap.escape_map[c - keymap.HOME]),
 		else => {},
 	}
 }
@@ -115,27 +109,23 @@ fn handler() void {
 	const index : u8 = scan_code & SCANCODE_MASK_INDEX;
 	const released : u16 = scan_code & SCANCODE_MASK_RELEASED;
 
-	switch (scan_mode) {
-		.Extended => if (index < scanmap_special.len and scanmap_special[index] != .NONE) {
-			send_to_buffer(@intFromEnum(scanmap_special[index]) | (released << 8));
+	scan_mode = switch (scan_mode) {
+		.Extended => b: {
+			if (index < scanmap_special.len and scanmap_special[index] != .NONE)
+				send_to_buffer(@intFromEnum(scanmap_special[index]) | (released << 8));
+			break :b .Normal;
 		},
-		.Pause => {}, // Skip the byte, it's a pause and i personnaly don't care yet
-		.Normal => {
-			switch (scan_code) {
-				0xE0 => {
-					scan_mode = .Extended;
-					return ;
-				},
-				0xE1 => {
-					scan_mode = .Pause;
-					return ;
-				},
-				else => if (index < scanmap_normal.len and scanmap_normal[index] != .NONE)
-					send_to_buffer(@intFromEnum(scanmap_normal[index]) | (released << 8))
+		.Pause => .Normal, // Skip the byte, it's a pause and i personnaly don't care yet
+		.Normal => switch (scan_code) {
+			0xE0 => .Extended,
+			0xE1 => .Pause,
+			else => b: {
+				if (index < scanmap_normal.len and scanmap_normal[index] != .NONE)
+					send_to_buffer(@intFromEnum(scanmap_normal[index]) | (released << 8));
+				break :b .Normal;
 			}
 		},
-	}
-	scan_mode = .Normal;
+	};
 }
 
 fn is_key_available() bool {
