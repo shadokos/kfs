@@ -1,4 +1,5 @@
 const ft = @import("../ft/ft.zig");
+const keymap = @import("keyboard/keymap.zig");
 
 pub const NCCS = 11;
 
@@ -118,7 +119,6 @@ pub const lflags = packed struct {
 	ECHOCTL : bool = false, // echo ctrl chars as ^X
 };
 
-fn ctrl(c: u8) u8 {return (c & 0b00011111);}
 
 pub const termios = struct {
 	c_iflag : iflags = .{.BRKINT = true, .ICRNL = true},
@@ -126,16 +126,16 @@ pub const termios = struct {
 	c_cflag : cflags = .{.CREAD = true, .CLOCAL = true},
 	c_lflag : lflags = .{.ISIG = true, .ICANON = true, .ECHO = true, .IEXTEN = true, .ECHOE = true, .ECHOK = true},
 	c_cc : [NCCS]cc_t = .{
-		ctrl('D'),
-		ctrl('@'),
-		ctrl('H'),
-		ctrl('C'),
-		ctrl('U'),
+		keymap.C('D'),
+		keymap.C('@'),
+		keymap.C('H'),
+		keymap.C('C'),
+		keymap.C('U'),
 		0,
-		ctrl('\\'),
-		ctrl('Q'),
-		ctrl('S'),
-		ctrl('Z'),
+		keymap.C('\\'),
+		keymap.C('Q'),
+		keymap.C('S'),
+		keymap.C('Z'),
 		0
 	}
 };
