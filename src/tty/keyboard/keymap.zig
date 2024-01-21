@@ -170,8 +170,6 @@ pub const RIGHT		= 0x06 + EXT;
 pub const PGUP		= 0x07 + EXT;
 pub const PGDN		= 0x08 + EXT;
 pub const MID		= 0x09 + EXT;
-// pub const UNUSED	= 0x0A + EXT;
-// pub const UNUSED	= 0x0B + EXT;
 pub const INSRT		= 0x0C + EXT;
 
 // Ctrl + Numeric keypad
