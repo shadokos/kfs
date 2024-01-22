@@ -81,6 +81,9 @@ fn make_break(scancode: u16) ?u16 {
 				locks.num_lock = !locks.num_lock;
 			keyState.num_down = make;
 		},
+		keymap.AF1...keymap.AF10 => if (keyState.ctrl and !make) {
+			_ = tty.set_tty(@intCast(c - keymap.AF1)) catch unreachable;
+		},
 		else => if (make and c != 0)
 				return c,
 	}
