@@ -10,12 +10,7 @@ const SCANCODE_MASK_RELEASED =	0x80;
 const SCANCODE_MASK_INDEX =		0x7F;
 const KEYBOARD_INPUT_SIZE =		32;
 
-var inbuf: [KEYBOARD_INPUT_SIZE]u16 = [_]u16{0} ** KEYBOARD_INPUT_SIZE;
-var intail: u8 = 0;
-var inhead: u8 = 0;
-var incount: u8 = 0;
-
-pub const KeyState = packed struct {
+pub const KeyState = struct {
 	shift_left: bool = false,
 	shift_right: bool = false,
 	shift: bool = false,
@@ -41,9 +36,14 @@ const ScanMode = enum (u2) {
 	Pause = 2,
 };
 
+var inbuf: [KEYBOARD_INPUT_SIZE]u16 = [_]u16{0} ** KEYBOARD_INPUT_SIZE;
+var intail: u8 = 0;
+var inhead: u8 = 0;
+var incount: u8 = 0;
+
 pub var keyState: KeyState = .{};
+pub var locks: KeyLocks = .{};
 var scan_mode: ScanMode = .Normal;
-var locks: KeyLocks = .{};
 
 pub fn send_to_tty(data: []const u8) void {
 	const current: *tty.Tty = &tty.tty_array[tty.current_tty];
@@ -63,7 +63,7 @@ fn make_break(scancode: u16) ?u16 {
 	var c = scancode & 0x7FFF;
 	var make: bool = !(scancode & 0x8000 != 0);
 
-	c = keymap.map_key(c, locks, keyState);
+	c = keymap.map_key(c);
 	switch (c) {
 		keymap.RCTRL   => { keyState.ctrl_right  = make; keyState.ctrl  = make;  },
 		keymap.LCTRL   => { keyState.ctrl_left   = make; keyState.ctrl  = make;  },
