@@ -3,7 +3,7 @@ const vt100 = @import("vt100.zig").vt100;
 const termios = @import("termios.zig");
 const cc_t = termios.cc_t;
 const keyboard = @import("keyboard.zig");
-const ports = @import("../drivers/ports.zig");
+const ports = @import("../io/ports.zig");
 
 /// The colors available for the console
 pub const Color = enum(u8) {

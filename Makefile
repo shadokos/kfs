@@ -26,7 +26,7 @@ SRC = linker.ld \
 	tty/keyboard/keymap.zig \
 	tty/keyboard/us-std.zig \
 	tty/keyboard.zig \
-	drivers/ports.zig \
+	io/ports.zig \
 	ft/ascii.zig \
 	ft/fmt.zig \
 	ft/ft.zig \

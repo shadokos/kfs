@@ -1,6 +1,6 @@
 const ft = @import("../ft/ft.zig");
 const tty = @import("tty.zig");
-const ports = @import("../drivers/ports.zig");
+const ports = @import("../io/ports.zig");
 const keymap = @import("keyboard/keymap.zig");
 const scanmap = @import("keyboard/scanmap.zig");
 const scanmap_normal = scanmap.scanmap_normal;
