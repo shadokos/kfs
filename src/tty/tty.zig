@@ -37,6 +37,8 @@ pub const Attribute = enum {
 	hidden
 };
 
+pub const BLANK_CHAR = ' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8);
+
 const MAX_INPUT = 4096;
 
 /// screen width
@@ -129,7 +131,7 @@ pub fn TtyN(comptime history_size: u32) type {
         /// clear line line in the history buffer
         pub fn clear_line(self: *Self, line: u32) void {
             for (0..width) |i|
-                self.history_buffer[line][i] = ' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8);
+                self.history_buffer[line][i] = BLANK_CHAR;
         }
 
 		/// move the curser of line_offset vertically and col_offset horizontally
@@ -518,11 +520,11 @@ pub fn TtyN(comptime history_size: u32) type {
                     const buffer_line = (view_line + l) % history_size;
                     mmio_buffer[l * width + c] = if (((buffer_line < self.head_line or (buffer_line == self.head_line))) or (self.head_line < view_line and buffer_line >= view_line))
                         switch (self.history_buffer[buffer_line][c]) {
-							0 => ' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8),
+							0 => BLANK_CHAR,
 							else => |char| char
                         }
                     else
-						' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8);
+						BLANK_CHAR;
                 }
             }
 			self.put_cursor();
