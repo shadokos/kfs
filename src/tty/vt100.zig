@@ -82,12 +82,12 @@ return struct {
 		{
 			0 => {
 				for (terminal.pos.col..tty.width) |i| {
-					terminal.history_buffer[terminal.pos.line][i] = ' ';
+					terminal.history_buffer[terminal.pos.line][i] = tty.BLANK_CHAR;
 				}
 			},
 			1 => {
 				for (0..terminal.pos.col + 1) |i| {
-					terminal.history_buffer[terminal.pos.line][i] = ' ';
+					terminal.history_buffer[terminal.pos.line][i] = tty.BLANK_CHAR;
 				}
 			},
 			2 => {terminal.clear_line(terminal.pos.line);},
