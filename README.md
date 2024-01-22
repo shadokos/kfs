@@ -4,5 +4,5 @@
 <div align="center">
 
 # Kentucky Fried Shrimp
-A minimalist kernel implementation using the [Zig](https://ziglang.org/) programming languge.
+A minimalist kernel implementation using the [Zig](https://ziglang.org/) programming language.
 </div>
