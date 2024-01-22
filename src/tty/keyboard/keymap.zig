@@ -1,7 +1,6 @@
 const InputKey = @import("scanmap.zig").InputKey;
 const default_map = @import("us-std.zig").keymap;
-const KeyState = @import("../keyboard.zig").KeyState;
-const KeyLocks = @import("../keyboard.zig").KeyLocks;
+const keyboard = @import("../keyboard.zig");
 
 pub const MAP_COLS:		u8	= 6;
 pub const NB_SCANCODES:	u8	= @typeInfo(InputKey).Enum.fields.len;
@@ -42,28 +41,28 @@ pub inline fn L(comptime scancode: u16) u16 {
 	return scancode | HASCAPS;
 }
 
-pub fn map_key(index: u16, locks: KeyLocks, keyState: KeyState) u16 {
+pub fn map_key(index: u16) u16 {
 	var caps: bool = false;
 	var col: u8 = 0;
 	var row: [6]u16 = default_map[index];
 
 	if (row[0] & HASNUM != 0) {
-		if (locks.num_lock) caps = true;
+		if (keyboard.locks.num_lock) caps = true;
 	} else {
-		caps = keyState.shift;
-		if ((locks.caps_lock) and (row[0] & HASCAPS) != 0)
+		caps = keyboard.keyState.shift;
+		if ((keyboard.locks.caps_lock) and (row[0] & HASCAPS) != 0)
 			caps = !caps;
 	}
 
-	if (keyState.alt) {
+	if (keyboard.keyState.alt) {
 		col = 2;
-		if (keyState.ctrl or keyState.alt_right) col = 3;
+		if (keyboard.keyState.ctrl or keyboard.keyState.alt_right) col = 3;
 		if (caps) col = 4;
 	}
 	else {
 		col = 0;
 		if (caps) col = 1;
-		if (keyState.ctrl) col = 5;
+		if (keyboard.keyState.ctrl) col = 5;
 	}
 
 	return row[col] & ~(HASCAPS | HASNUM);
