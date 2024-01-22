@@ -484,10 +484,11 @@ pub fn TtyN(comptime history_size: u32) type {
 
 		/// print the cursor at the current position on the screen
         fn put_cursor(self: *Self) void {
-        	const is_visible : bool = if (self.head_line < height)
-					self.pos.line > ((self.head_line + history_size - height) % history_size) or self.pos.line <= self.head_line
+        	const offset = (self.head_line + history_size - self.scroll_offset) % history_size;
+        	const is_visible : bool = if (offset < height)
+					self.pos.line > ((offset + history_size - height) % history_size) or self.pos.line <= offset
 				else
-					self.pos.line > (self.head_line - height) and self.pos.line <= self.head_line;
+					self.pos.line > (offset - height) and self.pos.line <= offset;
 			if (is_visible)
 			{
 				if (!cursor_enabled)
