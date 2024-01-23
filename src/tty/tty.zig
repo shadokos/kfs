@@ -214,24 +214,23 @@ pub fn TtyN(comptime history_size: u32) type {
 	        	while (self.unprocessed_begin != self.read_head) : ({self.current_line_end %= self.input_buffer.len; self.unprocessed_begin %= self.input_buffer.len;})
 	        	{
 	        		if (self.is_end_of_line(self.input_buffer[self.unprocessed_begin])) {
-	        			if (self.input_buffer[self.unprocessed_begin] != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
-						{
+	        			if (self.input_buffer[self.unprocessed_begin] != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)]) {
 							self.putchar(self.input_buffer[self.unprocessed_begin]);
 	        			}
 						self.input_buffer[self.current_line_end] = self.input_buffer[self.unprocessed_begin];
-						self.unprocessed_begin += 1;
 						self.current_line_end += 1;
-						self.unprocessed_begin %= self.input_buffer.len;
 	        			self.current_line_begin = self.current_line_end;
-	        			continue;
 	        		} else if (self.input_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
 	        			if (self.current_line_end != self.current_line_begin)
 						{
-							if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE)
-							{
+							if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE) {
 								_ = self.write("\x08 \x08") catch {};
 							}
-							self.current_line_end -= 1;
+							if (self.current_line_end != 0) {
+								self.current_line_end -= 1;
+							} else {
+								self.current_line_end = self.input_buffer.len - 1;
+							}
 						}
 	        		} else if (self.input_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
 						if (self.config.c_lflag.ECHO) // todo ECHOK
@@ -253,6 +252,9 @@ pub fn TtyN(comptime history_size: u32) type {
 						self.current_line_end += 1;
 	        		}
 					self.unprocessed_begin += 1;
+					self.current_line_end %= self.input_buffer.len;
+					self.current_line_begin %= self.input_buffer.len;
+					self.unprocessed_begin %= self.input_buffer.len;
 	        	}
 	        	self.read_head = self.current_line_end;
 	        	self.unprocessed_begin = self.current_line_end;
