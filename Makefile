@@ -15,6 +15,7 @@ GRUB_CONF=$(BOOTDIR)/grub/grub.cfg
 ARCH=i386
 
 SRCDIR = src
+
 SRC = linker.ld \
 	../build.zig \
 	boot.zig \
@@ -41,6 +42,10 @@ SRC = linker.ld \
 SYMBOL_DIR = $(ZIGCACHE)/symbols
 SYMBOL_FILE = $(SYMBOL_DIR)/$(NAME).symbols
 
+DOCKER_CMD ?= docker
+
+DOCKER_STAMP = .zig-docker
+
 all: $(ISO)
 
 $(ISO): $(BIN) $(GRUB_CONF)
@@ -52,8 +57,20 @@ run: $(ISO)
 run_kernel: $(BIN)
 	qemu-system-$(ARCH) -kernel $<
 
+$(DOCKER_STAMP): dockerfile
+	$(DOCKER_CMD) build -t zig .
+	> $(DOCKER_STAMP)
+
+ifneq (,$(shell which -b zdig 2>/dev/null))
+ZIG = zig
+else
+$(BIN): $(DOCKER_STAMP)
+# make zig be executed by the same uid than the makefile
+ZIG = $(DOCKER_CMD) run --rm -v.:$(shell eval echo ~$$(whoami))  -ti zig sh -c "adduser -u $(shell id -u) $(shell whoami) -D ;  echo \"cd; zig \$${@} \" | su $(shell whoami)" -
+endif
+
 $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
-	zig build \
+	$(ZIG) build \
 		--prefix $(BOOTDIR) \
 		-Dname=$(notdir $(BIN)) \
 		-Doptimize=ReleaseSafe \
@@ -73,10 +90,11 @@ $(SYMBOL_FILE): | $(SYMBOL_DIR)
 
 clean:
 	rm -rf $(BIN) $(ZIGCACHE)
+	[ -f $(DOCKER_STAMP) ] && { $(DOCKER_CMD) image rm zig; rm $(DOCKER_STAMP); } || true
 
 fclean: clean
 	rm -rf $(ISO)
 
 re: fclean all
 
-.PHONY: run all clean fclean re debug
+.PHONY: run all clean fclean re debug run_kernel
