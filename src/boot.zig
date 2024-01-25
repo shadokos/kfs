@@ -29,6 +29,8 @@ export fn init(eax : u32, ebx : *multiboot.info_header) void {
 		multiboot_info = ebx;
 	} else @panic("No multiboot2 magic number");
 
+	@import("gdt.zig").setup();
+
 	kernel.main();
 }
 
