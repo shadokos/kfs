@@ -48,8 +48,23 @@ DOCKER_STAMP = .zig-docker
 
 all: $(ISO)
 
+ifndef DOCKER
+
+ZIG = zig
+GRUB_MKRESCUE = grub-mkrescue
+
+else
+
+$(BIN): $(DOCKER_STAMP)
+ZIG = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw -ti zig zig
+
+$(ISO): $(DOCKER_STAMP)
+GRUB_MKRESCUE = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw -ti zig grub-mkrescue
+
+endif
+
 $(ISO): $(BIN) $(GRUB_CONF)
-	grub-mkrescue --compress=xz -o $@ $(ISODIR)
+	$(GRUB_MKRESCUE) --compress=xz -o $@ $(ISODIR)
 
 run: $(ISO)
 	qemu-system-$(ARCH) -cdrom $<
@@ -59,15 +74,9 @@ run_kernel: $(BIN)
 
 $(DOCKER_STAMP): dockerfile
 	$(DOCKER_CMD) build -t zig .
+	$(DOCKER_CMD) volume create --name $(NAME) --driver=local --opt type=none --opt device=$(PWD) --opt o=bind,uid=$(shell id -u)
 	> $(DOCKER_STAMP)
 
-ifneq (,$(shell which -b zdig 2>/dev/null))
-ZIG = zig
-else
-$(BIN): $(DOCKER_STAMP)
-# make zig be executed by the same uid than the makefile
-ZIG = $(DOCKER_CMD) run --rm -v.:$(shell eval echo ~$$(whoami))  -ti zig sh -c "adduser -u $(shell id -u) $(shell whoami) -D ;  echo \"cd; zig \$${@} \" | su $(shell whoami)" -
-endif
 
 $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 	$(ZIG) build \
@@ -90,7 +99,7 @@ $(SYMBOL_FILE): | $(SYMBOL_DIR)
 
 clean:
 	rm -rf $(BIN) $(ZIGCACHE)
-	[ -f $(DOCKER_STAMP) ] && { $(DOCKER_CMD) image rm zig; rm $(DOCKER_STAMP); } || true
+	[ -f $(DOCKER_STAMP) ] && { $(DOCKER_CMD) image rm zig && rm $(DOCKER_STAMP) && $(DOCKER_CMD) volume rm $(NAME); } || true
 
 fclean: clean
 	rm -rf $(ISO)
