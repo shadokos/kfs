@@ -336,8 +336,12 @@ pub fn TtyN(comptime history_size: u32) type {
 							self.write_state = .Escape;
 						}
 					} else {
+						var tmp: @TypeOf(self.escape_buffer) = undefined;
+						@memcpy(&tmp, &self.escape_buffer);
 						@memset(&self.escape_buffer, 0);
 						self.write_state = .Normal;
+						_ = self.write(tmp[0..]) catch {};
+						self.putchar_no_flush(c);
 					},
 					.Normal => {
 						if (self.config.c_oflag.ONLCR and c == '\n')
