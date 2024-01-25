@@ -19,6 +19,7 @@ SRCDIR = src
 SRC = linker.ld \
 	../build.zig \
 	boot.zig \
+	gdt.zig \
 	kernel.zig \
 	multiboot.zig \
 	tty/tty.zig \
