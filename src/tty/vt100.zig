@@ -21,7 +21,11 @@ return struct {
 		const len = ft.mem.indexOfSentinel(u8, 0, buffer);
 		var n: u32 = ft.fmt.parseInt(u32, buffer[1 .. len - 1], 10) catch 0;
 		switch (n) {
-			@intFromEnum(tty.Attribute.reset) => {terminal.attributes = 0;},
+			@intFromEnum(tty.Attribute.reset) => {
+				terminal.attributes = 0;
+				terminal.set_font_color(tty.Color.white);
+				terminal.set_background_color(tty.Color.black);
+			},
 			@intFromEnum(tty.Attribute.bold)...@intFromEnum(tty.Attribute.hidden) => {terminal.attributes |= @as(u16, 1) << @intCast(n);},
 			30...37 => {terminal.set_font_color(
 				switch (n) {
