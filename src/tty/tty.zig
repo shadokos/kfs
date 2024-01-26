@@ -552,6 +552,10 @@ pub var tty_array: [max_tty + 1]Tty = [1]Tty{Tty{}} ** 10;
 /// index of the active tty
 pub var current_tty: u8 = 0;
 
+pub fn get_tty() *Tty {
+	return &tty_array[current_tty];
+}
+
 /// set the current tty
 pub fn set_tty(n: u8) !void {
 	if (n > max_tty)
