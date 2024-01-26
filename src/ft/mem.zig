@@ -52,7 +52,7 @@ pub fn indexOfSentinel(comptime T: type, comptime sentinel: T, p: [*:sentinel]co
 }
 
 pub fn eql(comptime T: type, a: []const T, b: []const T) bool {
-	var i = 0;
+	var i : usize = 0;
 	if (a.len != b.len)
 		return false;
 	while (i < a.len and i < b.len and a[i] == b[i]) : (i += 1) {}
