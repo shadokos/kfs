@@ -43,7 +43,7 @@ pub  const keymap = [_][6]u16 {
 	[6]u16 {	'8', 		'*',		k.A('8'),	k.A('8'),	k.A('*'),	k.C('H')	},	// 0x25 Key 8
 	[6]u16 {	'9', 		'(',		k.A('9'),	k.A('9'),	k.A('('),	k.C('I')	},	// 0x26 Key 9
 	[6]u16 {	'0', 		')',		k.A('0'),	k.A('0'),	k.A(')'),	k.C('@')	},	// 0x27 Key 0
-	[6]u16 { 	k.C('J'), 	k.C('J'), 	k.CA('J'), 	k.CA('J'), 	k.CA('J'), 	k.C('J')	},	// 0x28 Key ENTER
+	[6]u16 { 	k.C('M'), 	k.C('M'), 	k.CA('M'), 	k.CA('M'), 	k.CA('M'), 	k.C('M')	},	// 0x28 Key ENTER
 	[6]u16 {	k.C('['),	k.C('['),	k.CA('['),	k.CA('['),	k.CA('['),	k.C('[')	},	// 0x29 Key ESC
 	[6]u16 {	k.C('H'),	k.C('H'),	k.CA('H'),	k.CA('H'),	k.CA('H'),	127			}, 	// 0x2a Key BACKSPACE
 	[6]u16 {	k.C('I'),	k.C('I'),	k.CA('I'),	k.CA('I'),	k.CA('I'),	k.C('I')	},	// 0x2b Key TAB
