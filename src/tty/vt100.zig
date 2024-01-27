@@ -153,7 +153,7 @@ return struct {
 		var buffer : [100]u8 = [1]u8{0} ** 100;
 		var slice = ft.fmt.bufPrint(&buffer, "\x1b{d};{d}R", .{terminal.get_state().pos.line, terminal.get_state().pos.col}) catch return;
 
-		_ = terminal.writer().write(slice) catch {};
+		terminal.input(slice);
 	}
 
 	fn handle_nothing(_: *tty.TtyN(history_size), _: [:0]const u8) void {}
@@ -255,6 +255,7 @@ return struct {
 		for (map) |e| {
 			if (compare_prefix(e.prefix, buffer)) {
 				e.f(terminal, buffer);
+				_ = terminal.write("coucou") catch {};
 				return true;
 			}
 		}

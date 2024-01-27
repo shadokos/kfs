@@ -213,14 +213,16 @@ pub fn TtyN(comptime history_size: u32) type {
 	        if (self.config.c_lflag.ICANON) {
 	        	while (self.unprocessed_begin != self.read_head) : ({self.current_line_end %= self.input_buffer.len; self.unprocessed_begin %= self.input_buffer.len;})
 	        	{
-	        		if (self.is_end_of_line(self.input_buffer[self.unprocessed_begin])) {
-	        			if (self.input_buffer[self.unprocessed_begin] != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)]) {
-							self.putchar(self.input_buffer[self.unprocessed_begin]);
+	        		const c : u8 = self.input_buffer[self.unprocessed_begin];
+	        		var echo_c : ?u8 = null;
+	        		if (self.is_end_of_line(c)) {
+	        			if (c != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)]) {
+							self.putchar(c);
 	        			}
-						self.input_buffer[self.current_line_end] = self.input_buffer[self.unprocessed_begin];
+						self.input_buffer[self.current_line_end] = c;
 						self.current_line_end += 1;
 	        			self.current_line_begin = self.current_line_end;
-	        		} else if (self.input_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
+	        		} else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
 	        			if (self.current_line_end != self.current_line_begin)
 						{
 							if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE) {
@@ -232,29 +234,28 @@ pub fn TtyN(comptime history_size: u32) type {
 								self.current_line_end = self.input_buffer.len - 1;
 							}
 						}
-	        		} else if (self.input_buffer[self.unprocessed_begin] == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
+	        		} else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
 						if (self.config.c_lflag.ECHO) // todo ECHOK
 	        				_ = self.write("\r\x1b[K") catch {}; // todo
 	        			self.current_line_end = self.current_line_begin;
 	        		} else {
-						if (self.config.c_lflag.ECHO)
-						{
-							if (self.config.c_lflag.ECHOCTL and self.input_buffer[self.unprocessed_begin] & 0b11100000 == 0) {
-								self.putchar('^');
-								self.putchar(self.input_buffer[self.unprocessed_begin] | 0b01000000);
-							} else {
-								self.putchar(self.input_buffer[self.unprocessed_begin]);
-							}
-						}
-						if (self.input_buffer[self.unprocessed_begin] == '\n' and self.config.c_lflag.ECHONL)
-							self.putchar(self.input_buffer[self.unprocessed_begin]);
-						self.input_buffer[self.current_line_end] = self.input_buffer[self.unprocessed_begin];
+						if (self.config.c_lflag.ECHO or (c == '\n' and self.config.c_lflag.ECHONL))
+							echo_c = c;
+						self.input_buffer[self.current_line_end] = c;
 						self.current_line_end += 1;
 	        		}
 					self.unprocessed_begin += 1;
 					self.current_line_end %= self.input_buffer.len;
 					self.current_line_begin %= self.input_buffer.len;
 					self.unprocessed_begin %= self.input_buffer.len;
+					if (echo_c) |value| {
+						if (self.config.c_lflag.ECHOCTL and value & 0b11100000 == 0) {
+							self.putchar('^');
+							self.putchar(value | 0b01000000);
+						} else {
+							self.putchar(value);
+						}
+					}
 	        	}
 	        	self.read_head = self.current_line_end;
 	        	self.unprocessed_begin = self.current_line_end;
