@@ -60,6 +60,8 @@ var cursor_enabled: bool = false;
 pub fn TtyN(comptime history_size: u32) type {
 	if (history_size < height)
 		@compileError("TtyN: history_size must be greater than the terminal height");
+	if (@popCount(MAX_INPUT) != 1)
+		@compileError("MAX_INPUT must be a power of 2");
     return struct {
         /// history buffer
         history_buffer: [history_size][width]u16 = undefined,
@@ -378,13 +380,14 @@ pub fn TtyN(comptime history_size: u32) type {
         	// todo time/min
         	var count : usize = 0;
         	for (s) |*c| {
-        		while  (self.read_tail == self.current_line_begin) {
+        		while  (self.read_tail == self.current_line_begin and self.read_head +% 1 != self.read_tail) {
         			keyboard.kb_read();
         		}
 
         		c.* = self.input_buffer[self.read_tail];
-        		self.read_tail += 1;
-        		self.read_tail %= self.input_buffer.len;
+        		if (self.read_tail == self.current_line_begin)
+        			self.current_line_begin +%= 1;
+        		self.read_tail +%= 1;
         		count += 1;
 	        	if (self.config.c_lflag.ICANON and self.is_end_of_line(c.*))
 	        	{
