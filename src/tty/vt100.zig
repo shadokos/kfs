@@ -255,7 +255,6 @@ return struct {
 		for (map) |e| {
 			if (compare_prefix(e.prefix, buffer)) {
 				e.f(terminal, buffer);
-				_ = terminal.write("coucou") catch {};
 				return true;
 			}
 		}
