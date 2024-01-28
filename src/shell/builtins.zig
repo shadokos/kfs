@@ -20,18 +20,18 @@ pub fn help(data: [][]u8) usize {
 		_help_available_commands();
 		return 0;
 	}
-    inline for (@typeInfo(helpers).Struct.decls) |decl| {
+	inline for (@typeInfo(helpers).Struct.decls) |decl| {
 		if (ft.mem.eql(u8, decl.name, data[1])) {
 			@field(helpers, decl.name)();
 			return 0;
 		}
-    }
-    tty.printk(
-    	utils.red ++
-    	"Error:" ++
-    	utils.reset ++
-    	" Help: There's no help page for \"{s}\"\n", .{ data[1] }
-    );
-    _help_available_commands();
-    return 2;
+	}
+	tty.printk(
+		utils.red ++
+		"Error:" ++
+		utils.reset ++
+		" Help: There's no help page for \"{s}\"\n", .{ data[1] }
+	);
+	_help_available_commands();
+	return 2;
 }
