@@ -1,31 +1,35 @@
-comptime { _ = @import("kernel.zig"); }
+const kernel_main = @import("kernel.zig").kernel_main;
+const multiboot_h = @import("c_headers.zig").multiboot_h;
 
 export const STACK_SIZE: u32 = 16 * 1024;
-const ALIGN = 1 << 0;
-const MEMINFO = 1 << 1;
-const MAGIC : i32 = 0x1BADB002;
-const FLAGS : i32 = ALIGN | MEMINFO;
 
 export var stack: [STACK_SIZE]u8 align(16) linksection(".bss") = undefined;
 
-const multiboot_t = extern struct {
-	magic: i32,
-	flags: i32,
-	checksum: i32,
-};
+fn get_header() multiboot_h.multiboot_header {
+	var ret : multiboot_h.multiboot_header = undefined;
 
-export var multiboot : multiboot_t align(4) linksection(".multiboot") = .{
-	.magic = MAGIC,
-	.flags = FLAGS,
-	.checksum = -(MAGIC + FLAGS)
-};
+	ret.magic = multiboot_h.MULTIBOOT_HEADER_MAGIC;
+	ret.flags = multiboot_h.MULTIBOOT_PAGE_ALIGN | multiboot_h.MULTIBOOT_MEMORY_INFO;
+
+	ret.checksum = @bitCast(-(@as(i32, ret.magic) + @as(i32, ret.flags)));
+	return ret;
+}
+
+export var multiboot : multiboot_h.multiboot_header align(4) linksection(".multiboot") = get_header();
 
 export fn _entry() callconv(.Naked) noreturn {
 	asm volatile(
 		\\ mov $stack, %esp
 		\\ add STACK_SIZE, %esp
 		\\ movl %esp, %ebp
-		\\ call kernel_main
+		\\ movl %ebx, multiboot_info
+		\\ call init
 	);
 	while (true) {}
+}
+
+pub export var multiboot_info : * volatile multiboot_h.multiboot_info_t = undefined;
+
+export fn init() void {
+	kernel_main();
 }
