@@ -34,7 +34,7 @@ pub fn print_error(msg: []const u8) void {
 pub fn print_prompt(status_code: usize) void {
 	ensure_newline();
 	tty.printk("{s}{s}" ++ reset ++ " ", .{ // print the prompt:
-		if (status_code != 0) red else blue, // prompt collor depending on the last command status
+		if (status_code != 0) red else cyan, // prompt collor depending on the last command status
 		prompt, // prompt
 	});
 }
