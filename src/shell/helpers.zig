@@ -14,10 +14,8 @@ fn print_helper(h: Help) void {
 	tty.printk(u.blue ++ "Description" ++ u.reset ++ ": {s}\n",  .{
 		h.description
 	});
-	if (h.usage != null) {
-		tty.printk(u.blue ++ "Usage" ++ u.reset ++ ": {s}\n",  .{
-			h.usage.?
-		});
+	if (h.usage) |usage| {
+		tty.printk(u.blue ++ "Usage" ++ u.reset ++ ": {s}\n",  .{usage});
 	}
 }
 
