@@ -100,7 +100,7 @@ pub fn kb_read() void {
 		intail = (intail + 1) % KEYBOARD_INPUT_SIZE;
 		incount -|= 1;
 
-		const c = make_break(scancode) orelse return;
+		const c = make_break(scancode) orelse continue;
 
 		switch (c) {
 			0...0xff => send_to_tty(&[1]u8 {@intCast(c)}),
