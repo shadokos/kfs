@@ -15,13 +15,13 @@ fn _help_available_commands() void {
 	}
 }
 
-pub fn help(data: []const ?[:0]u8) usize {
+pub fn help(data: [][]u8) usize {
 	if (data.len <= 1)  {
 		_help_available_commands();
 		return 0;
 	}
     inline for (@typeInfo(helpers).Struct.decls) |decl| {
-		if (ft.mem.eql(u8, decl.name, data[1].?)) {
+		if (ft.mem.eql(u8, decl.name, data[1])) {
 			@field(helpers, decl.name)();
 			return 0;
 		}
@@ -30,7 +30,7 @@ pub fn help(data: []const ?[:0]u8) usize {
     	utils.red ++
     	"Error:" ++
     	utils.reset ++
-    	" Help: There's no help page for \"{s}\"\n", .{ data[1].? }
+    	" Help: There's no help page for \"{s}\"\n", .{ data[1] }
     );
     _help_available_commands();
     return 2;
