@@ -58,3 +58,7 @@ pub fn eql(comptime T: type, a: []const T, b: []const T) bool {
 	while (i < a.len and i < b.len and a[i] == b[i]) : (i += 1) {}
 	return i == a.len;
 }
+
+pub fn copyForwards(comptime T: type, dest: []T, src: []const T) void {
+    for (dest[0..src.len], src) |*d, s| d.* = s;
+}
