@@ -37,7 +37,12 @@ SRC = linker.ld \
 	ft/io.zig \
 	ft/math.zig \
 	ft/mem.zig \
-	ft/meta.zig
+	ft/meta.zig \
+	shell/token.zig \
+	shell/builtins.zig \
+	shell/helpers.zig \
+	shell/utils.zig \
+	shell.zig \
 
 SYMBOL_DIR = $(ZIGCACHE)/symbols
 SYMBOL_FILE = $(SYMBOL_DIR)/$(NAME).symbols
