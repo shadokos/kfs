@@ -1,12 +1,12 @@
 const ft = @import("ft.zig");
 
-fn log2(x: anytype) @TypeOf(x)
+pub fn log2(x: anytype) @TypeOf(x)
 {
 	switch (@typeInfo(@TypeOf(x))) {
 		.Int, .ComptimeInt => {
 			var i = 0;
 			var absolute = if (x > 0) x else -x;
-			while ((absolute >> i) != 0) : (i += 1) {}
+			while ((absolute >> i) > 1) : (i += 1) {}
 			return i;
 		},
 		else => unreachable // todo

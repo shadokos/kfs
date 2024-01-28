@@ -39,7 +39,7 @@ pub const Attribute = enum {
 
 pub const BLANK_CHAR = ' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8);
 
-const MAX_INPUT = 4096;
+const MAX_INPUT : usize = 4096; // must be a power of 2
 
 /// screen width
 pub const width = 80;
@@ -90,22 +90,24 @@ pub fn TtyN(comptime history_size: u32) type {
         input_buffer: [MAX_INPUT]u8 = undefined,
 
 		/// point to the end of the input area
-        read_head: usize = 0,
+        read_head: input_buffer_pos_t = 0,
 
 		/// point to the beginning of the unread part of the buffer
-        read_tail: usize = 0,
+        read_tail: input_buffer_pos_t = 0,
 
 		/// In canonical mode, point to the beginning of the active line
-        current_line_begin: usize = 0,
+        current_line_begin: input_buffer_pos_t = 0,
 
 		/// point to the end of the processed area
-        current_line_end: usize = 0,
+        current_line_end: input_buffer_pos_t = 0,
 
 		/// point to the first unprocessed byte in the input buffer
-        unprocessed_begin: usize = 0,
+        unprocessed_begin: input_buffer_pos_t = 0,
 
 		/// current termios configuration
         config: termios.termios = .{},
+
+		const input_buffer_pos_t = ft.meta.Int(.unsigned, ft.math.log2(MAX_INPUT)); // todo
 
         /// Writer object type
         pub const Writer = ft.io.Writer(*Self, Self.WriteError, Self.write);
@@ -188,10 +190,9 @@ pub fn TtyN(comptime history_size: u32) type {
 
 		/// send one char as input to the terminal
         fn input_char(self: *Self, c: u8) void {
-			if (self.input_processing(c)) |p| if ((self.read_head + 1) % self.input_buffer.len != self.read_tail) {
+			if (self.input_processing(c)) |p| if (self.read_head +% 1 != self.read_tail) {
 				self.input_buffer[self.read_head] = p;
-				self.read_head += 1;
-				self.read_head %= self.input_buffer.len;
+				self.read_head +%= 1;
 			};
         }
 
@@ -211,16 +212,17 @@ pub fn TtyN(comptime history_size: u32) type {
 		/// perform local processing as defined by POSIX and according to the current termios configuration
         fn local_processing(self: *Self) void {
 	        if (self.config.c_lflag.ICANON) {
-	        	while (self.unprocessed_begin != self.read_head) : ({self.current_line_end %= self.input_buffer.len; self.unprocessed_begin %= self.input_buffer.len;})
+	        	while (self.unprocessed_begin != self.read_head)
 	        	{
 	        		const c : u8 = self.input_buffer[self.unprocessed_begin];
-	        		var echo_c : ?u8 = null;
+					self.unprocessed_begin +%= 1;
+
 	        		if (self.is_end_of_line(c)) {
 	        			if (c != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)]) {
 							self.putchar(c);
 	        			}
 						self.input_buffer[self.current_line_end] = c;
-						self.current_line_end += 1;
+						self.current_line_end +%= 1;
 	        			self.current_line_begin = self.current_line_end;
 	        		} else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
 	        			if (self.current_line_end != self.current_line_begin)
@@ -228,43 +230,39 @@ pub fn TtyN(comptime history_size: u32) type {
 							if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE) {
 								_ = self.write("\x08 \x08") catch {};
 							}
-							if (self.current_line_end != 0) {
-								self.current_line_end -= 1;
-							} else {
-								self.current_line_end = self.input_buffer.len - 1;
-							}
+							self.current_line_end -%= 1;
 						}
 	        		} else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
-						if (self.config.c_lflag.ECHO) // todo ECHOK
-	        				_ = self.write("\r\x1b[K") catch {}; // todo
-	        			self.current_line_end = self.current_line_begin;
-	        		} else {
-						if (self.config.c_lflag.ECHO or (c == '\n' and self.config.c_lflag.ECHONL))
-							echo_c = c;
-						self.input_buffer[self.current_line_end] = c;
-						self.current_line_end += 1;
-	        		}
-					self.unprocessed_begin += 1;
-					self.current_line_end %= self.input_buffer.len;
-					self.current_line_begin %= self.input_buffer.len;
-					self.unprocessed_begin %= self.input_buffer.len;
-					if (echo_c) |value| {
-						if (self.config.c_lflag.ECHOCTL and value & 0b11100000 == 0) {
-							self.putchar('^');
-							self.putchar(value | 0b01000000);
-						} else {
-							self.putchar(value);
+	        			while (self.current_line_end != self.current_line_begin)
+						{
+							if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE) {
+								_ = self.write("\x08 \x08") catch {};
+							}
+							self.current_line_end -%= 1;
 						}
-					}
+						// todo ECHOK
+	        		} else {
+						self.input_buffer[self.current_line_end] = c;
+						self.current_line_end +%= 1;
+						if (self.config.c_lflag.ECHO or (c == '\n' and self.config.c_lflag.ECHONL))
+						{
+							if (self.config.c_lflag.ECHOCTL and c & 0b11100000 == 0) {
+								self.putchar('^');
+								self.putchar(c | 0b01000000);
+							} else {
+								self.putchar(c);
+							}
+						}
+	        		}
 	        	}
 	        	self.read_head = self.current_line_end;
 	        	self.unprocessed_begin = self.current_line_end;
 	        } else {
-	        	while (self.current_line_end != self.read_head) : (self.current_line_end %= self.input_buffer.len)
+	        	while (self.current_line_end != self.read_head)
 	        	{
 					if (self.config.c_lflag.ECHO or (self.input_buffer[self.current_line_end] == '\n' and self.config.c_lflag.ECHONL))
 						self.putchar(self.input_buffer[self.current_line_end]);
-	        		self.current_line_end += 1;
+	        		self.current_line_end +%= 1;
 	        	}
 	        }
         }
