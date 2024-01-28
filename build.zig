@@ -30,6 +30,8 @@ pub fn build(b: *Builder) void {
 		.optimize = b.standardOptimizeOption(.{})
 	});
 
+    kernel.addIncludePath(std.Build.LazyPath{.path = "./src/c_headers/"});
+
 	kernel.setLinkerScriptPath(.{ .path = "src/linker.ld" });
 	b.installArtifact(kernel);
 }

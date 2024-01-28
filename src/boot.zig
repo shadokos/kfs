@@ -25,7 +25,18 @@ export fn _entry() callconv(.Naked) noreturn {
 		\\ mov $stack, %esp
 		\\ add STACK_SIZE, %esp
 		\\ movl %esp, %ebp
-		\\ call kernel_main
+		\\ movl %ebx, multiboot_info
+		\\ call init
 	);
 	while (true) {}
+}
+
+const multiboot_h = @import("c_headers.zig").multiboot_h;
+
+pub export var multiboot_info : * volatile multiboot_h.multiboot_info_t = undefined;
+
+extern fn kernel_main() void;
+
+export fn init() void {
+	kernel_main();
 }
