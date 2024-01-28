@@ -1,4 +1,5 @@
 const tty = @import("../tty/tty.zig");
+const u = @import("utils.zig");
 
 const Help = struct {
 	name:  [:0]const u8,
@@ -7,10 +8,16 @@ const Help = struct {
 };
 
 fn print_helper(h: Help) void {
-	tty.printk("{s}Command:{s} {s}\n",  .{"\x1b[36m", "\x1b[0m", h.name});
-	tty.printk("{s}Description:{s} {s}\n", .{"\x1b[36m", "\x1b[0m", h.description});
+	tty.printk(u.blue ++ "Command" ++ u.reset ++ ": {s}\n",  .{
+		h.name
+	});
+	tty.printk(u.blue ++ "Description" ++ u.reset ++ ": {s}\n",  .{
+		h.description
+	});
 	if (h.usage != null) {
-		tty.printk("{s}Usage:{s} {s}\n", .{"\x1b[36m", "\x1b[0m", h.usage.?});
+		tty.printk(u.blue ++ "Usage" ++ u.reset ++ ": {s}\n",  .{
+			h.usage.?
+		});
 	}
 }
 
@@ -19,7 +26,7 @@ pub fn stack() void {
 		.name = "stack",
 		.description =
 			"Prints the stack.\n" ++
-			"\x1b[33mWARNING:\x1b[0m This command is not implemented yet.",
+			u.yellow ++ "WARNING" ++ u.reset ++ ": This command is not implemented yet.",
 		.usage = null
 	});
 }

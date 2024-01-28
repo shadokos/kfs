@@ -9,7 +9,7 @@ pub fn stack(_: anytype) usize {
 }
 
 fn _help_available_commands() void {
-	tty.printk(utils.cyan ++ "Available commands:\n" ++ utils.reset, .{});
+	tty.printk(utils.blue ++ "Available commands:\n" ++ utils.reset, .{});
 	inline for (@typeInfo(helpers).Struct.decls) |decl| {
 		tty.printk("  - {s}\n", .{decl.name});
 	}
