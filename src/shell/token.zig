@@ -37,12 +37,15 @@ pub fn tokenize(data: *[]u8) TokenError!Tokens {
 			.none => switch (c) {
 				0, 9...13, 32  => {
 					data.*[i] = 0;
+
 					const slice : *const[:0]u8 = &data.*[offset..i:0];
+
 					_ = skip_whitespaces(data, &i);
 					offset = i + 1;
+
 					if (slice.*.len == 0 or slice.*[0] == 0) continue;
-					ret.tokens[ret.len] = slice.*;
-					ret.len += 1;
+                    ret.tokens[ret.len] = slice.*;
+                    ret.len += 1;
 				},
 				'\'', '"' => {
 					quote = if (c == '\'') .single else .double;
@@ -54,15 +57,17 @@ pub fn tokenize(data: *[]u8) TokenError!Tokens {
 			 	quote = .none; current_quote.end = i;
 				ft.mem.copyForwards(
 					u8,
-					data.*[current_quote.start.?..current_quote.end.?],
-					data.*[current_quote.start.? + 1..current_quote.end.? + 1]
+					data.*[current_quote.start.?..current_quote.end.?-1],
+					data.*[current_quote.start.? + 1..current_quote.end.?]
 				);
 				ft.mem.copyForwards(
 					u8,
 					data.*[current_quote.end.? - 1..data.*.len-1],
 					data.*[current_quote.end.? + 1..data.*.len]
 				);
-				i -= 2;
+				for (data.*[data.*.len-2..data.*.len]) |*_c| _c.* = 0;
+				i -|= 2;
+				offset = if (ft.ascii.isWhitespace(data.*[i])) i + 1 else offset;
 			},
 		}
 	}
