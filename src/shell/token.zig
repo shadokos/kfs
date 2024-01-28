@@ -66,8 +66,10 @@ pub fn tokenize(data: *[]u8) TokenError!Tokens {
 					data.*[current_quote.end.? + 1..data.*.len]
 				);
 				for (data.*[data.*.len-2..data.*.len]) |*_c| _c.* = 0;
+				const _i = i;
 				i -|= 2;
-				offset = if (ft.ascii.isWhitespace(data.*[i])) i + 1 else offset;
+				if (_i - i != 2 and ft.ascii.isWhitespace(data.*[i]))
+					offset = i + 1;
 			},
 		}
 	}
