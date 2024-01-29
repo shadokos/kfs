@@ -1,13 +1,14 @@
 const ft = @import("../ft/ft.zig");
 const tty = @import("../tty/tty.zig");
 
-const max_tokens = 256;
+const max_tokens = 32;
 
 pub const Tokens = [max_tokens][]u8;
 var tokens: Tokens = undefined;
 
-pub const TokenError = error {
+pub const TokenizerError = error {
 	InvalidQuote,
+	MaxTokensReached,
 };
 
 fn _skip_and_fill_whitespaces(data: *[]u8, i: *usize) void {
@@ -20,7 +21,7 @@ fn _skip_and_fill_whitespaces(data: *[]u8, i: *usize) void {
 	@memset(data.*[start..i.*], 0);
 }
 
-pub fn tokenize(data: *[]u8) TokenError![][]u8 {
+pub fn tokenize(data: *[]u8) TokenizerError![][]u8 {
  	var quote: enum { none, single, double } = .none;
  	var quote_offset: usize = 0;
 	var index: usize = 0;
@@ -40,6 +41,7 @@ pub fn tokenize(data: *[]u8) TokenError![][]u8 {
 
 					if (slice.len == 0 or slice[0] == 0) continue ;
 
+					if (index == max_tokens) return TokenizerError.MaxTokensReached;
 					tokens[index] = slice;
 					index += 1;
 				},
@@ -66,6 +68,6 @@ pub fn tokenize(data: *[]u8) TokenError![][]u8 {
 			}
 		}
 	}
-	if (quote != .none) return TokenError.InvalidQuote;
+	if (quote != .none) return TokenizerError.InvalidQuote;
 	return tokens[0..index];
 }
