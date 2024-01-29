@@ -6,6 +6,7 @@ const CrossTarget = @import("std").zig.CrossTarget;
  
 pub fn build(b: *Builder) void {
 	const name = b.option([]const u8, "name", "Specify a name for output binary") orelse "kernel.elf";
+	const posix = b.option(bool, "posix", "Enable this flag if strict POSIX conformance is wanted") orelse false;
 
     var cpu_features_sub : Feature.Set = Feature.Set.empty;
 
@@ -29,6 +30,10 @@ pub fn build(b: *Builder) void {
 		.target = target,
 		.optimize = b.standardOptimizeOption(.{})
 	});
+
+    const build_options = b.addOptions();
+    build_options.addOption(bool, "posix", posix);
+    kernel.addOptions("build_options", build_options);
 
     kernel.addIncludePath(std.Build.LazyPath{.path = "./src/c_headers/"});
 
