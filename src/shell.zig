@@ -4,6 +4,7 @@ const token = @import("shell/token.zig");
 const tty = @import("tty/tty.zig");
 const utils = @import("shell/utils.zig");
 
+const TokenizerError = token.TokenizerError;
 const max_line_size: u16 = 1024;
 var status_code: usize = 0;
 
@@ -24,7 +25,8 @@ pub fn shell() u8 {
 		// Tokenize the line
 		const args = token.tokenize(@constCast(line)) catch |err| {
 			switch (err) {
-				token.TokenError.InvalidQuote => utils.print_error("invalid quotes"),
+				token.TokenizerError.InvalidQuote => utils.print_error("invalid quotes"),
+				token.TokenizerError.MaxTokensReached => utils.print_error("too many tokens"),
 			}
 			status_code = 2;
 			continue ;
