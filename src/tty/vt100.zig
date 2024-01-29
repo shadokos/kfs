@@ -57,16 +57,6 @@ return struct {
 		}
 	}
 
-	/// handle set scroll escape codes
-	fn handle_scroll(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
-		switch (buffer[0])
-		{
-			'D' => {terminal.scroll(1);},
-			'M' => {terminal.scroll(-1);},
-			else => unreachable
-		}
-	}
-
 	/// handle save and restore
 	fn handle_save(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
 		const saved_state = struct {var value: ?tty.TtyN(history_size).State = null;};
@@ -219,8 +209,8 @@ return struct {
 				.{ .prefix = "[f", .f = &handle_goto },
 				.{ .prefix = "[;f", .f = &handle_goto },
 				.{ .prefix = "[^;^f", .f = &handle_goto },
-				.{ .prefix = "D", .f = &handle_scroll },
-				.{ .prefix = "M", .f = &handle_scroll },
+				.{ .prefix = "D", .f = &handle_nothing },
+				.{ .prefix = "M", .f = &handle_nothing },
 				.{ .prefix = "E", .f = &handle_nothing }, // move to next line
 				.{ .prefix = "7", .f = &handle_save }, // save cursor pos and attributes
 				.{ .prefix = "8", .f = &handle_save }, // restore cursor pos and attributes

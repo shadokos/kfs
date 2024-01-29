@@ -475,6 +475,7 @@ pub fn TtyN(comptime history_size: u32) type {
             }
             if (self.scroll_offset >= history_size)
             	self.scroll_offset = history_size - 1;
+            self.view();
         }
 
 
