@@ -211,6 +211,18 @@ pub fn TtyN(comptime history_size: u32) type {
         	return c == '\n' or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOL)] or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)];
         }
 
+        fn erase_char(self: *Self) void {
+        	if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE)
+			{
+				_ = self.write("\x08 \x08") catch {};
+				self.current_line_end -%= 1;
+				if (self.config.c_lflag.ECHOCTL and self.input_buffer[self.current_line_end] & 0b11100000 == 0 and !ft.ascii.isWhitespace(self.input_buffer[self.current_line_end]))
+					_ = self.write("\x08 \x08") catch {};
+			} else {
+				self.current_line_end -%= 1;
+			}
+        }
+
 		/// perform local processing as defined by POSIX and according to the current termios configuration
         fn local_processing(self: *Self) void {
 	        if (self.config.c_lflag.ICANON) {
@@ -227,20 +239,12 @@ pub fn TtyN(comptime history_size: u32) type {
 						self.current_line_end +%= 1;
 	        			self.current_line_begin = self.current_line_end;
 	        		} else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
-	        			if (self.current_line_end != self.current_line_begin)
-						{
-							if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE) {
-								_ = self.write("\x08 \x08") catch {};
-							}
-							self.current_line_end -%= 1;
+	        			if (self.current_line_end != self.current_line_begin) {
+							self.erase_char();
 						}
 	        		} else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
-	        			while (self.current_line_end != self.current_line_begin)
-						{
-							if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE) {
-								_ = self.write("\x08 \x08") catch {};
-							}
-							self.current_line_end -%= 1;
+	        			while (self.current_line_end != self.current_line_begin) {
+							self.erase_char();
 						}
 						// todo ECHOK
 	        		} else {
@@ -248,7 +252,7 @@ pub fn TtyN(comptime history_size: u32) type {
 						self.current_line_end +%= 1;
 						if (self.config.c_lflag.ECHO or (c == '\n' and self.config.c_lflag.ECHONL))
 						{
-							if (self.config.c_lflag.ECHOCTL and c & 0b11100000 == 0) {
+							if (self.config.c_lflag.ECHOCTL and c & 0b11100000 == 0 and !ft.ascii.isWhitespace(c)) {
 								self.putchar('^');
 								self.putchar(c | 0b01000000);
 							} else {
