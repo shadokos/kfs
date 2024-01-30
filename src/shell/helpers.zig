@@ -22,9 +22,7 @@ fn print_helper(h: Help) void {
 pub fn stack() void {
 	print_helper(Help{
 		.name = "stack",
-		.description =
-			"Prints the stack.\n" ++
-			u.yellow ++ "WARNING" ++ u.reset ++ ": This command is not implemented yet.",
+		.description = "Dispay base pointer's \"traceback\" and dump the stackframes",
 		.usage = null
 	});
 }
