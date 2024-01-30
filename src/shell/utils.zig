@@ -91,14 +91,13 @@ pub fn print_stack() void {
 
 	// print ebp "traceback"
 	tty.printk(yellow ++ "(ebp) " ++ reset , .{});
-	while (true) {
-		if (@intFromPtr(_ebp) == @intFromPtr(&stack) + STACK_SIZE) {
-			tty.printk("0x{x} " ++ red ++ "(_entry)\n" ++ reset, .{@intFromPtr(_ebp)});
-			break ;
-		}
-		tty.printk("0x{x} -> ", .{@intFromPtr(_ebp)});
+	while (true) if (@intFromPtr(_ebp) == @intFromPtr(&stack) + STACK_SIZE) {
+		tty.printk("0x{x} " ++ red ++ "(_entry)\n" ++ reset, .{@intFromPtr(_ebp)});
+		break ;
+	} else {
+		tty.printk("0x{x}" ++ yellow ++ "->" ++ reset, .{@intFromPtr(_ebp)});
 		_ebp = @ptrFromInt(_ebp.*);
-	}
+	};
 
 	// print stack frames
 	_ebp = ebp;
