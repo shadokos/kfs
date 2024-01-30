@@ -4,13 +4,13 @@ const helpers = @import("helpers.zig");
 const utils = @import("utils.zig");
 
 pub fn stack(_: anytype) usize {
-	tty.printk("Stack: WIP\n", .{});
+	utils.print_stack();
 	return 0;
 }
 
 fn _help_available_commands() void {
 	tty.printk(utils.blue ++ "Available commands:\n" ++ utils.reset, .{});
-	inline for (@typeInfo(helpers).Struct.decls) |decl| {
+	inline for (@typeInfo(@This()).Struct.decls) |decl| {
 		tty.printk("  - {s}\n", .{decl.name});
 	}
 }
