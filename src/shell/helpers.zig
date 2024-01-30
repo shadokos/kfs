@@ -36,3 +36,11 @@ pub fn help() void {
 		.usage = "help <command>"
 	});
 }
+
+pub fn clear() void {
+	print_helper(Help{
+		.name = "clear",
+		.description = "Clears the screen",
+		.usage = null
+	});
+}
