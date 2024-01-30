@@ -35,3 +35,8 @@ pub fn help(data: [][]u8) usize {
 	_help_available_commands();
 	return 2;
 }
+
+pub fn clear(_: [][]u8) usize {
+	tty.printk("\x1b[2J\x1b[H", .{});
+	return 0;
+}
