@@ -22,7 +22,7 @@ fn print_helper(h: Help) void {
 pub fn stack() void {
 	print_helper(Help{
 		.name = "stack",
-		.description = "Dispay base pointer's \"traceback\" and dump the stackframes",
+		.description = "Display ebp traceback and dump the stack frames",
 		.usage = null
 	});
 }
