@@ -31,9 +31,9 @@ pub fn ensure_newline() void {
 	});
 }
 
-pub fn print_error(msg: []const u8) void {
+pub fn print_error(comptime msg: []const u8, args: anytype) void {
 	ensure_newline();
-	tty.printk(red ++ "Error:" ++ reset ++ " {s}\n", .{msg});
+	tty.printk(red ++ "Error" ++ reset ++ ": " ++ msg ++ "\n", args);
 }
 
 pub fn print_prompt(status_code: usize) void {

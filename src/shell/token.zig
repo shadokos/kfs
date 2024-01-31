@@ -1,7 +1,7 @@
 const ft = @import("../ft/ft.zig");
 const tty = @import("../tty/tty.zig");
 
-const max_tokens = 32;
+pub const max_tokens = 32;
 
 pub const Tokens = [max_tokens][]u8;
 var tokens: Tokens = undefined;
