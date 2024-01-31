@@ -29,6 +29,7 @@ SRC = linker.ld \
 	tty/keyboard.zig \
 	io/ports.zig \
 	ft/ascii.zig \
+	ft/debug.zig \
 	ft/fmt.zig \
 	ft/ft.zig \
 	ft/io/fixed_buffer_stream.zig \
