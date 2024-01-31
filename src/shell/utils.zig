@@ -76,13 +76,12 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
     }
 }
 
-pub fn print_stack() void {
-	var si: StackIterator = StackIterator.init(null, @frameAddress());
-	var esp: usize = 0;
+pub fn print_stack(_ebp: usize, _esp: usize) void {
+	var ebp: usize = _ebp;
+	var esp: usize = _esp;
+	var si: StackIterator = StackIterator.init(null, ebp);
 	var old_fp: usize = 0;
 	var link: bool = false;
-
-	asm volatile("movl %esp, %[esp]" : [esp] "=r" (esp));
 
 	tty.printk("{s}EBP{s}, {s}ESP{s}, {s}PC{s}, {s}Size{s}\n", .{
 		yellow, reset,
@@ -96,7 +95,7 @@ pub fn print_stack() void {
 	while (true) {
 		const size = si.fp - esp;
 
-		tty.printk("{s}\xB3 {s}0x{x:0>8}{s} \xB3\n", .{
+		tty.printk("{s}\xB3     ...    \xB3 {s}{d}{s} bytes\n", .{
 			if (link) "\xB3  " else "   ", green, size, reset
 		});
 		tty.printk("{s}\xC3" ++ "\xC4"**12 ++ "\xB4\n", .{
@@ -124,6 +123,43 @@ pub fn print_stack() void {
         		yellow, @as(*const usize, @ptrFromInt(si.fp)).*, reset, yellow, si.fp, reset,
         	});
 			tty.printk("   \xC0" ++ "\xC4"**12 ++ "\xD9\n", .{});
+			break;
+		}
+	}
+}
+
+pub fn dump_stack(_ebp: usize, _esp: usize) void {
+	var ebp: usize = _ebp;
+	var esp: usize = _esp;
+	var pc: ?usize = null;
+	var si: StackIterator = StackIterator.init(null, ebp);
+
+	while (true) {
+		const size = si.fp - esp;
+
+		tty.printk(
+			\\{s}STACK FRAME{s}
+			\\Size: {s}0x{x}{s}({s}{d}{s}) bytes
+			\\ebp: {s}0x{x}{s}, esp: {s}0x{x}{s}
+			, .{
+				"\xCD" ** tty.width,
+				"\xB3\n" ++ "\xC4"**11 ++ "\xD9\n",
+				green, size, reset,
+				green, size, reset,
+				yellow, si.fp, reset,
+				red, esp, reset
+			},
+		);
+		if (pc) |addr| tty.printk(", pc: {s}0x{x}{s}", .{ blue, addr, reset });
+		tty.printk("\n\nhex dump:\n", .{});
+
+		memory_dump(si.fp + @sizeOf(usize), esp);
+		esp = si.fp + @sizeOf(usize);
+		tty.printk("\n", .{});
+		if (si.next()) |addr| {
+			pc = addr;
+		} else {
+			tty.printk("\xCD" ** tty.width ++ "\n", .{});
 			break;
 		}
 	}

@@ -4,7 +4,12 @@ const helpers = @import("helpers.zig");
 const utils = @import("utils.zig");
 
 pub fn stack(_: anytype) usize {
-	utils.print_stack();
+	var ebp: usize = @frameAddress();
+	var esp: usize = 0;
+
+	asm volatile("movl %esp, %[esp]" : [esp] "=r" (esp));
+	utils.dump_stack(ebp, esp);
+	utils.print_stack(ebp, esp);
 	return 0;
 }
 
