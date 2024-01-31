@@ -62,3 +62,7 @@ pub fn eql(comptime T: type, a: []const T, b: []const T) bool {
 pub fn copyForwards(comptime T: type, dest: []T, src: []const T) void {
     for (dest[0..src.len], src) |*d, s| d.* = s;
 }
+
+pub fn isAligned(addr: usize, alighment: usize) bool {
+	return addr & ~(alighment - 1) == addr;
+}
