@@ -1,5 +1,6 @@
 const tty = @import("../tty/tty.zig");
 const ft = @import("../ft/ft.zig");
+const StackIterator = ft.debug.StackIterator;
 
 extern var STACK_SIZE: usize;
 extern var stack: u8;
@@ -76,40 +77,54 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
 }
 
 pub fn print_stack() void {
-	var ebp: *u32 = @ptrFromInt(@frameAddress());
-	var esp: *u32 = undefined;
+	var si: StackIterator = StackIterator.init(null, @frameAddress());
+	var esp: usize = 0;
+	var old_fp: usize = 0;
+	var link: bool = false;
 
-	// Get the current base and stack pointers
-	asm volatile(
-		\\ movl %ebp, %[ebp]
-		\\ movl %esp, %[esp]
-		: [ebp] "=r" (ebp), [esp] "=r" (esp)
-	);
+	asm volatile("movl %esp, %[esp]" : [esp] "=r" (esp));
 
-	var _ebp = ebp;
-	var _esp = esp;
-
-	// print ebp "traceback"
-	tty.printk(yellow ++ "(ebp) " ++ reset , .{});
-	while (true) if (@intFromPtr(_ebp) == @intFromPtr(&stack) + STACK_SIZE) {
-		tty.printk("0x{x} " ++ red ++ "(_entry)\n" ++ reset, .{@intFromPtr(_ebp)});
-		break ;
-	} else {
-		tty.printk("0x{x}" ++ yellow ++ "->" ++ reset, .{@intFromPtr(_ebp)});
-		_ebp = @ptrFromInt(_ebp.*);
-	};
-
-	// print stack frames
-	_ebp = ebp;
+	tty.printk("{s}EBP{s}, {s}ESP{s}, {s}PC{s}, {s}Size{s}\n", .{
+		yellow, reset,
+		red, reset,
+		blue, reset,
+		green, reset
+	});
+	tty.printk("   \xDA" ++ "\xC4" ** 12 ++ "\xBF <- {s}0x{x:0>8}{s}\n", .{
+		red, esp, reset
+	});
 	while (true) {
-		tty.printk("\nStack frame ({s}ebp{s}: 0x{x} | {s}esp{s}: 0x{x})\n", .{
-			yellow, reset, @intFromPtr(_ebp),
-			yellow, reset, @intFromPtr(_esp),
-		});
-		memory_dump(@intFromPtr(_ebp), @intFromPtr(_esp));
-		if (@intFromPtr(_ebp) == @intFromPtr(&stack) + STACK_SIZE) break;
+		const size = si.fp - esp;
 
-		_esp = _ebp;
-		_ebp = @ptrFromInt(_ebp.*);
+		tty.printk("{s}\xB3 {s}0x{x:0>8}{s} \xB3\n", .{
+			if (link) "\xB3  " else "   ", green, size, reset
+		});
+		tty.printk("{s}\xC3" ++ "\xC4"**12 ++ "\xB4\n", .{
+			if (link) "\xB3  " else "   ", "\x1b[C"**3
+		});
+		old_fp = si.fp;
+		esp = si.fp - @sizeOf(usize);
+		if (si.next()) |addr| {
+			tty.printk("{s}\xB3 {s}0x{x:0>8}{s} \xB3 <- {s}0x{x:0>8}{s}\n", .{
+				if (link) "\xC0> " else "   ",
+				yellow, si.fp, reset, yellow, old_fp, reset,
+			});
+			link = true;
+			tty.printk("   \xC0\xC4\xC2" ++ "\xC4"**10 ++ "\xD9\n", .{});
+			tty.printk("\xDA" ++ "\xC4"**4 ++ "\xD9\n", .{});
+			tty.printk("\xB3  \xDA" ++ "\xC4"**12 ++ "\xBF\n", .{});
+			tty.printk("\xB3  \xB3 {s}0x{x:0>8}{s} \xB3 <- {s}0x{x:0>8}{s}\n", .{
+				blue, addr, reset,
+				red, esp, reset,
+			});
+			tty.printk("\xB3  \xC3" ++ "\xC4" ** 12 ++ "\xB4\n", .{});
+		} else {
+			tty.printk("{s}\xB3 {s}0x{x:0>8}{s} \xB3 <- {s}0x{x:0>8}{s}\n", .{
+        		if (link) "\xC0> " else "   ",
+        		yellow, @as(*const usize, @ptrFromInt(si.fp)).*, reset, yellow, si.fp, reset,
+        	});
+			tty.printk("   \xC0" ++ "\xC4"**12 ++ "\xD9\n", .{});
+			break;
+		}
 	}
 }
