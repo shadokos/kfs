@@ -33,6 +33,7 @@ pub fn build(b: *Builder) void {
 
     const build_options = b.addOptions();
     build_options.addOption(bool, "posix", posix);
+    build_options.addOption(std.builtin.OptimizeMode, "optimize", kernel.optimize);
     kernel.addOptions("build_options", build_options);
 
     kernel.addIncludePath(std.Build.LazyPath{.path = "./src/c_headers/"});
