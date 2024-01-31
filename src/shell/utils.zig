@@ -76,13 +76,20 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
     }
 }
 
-pub fn print_stack(_ebp: usize, _esp: usize) void {
-	var ebp: usize = _ebp;
-	var esp: usize = _esp;
+pub inline fn print_stack() void {
+	if (@import("build_options").optimize != .Debug) {
+		print_error("{s}", .{"The dump_stack function is only available in debug mode"});
+		return ;
+	}
+
+	var ebp: usize = @frameAddress();
+	var esp: usize = 0;
 	var si: StackIterator = StackIterator.init(null, ebp);
 	var old_fp: usize = 0;
 	var link: bool = false;
 	var pc: ?usize = null;
+
+	asm volatile("movl %esp, %[esp]" : [esp] "=r" (esp));
 
 	tty.printk("{s}EBP{s}, {s}ESP{s}, {s}PC{s}\n", .{
 		yellow, reset,
@@ -129,11 +136,18 @@ pub fn print_stack(_ebp: usize, _esp: usize) void {
 	}
 }
 
-pub fn dump_stack(_ebp: usize, _esp: usize) void {
-	var ebp: usize = _ebp;
-	var esp: usize = _esp;
-	var pc: ?usize = null;
+pub inline fn dump_stack() void {
+	if (@import("build_options").optimize != .Debug) {
+		print_error("{s}", .{"The dump_stack function is only available in debug mode"});
+		return ;
+	}
+
+	var ebp: usize = @frameAddress();
+    var esp: usize = 0;
 	var si: StackIterator = StackIterator.init(null, ebp);
+	var pc: ?usize = null;
+
+    asm volatile("movl %esp, %[esp]" : [esp] "=r" (esp));
 
 	while (true) {
 		const size = si.fp - esp + @sizeOf(usize);

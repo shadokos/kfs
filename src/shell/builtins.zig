@@ -4,12 +4,12 @@ const helpers = @import("helpers.zig");
 const utils = @import("utils.zig");
 
 pub fn stack(_: anytype) usize {
-	var ebp: usize = @frameAddress();
-	var esp: usize = 0;
-
-	asm volatile("movl %esp, %[esp]" : [esp] "=r" (esp));
-	utils.dump_stack(ebp, esp);
-	utils.print_stack(ebp, esp);
+	if (@import("build_options").optimize != .Debug) {
+		utils.print_error("{s}", .{"The stack builtin is only available in debug mode"});
+		return 2;
+	}
+	utils.dump_stack();
+	utils.print_stack();
 	return 0;
 }
 
