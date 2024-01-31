@@ -82,28 +82,29 @@ pub fn print_stack(_ebp: usize, _esp: usize) void {
 	var si: StackIterator = StackIterator.init(null, ebp);
 	var old_fp: usize = 0;
 	var link: bool = false;
+	var pc: ?usize = null;
 
-	tty.printk("{s}EBP{s}, {s}ESP{s}, {s}PC{s}, {s}Size{s}\n", .{
+	tty.printk("{s}EBP{s}, {s}ESP{s}, {s}PC{s}\n", .{
 		yellow, reset,
 		red, reset,
 		blue, reset,
-		green, reset
 	});
 	tty.printk("   \xDA" ++ "\xC4" ** 12 ++ "\xBF <- {s}0x{x:0>8}{s}\n", .{
 		red, esp, reset
 	});
 	while (true) {
-		const size = si.fp - esp;
+		var size = si.fp - esp;
 
-		tty.printk("{s}\xB3     ...    \xB3 {s}{d}{s} bytes\n", .{
-			if (link) "\xB3  " else "   ", green, size, reset
-		});
-		tty.printk("{s}\xC3" ++ "\xC4"**12 ++ "\xB4\n", .{
-			if (link) "\xB3  " else "   ", "\x1b[C"**3
-		});
+		if (pc) |_| size -= @sizeOf(usize);
+		if (size > 0)
+			tty.printk("{s}\xB3     ...    \xB3 {s}{d}{s} bytes\n{s}", .{
+				if (link) "\xB3  " else "   ", green, size, reset,
+				(if (link) "\xB3  " else "   ") ++ "\xC3" ++ "\xC4"**12 ++ "\xB4\n",
+			});
 		old_fp = si.fp;
-		esp = si.fp - @sizeOf(usize);
+		esp = si.fp + @sizeOf(usize);
 		if (si.next()) |addr| {
+			pc = addr;
 			tty.printk("{s}\xB3 {s}0x{x:0>8}{s} \xB3 <- {s}0x{x:0>8}{s}\n", .{
 				if (link) "\xC0> " else "   ",
 				yellow, si.fp, reset, yellow, old_fp, reset,
@@ -135,14 +136,14 @@ pub fn dump_stack(_ebp: usize, _esp: usize) void {
 	var si: StackIterator = StackIterator.init(null, ebp);
 
 	while (true) {
-		const size = si.fp - esp;
+		const size = si.fp - esp + @sizeOf(usize);
 
 		tty.printk(
 			\\{s}STACK FRAME{s}
-			\\Size: {s}0x{x}{s}({s}{d}{s}) bytes
+			\\Size: {s}0x{x}{s} ({s}{d}{s}) bytes
 			\\ebp: {s}0x{x}{s}, esp: {s}0x{x}{s}
 			, .{
-				"\xCD" ** tty.width,
+				"\xCD"**11 ++ "\xD1" ++ "\xCD"**(tty.width-12),
 				"\xB3\n" ++ "\xC4"**11 ++ "\xD9\n",
 				green, size, reset,
 				green, size, reset,
