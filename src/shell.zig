@@ -25,8 +25,10 @@ pub fn shell() u8 {
 		// Tokenize the line
 		const args = token.tokenize(@constCast(line)) catch |err| {
 			switch (err) {
-				token.TokenizerError.InvalidQuote => utils.print_error("invalid quotes"),
-				token.TokenizerError.MaxTokensReached => utils.print_error("too many tokens"),
+				token.TokenizerError.InvalidQuote =>
+					utils.print_error("invalid quotes", .{}),
+				token.TokenizerError.MaxTokensReached =>
+					utils.print_error("too many tokens (max: {d})", .{token.max_tokens}),
 			}
 			status_code = 2;
 			continue ;
@@ -43,7 +45,8 @@ pub fn shell() u8 {
 			}
 			else status_code = 1;
 		}
-		if (status_code == 1) utils.print_error("command not found");
+		if (status_code == 1)
+			utils.print_error("{s}: command not found", .{args[0]});
 	}
 	return 0;
 }

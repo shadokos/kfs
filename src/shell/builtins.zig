@@ -31,12 +31,7 @@ pub fn help(data: [][]u8) usize {
 			return 0;
 		}
 	}
-	tty.printk(
-		utils.red ++
-		"Error:" ++
-		utils.reset ++
-		" Help: There's no help page for \"{s}\"\n", .{ data[1] }
-	);
+	utils.print_error("There's no help page for \"{s}\"\n", .{data[1]});
 	_help_available_commands();
 	return 2;
 }
