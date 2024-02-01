@@ -22,6 +22,7 @@ SRC = linker.ld \
 	boot.zig \
 	drivers/ps2/ps2.zig \
 	gdt.zig \
+	drivers/acpi.zig \
 	kernel.zig \
 	multiboot.zig \
 	tty/tty.zig \
