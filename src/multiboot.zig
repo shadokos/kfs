@@ -12,7 +12,7 @@ fn mbi_requestN(comptime types : []const u32) type {
 	};
 }
 
-fn get_multiboot_header_type(comptime types : []const u32) type {
+fn get_header_type(comptime types : []const u32) type {
 	return extern struct {
 		header : extern struct {
 			magic : u32 = multiboot2_h.MULTIBOOT2_HEADER_MAGIC,
@@ -29,7 +29,10 @@ fn get_multiboot_header_type(comptime types : []const u32) type {
 	};
 }
 
-pub const header_type = get_multiboot_header_type(([_]u32{multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP, multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW})[0..]);
+pub const header_type = get_header_type(([_]u32{
+	multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP,
+	multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW
+})[0..]);
 
 pub fn get_header() header_type {
 	var ret : header_type = .{};
@@ -39,20 +42,20 @@ pub fn get_header() header_type {
 	return ret;
 }
 
-pub const multiboot_mmap_entry = extern struct {
+pub const mmap_entry = extern struct {
 	base : u64,
 	length : u64,
 	type : u32,
 	reserved : u32
 };
 
-pub const mmap_iter = extern struct {
+pub const mmap_it = extern struct {
 	base : *tag_type,
 	index : usize = 0,
 
 	const tag_type = get_tag_type(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP);
-	pub fn next(self : *@This()) ?*multiboot_mmap_entry {
-		const ret : *multiboot_mmap_entry = @ptrFromInt(@intFromPtr(&self.base.first_entry) + self.base.entry_size * self.index);
+	pub fn next(self : *@This()) ?*mmap_entry {
+		const ret : *mmap_entry = @ptrFromInt(@intFromPtr(&self.base.first_entry) + self.base.entry_size * self.index);
 		if (@intFromPtr(ret) > @intFromPtr(self.base) + self.base.size)
 			return null;
 		self.index += 1;
@@ -87,7 +90,7 @@ fn get_tag_type(comptime n : comptime_int) type {
 		extern struct { // MULTIBOOT_TAG_TYPE_MMAP
 			entry_size : u32,
 			entry_version : u32,
-			first_entry : multiboot_mmap_entry,
+			first_entry : mmap_entry,
 		},
 		extern struct { // MULTIBOOT_TAG_TYPE_VBE
 			vbe_mode : u16,
@@ -173,18 +176,18 @@ fn get_tag_type(comptime n : comptime_int) type {
 	return @Type(tmp);
 }
 
-const multiboot_info_tag = extern struct {
+const tag_header = extern struct {
 	type : u32,
 	size : u32,
 };
 
-pub const multiboot_info = extern struct {
+pub const info_header = extern struct {
 	total_size : u32,
 	reserved : u32,
 };
 
-pub fn get_multiboot_tag(comptime t : usize) ?*get_tag_type(t) {
-	var tag : *align(1) multiboot_info_tag = @ptrFromInt(@intFromPtr(boot.multiboot_info) + @sizeOf(multiboot_info));
+pub fn get_tag(comptime t : usize) ?*get_tag_type(t) {
+	var tag : *align(1) tag_header = @ptrFromInt(@intFromPtr(boot.info_header) + @sizeOf(info_header));
 	while (tag.type != multiboot2_h.MULTIBOOT_TAG_TYPE_END) {
 		if (tag.type == t) {
 			return @alignCast(@ptrCast(tag));
@@ -197,7 +200,7 @@ pub fn get_multiboot_tag(comptime t : usize) ?*get_tag_type(t) {
 }
 
 pub fn list_tags() void {
-	var tag : *align(1) multiboot_info_tag = @ptrFromInt(@intFromPtr(boot.multiboot_info) + @sizeOf(multiboot_info));
+	var tag : *align(1) tag_header = @ptrFromInt(@intFromPtr(boot.info_header) + @sizeOf(info_header));
 
 	while (tag.type != multiboot2_h.MULTIBOOT_TAG_TYPE_END) {
 		tty.printk("tag: type {d} size {d}\n", .{tag.type, tag.size});
