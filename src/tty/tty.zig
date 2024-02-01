@@ -211,7 +211,7 @@ pub fn TtyN(comptime history_size: u32) type {
         	return c == '\n' or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOL)] or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)];
         }
 
-        inline fn is_echoctl(self: Self, c : u8) bool {
+        fn is_echoctl(self: Self, c : u8) bool {
 			return c & 0b11100000 == 0 and c != '\t' and c != '\n' and c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTART)] and c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTOP)];
         }
 
