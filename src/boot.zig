@@ -1,21 +1,12 @@
 const kernel_main = @import("kernel.zig").kernel_main;
-const multiboot_h = @import("c_headers.zig").multiboot_h;
+const multiboot2_h = @import("c_headers.zig").multiboot2_h;
+const multiboot = @import("multiboot.zig");
 
 export const STACK_SIZE: u32 = 16 * 1024;
 
 export var stack: [STACK_SIZE]u8 align(16) linksection(".bss") = undefined;
 
-fn get_header() multiboot_h.multiboot_header {
-	var ret : multiboot_h.multiboot_header = undefined;
-
-	ret.magic = multiboot_h.MULTIBOOT_HEADER_MAGIC;
-	ret.flags = multiboot_h.MULTIBOOT_PAGE_ALIGN | multiboot_h.MULTIBOOT_MEMORY_INFO;
-
-	ret.checksum = @bitCast(-(@as(i32, ret.magic) + @as(i32, ret.flags)));
-	return ret;
-}
-
-export var multiboot : multiboot_h.multiboot_header align(4) linksection(".multiboot") = get_header();
+export var multiboot_header : multiboot.header_type align(4) linksection(".multiboot") = multiboot.get_header();
 
 export fn _entry() callconv(.Naked) noreturn {
 	asm volatile(
@@ -28,7 +19,7 @@ export fn _entry() callconv(.Naked) noreturn {
 	while (true) {}
 }
 
-pub export var multiboot_info : * volatile multiboot_h.multiboot_info_t = undefined;
+pub export var multiboot_info : * volatile multiboot.multiboot_info = undefined;
 
 export fn init() void {
 	kernel_main();
