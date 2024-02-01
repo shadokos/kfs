@@ -1,6 +1,7 @@
 const kernel_main = @import("kernel.zig").kernel_main;
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const multiboot = @import("multiboot.zig");
+const builtin = @import("std").builtin;
 
 export const STACK_SIZE: u32 = 16 * 1024;
 
@@ -20,6 +21,13 @@ export fn _entry() callconv(.Naked) noreturn {
 }
 
 pub export var multiboot_info : * volatile multiboot.info_header = undefined;
+
+pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
+	const tty = @import("tty/tty.zig");
+
+	tty.printk("panic: {s}\n", .{msg});
+	while (true) {}
+}
 
 export fn init() void {
 	kernel_main();
