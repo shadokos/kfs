@@ -20,6 +20,7 @@ SRC = linker.ld \
 	../build.zig \
 	boot.zig \
 	kernel.zig \
+	multiboot.zig \
 	tty/tty.zig \
 	tty/vt100.zig \
 	tty/termios.zig \
