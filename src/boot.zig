@@ -19,7 +19,7 @@ export fn _entry() callconv(.Naked) noreturn {
 	while (true) {}
 }
 
-pub export var multiboot_info : * volatile multiboot.multiboot_info = undefined;
+pub export var multiboot_info : * volatile multiboot.info_header = undefined;
 
 export fn init() void {
 	kernel_main();
