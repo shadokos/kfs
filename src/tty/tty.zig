@@ -211,12 +211,16 @@ pub fn TtyN(comptime history_size: u32) type {
         	return c == '\n' or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOL)] or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)];
         }
 
+        inline fn is_echoctl(self: Self, c : u8) bool {
+			return c & 0b11100000 == 0 and c != '\t' and c != '\n' and c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTART)] and c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTOP)];
+        }
+
         fn erase_char(self: *Self) void {
         	if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE)
 			{
 				_ = self.write("\x08 \x08") catch {};
 				self.current_line_end -%= 1;
-				if (self.config.c_lflag.ECHOCTL and self.input_buffer[self.current_line_end] & 0b11100000 == 0 and !ft.ascii.isWhitespace(self.input_buffer[self.current_line_end]))
+				if (self.config.c_lflag.ECHOCTL and self.is_echoctl(self.input_buffer[self.current_line_end]))
 					_ = self.write("\x08 \x08") catch {};
 			} else {
 				self.current_line_end -%= 1;
@@ -252,7 +256,7 @@ pub fn TtyN(comptime history_size: u32) type {
 						self.current_line_end +%= 1;
 						if (self.config.c_lflag.ECHO or (c == '\n' and self.config.c_lflag.ECHONL))
 						{
-							if (self.config.c_lflag.ECHOCTL and c & 0b11100000 == 0 and !ft.ascii.isWhitespace(c)) {
+							if (self.config.c_lflag.ECHOCTL and self.is_echoctl(c)) {
 								self.putchar('^');
 								self.putchar(c | 0b01000000);
 							} else {
