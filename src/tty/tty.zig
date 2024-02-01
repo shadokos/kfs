@@ -312,7 +312,7 @@ pub fn TtyN(comptime history_size: u32) type {
 						self.move_cursor(0, -1);
 					},
 					11 => { // vertical tab
-						self.move_cursor(-1, 0);
+						self.move_cursor(1, 0);
 					},
 					12 => { // form feed
 						// todo?
