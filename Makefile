@@ -27,7 +27,8 @@ SRC = linker.ld \
 	tty/termios.zig \
 	tty/keyboard/scanmap.zig \
 	tty/keyboard/keymap.zig \
-	tty/keyboard/us-std.zig \
+	tty/keyboard/keymaps/us-std.zig \
+	tty/keyboard/keymaps/french.zig \
 	tty/keyboard.zig \
 	io/ports.zig \
 	ft/ascii.zig \

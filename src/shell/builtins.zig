@@ -63,3 +63,28 @@ pub fn mmap(_: [][]u8) usize {
 	utils.print_mmap();
 	return 0;
 }
+
+pub fn keymap(args: [][]u8) usize {
+	const km = @import("../tty/keyboard/keymap.zig");
+	switch(args.len) {
+		1 => {
+			const list = km.keymap_list;
+			tty.printk("Installed keymaps:\n\n", .{});
+			for (list) |e| {
+				tty.printk(" - {s}\n", .{e});
+			}
+			tty.printk("\n", .{});
+		},
+		2 => {
+			km.set_keymap(args[1]) catch {
+				utils.print_error("{s}", .{"Bad arguments"});
+				return 2;
+			};
+		},
+		else => {
+			utils.print_error("{s}", .{"Invalid number of arguments"});
+			return 2;
+		}
+	}
+	return 0;
+}

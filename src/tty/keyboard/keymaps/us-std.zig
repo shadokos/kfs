@@ -1,4 +1,4 @@
-const k = @import("keymap.zig");
+const k = @import("../keymap.zig");
 
 pub  const keymap = [_][6]u16 {
 	//			!SHIFT		SHIFT		ALT1		ALT2		ALT+SHIFT 	CTRL		//
