@@ -42,3 +42,11 @@ pub fn clear() void {
 		.usage = null
 	});
 }
+
+pub fn mmap() void {
+	print_helper(Help{
+		.name = "mmap",
+		.description = "Show multiboot2 mmap tag content",
+		.usage = null
+	});
+}
