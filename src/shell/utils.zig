@@ -33,10 +33,10 @@ pub fn print_error(comptime msg: []const u8, args: anytype) void {
 	tty.printk(red ++ "Error" ++ reset ++ ": " ++ msg ++ "\n", args);
 }
 
-pub fn print_prompt(status_code: usize) void {
+pub fn print_prompt(err: bool) void {
 	ensure_newline();
 	tty.printk("{s}{s}" ++ reset ++ " ", .{ // print the prompt:
-		if (status_code != 0) red else cyan, // prompt collor depending on the last command status
+		if (err) red else cyan, // prompt collor depending on the last command status
 		prompt, // prompt
 	});
 }

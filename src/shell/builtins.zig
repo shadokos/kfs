@@ -2,15 +2,15 @@ const ft = @import("../ft/ft.zig");
 const tty = @import("../tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("utils.zig");
+const CmdError = @import("../shell.zig").CmdError;
 
-pub fn stack(_: anytype) usize {
+pub fn stack(_: anytype) CmdError!void {
 	if (@import("build_options").optimize != .Debug) {
 		utils.print_error("{s}", .{"The stack builtin is only available in debug mode"});
-		return 2;
+		return CmdError.OtherError;
 	}
 	utils.dump_stack();
 	utils.print_stack();
-	return 0;
 }
 
 fn _help_available_commands() void {
@@ -20,51 +20,41 @@ fn _help_available_commands() void {
 	}
 }
 
-pub fn help(data: [][]u8) usize {
+pub fn help(data: [][]u8) CmdError!void {
 	if (data.len <= 1)  {
 		_help_available_commands();
-		return 0;
+		return;
 	}
 	inline for (@typeInfo(helpers).Struct.decls) |decl| {
 		if (ft.mem.eql(u8, decl.name, data[1])) {
 			@field(helpers, decl.name)();
-			return 0;
+			return;
 		}
 	}
 	utils.print_error("There's no help page for \"{s}\"\n", .{data[1]});
 	_help_available_commands();
-	return 2;
+	return CmdError.OtherError;
 }
 
-pub fn clear(_: [][]u8) usize {
+pub fn clear(_: [][]u8) CmdError!void {
 	tty.printk("\x1b[2J\x1b[H", .{});
-	return 0;
+	return;
 }
 
-pub fn hexdump(args: [][]u8) usize {
-	if (args.len != 3)
-	{
-		utils.print_error("{s}", .{"Invalid number of arguments"});
-		return 2;
+pub fn hexdump(args: [][]u8) CmdError!void {
+	if (args.len != 3) {
+		return CmdError.InvalidNumberOfArguments;
 	}
-	var begin : usize = ft.fmt.parseInt(usize, args[1], 0) catch {
-		utils.print_error("{s}", .{"Bad arguments"});
-		return 2;
-	};
-	var len : usize = ft.fmt.parseInt(usize, args[2], 0) catch {
-		utils.print_error("{s}", .{"Bad arguments"});
-		return 2;
-	};
+	var begin : usize = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+	var len : usize = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
 	utils.memory_dump(begin, begin +| len);
-	return 0;
 }
 
-pub fn mmap(_: [][]u8) usize {
+pub fn mmap(_: [][]u8) CmdError!void {
 	utils.print_mmap();
-	return 0;
 }
 
-pub fn keymap(args: [][]u8) usize {
+pub fn keymap(args: [][]u8) CmdError!void {
 	const km = @import("../tty/keyboard/keymap.zig");
 	switch(args.len) {
 		1 => {
@@ -75,16 +65,7 @@ pub fn keymap(args: [][]u8) usize {
 			}
 			tty.printk("\n", .{});
 		},
-		2 => {
-			km.set_keymap(args[1]) catch {
-				utils.print_error("{s}", .{"Bad arguments"});
-				return 2;
-			};
-		},
-		else => {
-			utils.print_error("{s}", .{"Invalid number of arguments"});
-			return 2;
-		}
+		2 => km.set_keymap(args[1]) catch return CmdError.InvalidParameter,
+		else => return CmdError.InvalidNumberOfArguments
 	}
-	return 0;
 }
