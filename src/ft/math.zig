@@ -30,3 +30,10 @@ pub fn IntFittingRange(comptime from: comptime_int, comptime to: comptime_int) t
 pub fn abs(comptime T: type, n: T) T {
 	return if (n < 0) -n else n;
 }
+
+pub fn divCeil(comptime T: type, numerator: T, denominator: T) !T {
+	return if (@mod(numerator, denominator) != 0)
+		@divFloor(numerator, denominator) + 1
+	else
+		@divFloor(numerator, denominator);
+}
