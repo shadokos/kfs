@@ -40,3 +40,8 @@ pub fn clear(_: [][]u8) usize {
 	tty.printk("\x1b[2J\x1b[H", .{});
 	return 0;
 }
+
+pub fn mmap(_: [][]u8) usize {
+	utils.print_mmap();
+	return 0;
+}

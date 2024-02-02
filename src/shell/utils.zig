@@ -176,3 +176,19 @@ pub inline fn dump_stack() void {
 		}
 	}
 }
+
+pub fn print_mmap() void {
+	const multiboot = @import("../multiboot.zig");
+	const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
+	if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP)) |t| {
+		tty.printk("\xC9{s:\xCD<18}\xD1{s:\xCD^18}\xD1{s:\xCD<18}\xBB\n", .{"", " MMAP ", ""}); // 14
+		tty.printk("\xBA {s: <16} \xB3 {s: <16} \xB3 {s: <16} \xBA\n", .{"base", "length", "type"}); // 14
+
+		var iter = multiboot.mmap_it{.base = t};
+		while (iter.next()) |e| {
+			tty.printk("\xCC{s:\xCD<18}\xD8{s:\xCD^18}\xD8{s:\xCD<18}\xB9\n", .{"", "", ""}); // 14
+			tty.printk("\xBA 0x{x:0>14} \xB3 0x{x:0>14} \xB3 {d: <16} \xBA\n", .{e.base, e.length, e.type}); // 14
+		}
+		tty.printk("\xC8{s:\xCD<18}\xCF{s:\xCD^18}\xCF{s:\xCD<18}\xBC\n", .{"", "", ""}); // 14
+	}
+}
