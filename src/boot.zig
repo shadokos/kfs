@@ -31,7 +31,7 @@ export fn init(eax : u32, ebx : *multiboot.info_header) void {
 
 	@import("gdt.zig").setup();
 	@import("drivers/ps2/ps2.zig").init();
-	_ = @import("./drivers/acpi.zig").enable();
+	_ = @import("./drivers/acpi/acpi.zig").enable();
 
 	kernel.main();
 }
