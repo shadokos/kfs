@@ -1,19 +1,15 @@
 const ft = @import("../../ft/ft.zig");
 const tty = @import("../../tty/tty.zig");
 const utils = @import("../../shell/utils.zig");
-
 const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
 
-const debug = @import("std").debug;
+pub const RSDT = entry_type("RSDT");
+pub const DSDT = entry_type("DSDT");
 
-pub const RSDT = _get_entry_type("RSDT");
-
-pub const ACPI_error = error {
-	rsdp_not_found,
-	rsdp_invalid,
-	rsdt_not_found,
-	rsdt_invalid,
+pub const ACPI_error = error{
+	entry_not_found,
+	entry_invalid,
 };
 
 pub const RSDP = extern struct {
@@ -36,9 +32,9 @@ pub const ACPISDT_Header = extern struct {
 	creator_revision: u32,
 };
 
-fn _get_entry_type(comptime name : *const [4]u8) type {
-	const names = .{"RSDT", "FACP"};
-	var index : ?usize = null;
+fn entry_type(comptime name: *const [4]u8) type {
+	const names = .{ "RSDT", "FACP", "DSDT" };
+	var index: ?usize = null;
 
 	for (names, 0..) |n, i| if (ft.mem.eql(u8, n, name)) { index = i; };
 
@@ -48,82 +44,107 @@ fn _get_entry_type(comptime name : *const [4]u8) type {
 		extern struct { // RSDT
 			pointer_to_other_sdt: usize,
 		},
-		extern struct {
+		extern struct { // FACP
 			fadt: @import("types/fadt.zig").FADT,
-		}
+		},
+		extern struct {}, // DSDT
 	};
 	var ret = struct {
 		header: ACPISDT_Header,
 	};
 	var tmp = @typeInfo(ret);
-	tmp.Struct.fields =  @typeInfo(ret).Struct.fields ++ @typeInfo(array[index.?]).Struct.fields;
+	tmp.Struct.fields = @typeInfo(ret).Struct.fields ++ @typeInfo(array[index.?]).Struct.fields;
 	return @Type(tmp);
 }
 
-fn _find_entry(rsdt: *RSDT, comptime name: *const [4]u8) ?*align(1)_get_entry_type(name) {
-	tty.printk("ACPI: Searching for entry {s} on 0x{x} among {d} entries\n", .{
-		name, rsdt.pointer_to_other_sdt, rsdt.header.length}
-	);
-	const entries = (rsdt.header.length - @sizeOf(ACPISDT_Header)) / @sizeOf(usize);
+fn PTRI(comptime T: anytype) type {
+	return [*]align(1) T;
+}
 
-	for (0..entries) |i| {
-		const entry_addr: [*]usize = @as([*]usize, @ptrFromInt(@intFromPtr(&rsdt.pointer_to_other_sdt)));
-		const entry = entry_addr[i];
-		const header: *align(1) ACPISDT_Header = @as(*align(1)ACPISDT_Header, @ptrFromInt(entry));
+fn PTR(comptime T: anytype) type {
+	return *align(1) T;
+}
 
-		if (ft.mem.eql(u8, &header.signature, name)) {
-			tty.printk("ACPI: Found entry {s} at 0x{x}\n", .{name, entry});
-			return @as(*align(1)_get_entry_type(name), @ptrFromInt(entry));
-		}
-	}
-	return null;
+inline fn acpi_strerror(comptime name: *const [4]u8, err: ACPI_error) []const u8 {
+	return switch (err) {
+		ACPI_error.entry_not_found => "ACPI: " ++ name ++ " not found",
+		ACPI_error.entry_invalid => "ACPI: Failed to validate " ++ name ++ " (invalid checksum)",
+		else => unreachable,
+	};
 }
 
 fn _checksum(rsdp: anytype, size: usize) bool {
-	const ptr : [*] align(1) u8 = @as([*]u8, @ptrFromInt(@intFromPtr(rsdp)));
+	const ptr: PTRI(u8) = @ptrFromInt(@intFromPtr(rsdp));
 	var sum: u8 = 0;
 
-    for (0..size) |p| sum +%= ptr[p];
-    return sum == 0;
+	for (0..size) |p| sum +%= ptr[p];
+	return sum == 0;
 }
 
-fn _get_rsdp() ACPI_error!RSDP {
-	tty.printk("ACPI: Retrieving rsdp from mutliboot2 header\n", .{});
-	return if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD)) |tag| b: {
-		tty.printk("ACPI: Validating rsdp\n", .{});
-		if (_checksum(&tag.rsdp, @sizeOf(RSDP))) {
-			tty.printk("ACPI: rsdp checksum is valid\n", .{});
-			break :b tag.rsdp;
-		}
-		else break :b ACPI_error.rsdp_invalid;
-	}
-	else ACPI_error.rsdp_not_found;
-}
+fn _validate(comptime T: type, comptime name: *const [4]u8, entry: anytype) ACPI_error!PTR(T) {
+	const len = if (@hasField(@TypeOf(entry.*), "header")) entry.header.length
+				else @sizeOf(@TypeOf(entry.*));
 
-fn _get_rsdt(rsdp: RSDP) ACPI_error!*RSDT {
-	tty.printk("ACPI: Validating rsdt (0x{x}) on {d} bytes\n", .{
-		@intFromPtr(rsdp.rsdt_address), rsdp.rsdt_address.header.length,
+	tty.printk("ACPI: Validating {s}"++name++"{s} ({s}0x{x}:{d} bytes{s})\n", .{
+		utils.magenta, utils.reset, utils.blue, @intFromPtr(entry), len, utils.reset,
 	});
-	return if (_checksum(rsdp.rsdt_address, rsdp.rsdt_address.header.length)) b: {
-		tty.printk("ACPI: rsdt checksum is valid\n", .{});
-		break :b rsdp.rsdt_address;
+	return if (_checksum(entry, len)) b: {
+		tty.printk("ACPI: "++name++" checksum: {s}OK{s}\n", .{
+			utils.green, utils.reset
+		});
+		break :b @as(PTR(T), @ptrFromInt(@intFromPtr(entry)));
+	} else ACPI_error.entry_invalid;
+}
+
+fn _find_entry(rsdt: PTR(RSDT), comptime name: *const [4]u8) ACPI_error!PTR(entry_type(name)) {
+	const entries = (rsdt.header.length - @sizeOf(ACPISDT_Header)) / @sizeOf(usize);
+
+	tty.printk("ACPI: Searching for entry {s} ({s}0x{x}:{d} entries{s})\n", .{
+		utils.magenta++name++utils.reset,
+		utils.blue, @intFromPtr(&rsdt.pointer_to_other_sdt),
+		entries, utils.reset
+	});
+
+	for (0..entries) |i| {
+		const entry_addr: PTRI(usize) = @ptrFromInt(@intFromPtr(&rsdt.pointer_to_other_sdt));
+		const entry = entry_addr[i];
+		const header: PTR(ACPISDT_Header) = @ptrFromInt(entry);
+
+		if (ft.mem.eql(u8, &header.signature, name)) {
+			tty.printk("ACPI: Found entry {s} at {s}0x{x}{s}\n", .{
+				utils.magenta++name++utils.reset,
+				utils.blue, entry, utils.reset
+			});
+
+			return _validate(entry_type(name), name, @as(PTR(entry_type(name)), @ptrFromInt(entry)));
+		}
 	}
-	else ACPI_error.rsdt_invalid;
+	return ACPI_error.entry_not_found;
+}
+
+fn _get_rsdp() ACPI_error!PTR(RSDP) {
+	tty.printk("ACPI: Retrieving {s}RSDP{s} from mutliboot2 header\n", .{
+		utils.magenta, utils.reset
+	});
+	return if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD)) |tag| {
+		return _validate(RSDP, "RSDP", &tag.rsdp);
+	} else ACPI_error.entry_not_found;
+}
+
+fn _get_rsdt(rsdp: PTR(RSDP)) ACPI_error!PTR(RSDT) {
+	return _validate(RSDT, "RSDT", rsdp.rsdt_address);
+}
+
+fn _get_dsdt(facp: PTR(entry_type("FACP"))) ACPI_error!PTR(DSDT) {
+	return _validate(DSDT, "DSDT", @as(PTR(DSDT), @ptrFromInt(facp.fadt.dsdt)));
 }
 
 pub fn enable() u32 {
-	const rsdp: RSDP = _get_rsdp() catch |err| switch (err) {
-		ACPI_error.rsdp_not_found => @panic("ACPI: no rsdp found"),
-		ACPI_error.rsdp_invalid => @panic("ACPI: Failed to validate rsdp (invalid checksum)"),
-		else => unreachable,
-	};
+	const rsdp = _get_rsdp() catch |err| @panic(acpi_strerror("RSDP", err));
+	const rsdt = _get_rsdt(rsdp) catch |err| @panic(acpi_strerror("RSDT", err));
+	const facp = _find_entry(rsdt, "FACP") catch |err| @panic(acpi_strerror("FACP", err));
+	const dsdt = _get_dsdt(facp) catch |err| @panic(acpi_strerror("DSDT", err));
 
-	const rsdt = _get_rsdt(rsdp) catch |err| switch (err) {
-		ACPI_error.rsdt_not_found => @panic("ACPI: no rsdt found"),
-		ACPI_error.rsdt_invalid => @panic("ACPI: Failed to validate rsdt (invalid checksum)"),
-		else => unreachable,
-	};
-	const fadt = _find_entry(rsdt, "FACP") orelse @panic("ACPI: FACP not found");
-	_ = fadt;
+	_ = dsdt;
 	return 0;
 }
