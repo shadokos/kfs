@@ -1,12 +1,11 @@
 /* The bootloader will look at this image and start execution at the symbol
    designated as the entry point. */
 ENTRY(_entry)
- 
+
 VERSION {
 	VERS_1.0 {
 		local:
-			stack;
-			STACK_SIZE;
+			stack_bottom;
 	};
 }
 

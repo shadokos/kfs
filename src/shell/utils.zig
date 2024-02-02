@@ -2,9 +2,6 @@ const tty = @import("../tty/tty.zig");
 const ft = @import("../ft/ft.zig");
 const StackIterator = ft.debug.StackIterator;
 
-extern var STACK_SIZE: usize;
-extern var stack: u8;
-
 pub const inverse = "\x1b[7m";
 pub const red = "\x1b[31m";
 pub const green = "\x1b[32m";
