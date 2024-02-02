@@ -142,7 +142,7 @@ fn get_tag_type(comptime n : comptime_int) type {
 			// SMBIOS tables
 		},
 		extern struct { // MULTIBOOT_TAG_TYPE_ACPI_OLD
-			rsdp : @import("drivers/acpi.zig").RSDP,
+			rsdp : @import("drivers/acpi/acpi.zig").RSDP,
 		},
 		extern struct { // MULTIBOOT_TAG_TYPE_ACPI_NEW
 			// RDSPv2 struct
