@@ -2,7 +2,8 @@ const ft = @import("ft.zig");
 
 pub const ParseIntError = error{ Overflow, InvalidCharacter };
 
-pub fn parseInt(comptime T: type, buf: []const u8, base: u8) ParseIntError!T {
+pub fn parseInt(comptime T: type, buf: []const u8, _base: u8) ParseIntError!T {
+	var base : u8 = _base;
     var index: usize = 0;
     if (buf.len <= index)
         return ParseIntError.InvalidCharacter;
@@ -17,13 +18,28 @@ pub fn parseInt(comptime T: type, buf: []const u8, base: u8) ParseIntError!T {
     if (buf.len <= index)
         return ParseIntError.InvalidCharacter;
 
+	if (base == 0 and buf[index] == '0' and buf.len > index + 1) {
+		switch (buf[index + 1]) {
+			'o','O' => {base = 8; index += 2;},
+			'x','X' => {base = 16; index += 2;},
+			'b','B' => {base = 2; index += 2;},
+			else => {}
+		}
+		if (buf.len <= index)
+			return ParseIntError.InvalidCharacter;
+	}
+	if (base == 0)
+		base = 10;
+
     if (!ft.ascii.isDigit(buf[index]))
         return ParseIntError.InvalidCharacter;
 
     const U = ft.meta.Int(@typeInfo(T).Int.signedness, @max(8, @typeInfo(T).Int.bits));
     var ret: U = 0;
 
-    while (index < buf.len) {
+    while (index < buf.len) : (index += 1) {
+    	if (buf[index] == '_')
+    		continue;
         if (!ft.ascii.isDigit(buf[index]))
             return ParseIntError.InvalidCharacter;
 
@@ -38,7 +54,6 @@ pub fn parseInt(comptime T: type, buf: []const u8, base: u8) ParseIntError!T {
         if (ov[1] != 0) return ParseIntError.Overflow;
 
         ret = ov[0];
-        index += 1;
     }
 
     return @as(T, @intCast(ret));
@@ -82,28 +97,28 @@ test "parseInt" { // stolen from zig's ft lib
 
     // autodectect the base todo
 
-    // try std.testing.expect((try parseInt(i32, "111", 0)) == 111);
-    // try std.testing.expect((try parseInt(i32, "1_1_1", 0)) == 111);
-    // try std.testing.expect((try parseInt(i32, "1_1_1", 0)) == 111);
-    // try std.testing.expect((try parseInt(i32, "+0b111", 0)) == 7);
-    // try std.testing.expect((try parseInt(i32, "+0B111", 0)) == 7);
-    // try std.testing.expect((try parseInt(i32, "+0b1_11", 0)) == 7);
-    // try std.testing.expect((try parseInt(i32, "+0o111", 0)) == 73);
-    // try std.testing.expect((try parseInt(i32, "+0O111", 0)) == 73);
-    // try std.testing.expect((try parseInt(i32, "+0o11_1", 0)) == 73);
-    // try std.testing.expect((try parseInt(i32, "+0x111", 0)) == 273);
-    // try std.testing.expect((try parseInt(i32, "-0b111", 0)) == -7);
-    // try std.testing.expect((try parseInt(i32, "-0b11_1", 0)) == -7);
-    // try std.testing.expect((try parseInt(i32, "-0o111", 0)) == -73);
-    // try std.testing.expect((try parseInt(i32, "-0x111", 0)) == -273);
-    // try std.testing.expect((try parseInt(i32, "-0X111", 0)) == -273);
-    // try std.testing.expect((try parseInt(i32, "-0x1_11", 0)) == -273);
+    try std.testing.expect((try parseInt(i32, "111", 0)) == 111);
+    try std.testing.expect((try parseInt(i32, "1_1_1", 0)) == 111);
+    try std.testing.expect((try parseInt(i32, "1_1_1", 0)) == 111);
+    try std.testing.expect((try parseInt(i32, "+0b111", 0)) == 7);
+    try std.testing.expect((try parseInt(i32, "+0B111", 0)) == 7);
+    try std.testing.expect((try parseInt(i32, "+0b1_11", 0)) == 7);
+    try std.testing.expect((try parseInt(i32, "+0o111", 0)) == 73);
+    try std.testing.expect((try parseInt(i32, "+0O111", 0)) == 73);
+    try std.testing.expect((try parseInt(i32, "+0o11_1", 0)) == 73);
+    try std.testing.expect((try parseInt(i32, "+0x111", 0)) == 273);
+    try std.testing.expect((try parseInt(i32, "-0b111", 0)) == -7);
+    try std.testing.expect((try parseInt(i32, "-0b11_1", 0)) == -7);
+    try std.testing.expect((try parseInt(i32, "-0o111", 0)) == -73);
+    try std.testing.expect((try parseInt(i32, "-0x111", 0)) == -273);
+    try std.testing.expect((try parseInt(i32, "-0X111", 0)) == -273);
+    try std.testing.expect((try parseInt(i32, "-0x1_11", 0)) == -273);
 
     // bare binary/octal/decimal prefix is invalid
 
-    // try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0b", 0));
-    // try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0o", 0));
-    // try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0x", 0));
+    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0b", 0));
+    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0o", 0));
+    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0x", 0));
 
     // edge cases which previously errored due to base overflowing T
 
