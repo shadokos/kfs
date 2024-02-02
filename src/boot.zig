@@ -3,16 +3,17 @@ const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const multiboot = @import("multiboot.zig");
 const builtin = @import("std").builtin;
 
-export const STACK_SIZE: u32 = 16 * 1024;
+const STACK_SIZE: u32 = 16 * 1024;
 
-export var stack: [STACK_SIZE]u8 align(16) linksection(".bss") = undefined;
+var stack: [STACK_SIZE]u8 align(4096) linksection(".bss") = undefined;
+
+export var stack_bottom : [*]u8 = @as([*]u8, @ptrCast(&stack)) + @sizeOf(@TypeOf(stack));
 
 export var multiboot_header : multiboot.header_type align(4) linksection(".multiboot") = multiboot.get_header();
 
 export fn _entry() callconv(.Naked) noreturn {
 	asm volatile(
-		\\ mov $stack, %esp
-		\\ add STACK_SIZE, %esp
+		\\ mov stack_bottom, %esp
 		\\ movl %esp, %ebp
 		\\ movl %ebx, multiboot_info
 		\\ call init
