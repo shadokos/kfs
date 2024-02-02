@@ -63,6 +63,14 @@ pub fn copyForwards(comptime T: type, dest: []T, src: []const T) void {
     for (dest[0..src.len], src) |*d, s| d.* = s;
 }
 
+pub fn alignBackward(comptime T: type, addr: T, alignment: T) T {
+	return addr & ~(alignment - 1);
+}
+
+pub fn alignForward(comptime T: type, addr: T, alignment: T) T {
+	return alignBackward(T, addr + (alignment - 1), alignment);
+}
+
 pub fn isAligned(addr: usize, alighment: usize) bool {
 	return addr & ~(alighment - 1) == addr;
 }
