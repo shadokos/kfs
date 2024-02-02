@@ -58,3 +58,11 @@ pub fn mmap() void {
 		.usage = null
 	});
 }
+
+pub fn keymap() void {
+	print_helper(Help{
+		.name = "keymap",
+		.description = "Set keymap or list installed keymaps",
+		.usage = "keymap [<name>]"
+	});
+}
