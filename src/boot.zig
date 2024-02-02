@@ -1,4 +1,4 @@
-const kernel_main = @import("kernel.zig").kernel_main;
+const kernel = @import("kernel.zig");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const multiboot = @import("multiboot.zig");
 const builtin = @import("std").builtin;
@@ -29,7 +29,7 @@ export fn init(eax : u32, ebx : *multiboot.info_header) void {
 		multiboot_info = ebx;
 	} else @panic("No multiboot2 magic number");
 
-	kernel_main();
+	kernel.main();
 }
 
 pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
