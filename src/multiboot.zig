@@ -56,7 +56,7 @@ pub const mmap_it = extern struct {
 	const tag_type = get_tag_type(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP);
 	pub fn next(self : *@This()) ?*mmap_entry {
 		const ret : *mmap_entry = @ptrFromInt(@intFromPtr(&self.base.first_entry) + self.base.entry_size * self.index);
-		if (@intFromPtr(ret) > @intFromPtr(self.base) + self.base.size)
+		if (@intFromPtr(ret) >= @intFromPtr(self.base) + self.base.size)
 			return null;
 		self.index += 1;
 		return ret;
@@ -187,7 +187,7 @@ pub const info_header = extern struct {
 };
 
 pub fn get_tag(comptime t : usize) ?*get_tag_type(t) {
-	var tag : *align(1) tag_header = @ptrFromInt(@intFromPtr(boot.info_header) + @sizeOf(info_header));
+	var tag : *align(1) tag_header = @ptrFromInt(@intFromPtr(boot.multiboot_info) + @sizeOf(info_header));
 	while (tag.type != multiboot2_h.MULTIBOOT_TAG_TYPE_END) {
 		if (tag.type == t) {
 			return @alignCast(@ptrCast(tag));
@@ -200,7 +200,7 @@ pub fn get_tag(comptime t : usize) ?*get_tag_type(t) {
 }
 
 pub fn list_tags() void {
-	var tag : *align(1) tag_header = @ptrFromInt(@intFromPtr(boot.info_header) + @sizeOf(info_header));
+	var tag : *align(1) tag_header = @ptrFromInt(@intFromPtr(boot.multiboot_info) + @sizeOf(info_header));
 
 	while (tag.type != multiboot2_h.MULTIBOOT_TAG_TYPE_END) {
 		tty.printk("tag: type {d} size {d}\n", .{tag.type, tag.size});
