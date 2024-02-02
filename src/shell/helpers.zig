@@ -43,6 +43,14 @@ pub fn clear() void {
 	});
 }
 
+pub fn hexdump() void {
+	print_helper(Help{
+		.name = "hexdump",
+		.description = "Dump memory",
+		.usage = "hexdump <base> <length>"
+	});
+}
+
 pub fn mmap() void {
 	print_helper(Help{
 		.name = "mmap",

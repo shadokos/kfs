@@ -41,6 +41,24 @@ pub fn clear(_: [][]u8) usize {
 	return 0;
 }
 
+pub fn hexdump(args: [][]u8) usize {
+	if (args.len != 3)
+	{
+		utils.print_error("{s}", .{"Invalid number of arguments"});
+		return 2;
+	}
+	var begin : usize = ft.fmt.parseInt(usize, args[1], 0) catch {
+		utils.print_error("{s}", .{"Bad arguments"});
+		return 2;
+	};
+	var len : usize = ft.fmt.parseInt(usize, args[2], 0) catch {
+		utils.print_error("{s}", .{"Bad arguments"});
+		return 2;
+	};
+	utils.memory_dump(begin, begin + len);
+	return 0;
+}
+
 pub fn mmap(_: [][]u8) usize {
 	utils.print_mmap();
 	return 0;
