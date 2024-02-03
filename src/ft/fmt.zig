@@ -5,12 +5,11 @@ pub const ParseIntError = error{ Overflow, InvalidCharacter };
 pub fn parseInt(comptime T: type, buf: []const u8, _base: u8) ParseIntError!T {
 	var base : u8 = _base;
     var index: usize = 0;
+
     if (buf.len <= index)
         return ParseIntError.InvalidCharacter;
 
     const is_neg: bool = buf[index] == '-';
-    if (buf.len <= index)
-        return ParseIntError.InvalidCharacter;
 
     if (buf[index] == '-' or buf[index] == '+')
         index += 1;
@@ -31,8 +30,8 @@ pub fn parseInt(comptime T: type, buf: []const u8, _base: u8) ParseIntError!T {
 	if (base == 0)
 		base = 10;
 
-    if (!ft.ascii.isDigit(buf[index]))
-        return ParseIntError.InvalidCharacter;
+    if (buf.len <= index or buf[index] == '_')
+    	return ParseIntError.InvalidCharacter;
 
     const U = ft.meta.Int(@typeInfo(T).Int.signedness, @max(8, @typeInfo(T).Int.bits));
     var ret: U = 0;
@@ -40,9 +39,6 @@ pub fn parseInt(comptime T: type, buf: []const u8, _base: u8) ParseIntError!T {
     while (index < buf.len) : (index += 1) {
     	if (buf[index] == '_')
     		continue;
-        if (!ft.ascii.isDigit(buf[index]))
-            return ParseIntError.InvalidCharacter;
-
         var ov = @mulWithOverflow(ret, @as(U, @intCast(base)));
         if (ov[1] != 0) return ParseIntError.Overflow;
 
