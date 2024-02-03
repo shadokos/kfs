@@ -1,4 +1,3 @@
-const GenericAddressStructure = @import("generic_addr_struct.zig").GenericAddressStructure;
 
 pub const FADT = extern struct {
 	firmware_ctrl: u32,
@@ -39,15 +38,4 @@ pub const FADT = extern struct {
 	day_alarm: u8,
 	month_alarm: u8,
 	century: u8,
-
-	// reserved in ACPI 1.0; used since ACPI 2.0+
-	reserved2: u16,
-	reserved3: u8,
-
-	flags: u32,
-
-	reset_reg: GenericAddressStructure,
-
-	reset_value: u8,
-	reserved4: [3]u8,
 };
