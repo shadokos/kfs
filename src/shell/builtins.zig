@@ -70,6 +70,12 @@ pub fn keymap(args: [][]u8) CmdError!void {
 	}
 }
 
+pub fn shutdown(_: [][]u8) CmdError!void {
+	_ = @import("../drivers/acpi/acpi.zig").shutdown();
+	utils.print_error("Failed to shutdown\n", .{});
+	return CmdError.OtherError;
+}
+
 pub fn reboot(_: [][]u8) CmdError!void {
 	// Try to reboot using PS/2 Controller
 	@import("../drivers/ps2/ps2.zig").cpu_reset();

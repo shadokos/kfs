@@ -66,3 +66,19 @@ pub fn keymap() void {
 		.usage = "keymap [<name>]"
 	});
 }
+
+pub fn reboot() void {
+	print_helper(Help{
+		.name = "reboot",
+		.description = "Reboot the system",
+		.usage = null
+	});
+}
+
+pub fn shutdown() void {
+	print_helper(Help{
+		.name = "shutdown",
+		.description = "Shutdown the system",
+		.usage = null
+	});
+}
