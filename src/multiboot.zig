@@ -145,7 +145,7 @@ fn get_tag_type(comptime n : comptime_int) type {
 			rsdp : @import("drivers/acpi/acpi.zig").RSDP,
 		},
 		extern struct { // MULTIBOOT_TAG_TYPE_ACPI_NEW
-			// RDSPv2 struct
+			rsdp : @import("drivers/acpi/acpi.zig").RSDP,
 		},
 		extern struct { // MULTIBOOT_TAG_TYPE_NETWORK
 			// DHCP ACK

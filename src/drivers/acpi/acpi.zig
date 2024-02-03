@@ -127,6 +127,10 @@ fn _get_rsdp() ACPI_error!PTR(RSDP) {
 		utils.magenta, utils.reset
 	});
 	return if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD)) |tag| {
+		tty.printk("ACPI: {s}: Found tag\n", .{ utils.magenta++"ACPI_OLD"++utils.reset });
+		return _validate(RSDP, "RSDP", &tag.rsdp);
+	} else if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW)) |tag| {
+		tty.printk("ACPI: {s}: Found tag\n", .{ utils.magenta++"ACPI_NEW"++utils.reset });
 		return _validate(RSDP, "RSDP", &tag.rsdp);
 	} else ACPI_error.entry_not_found;
 }
