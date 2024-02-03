@@ -193,8 +193,7 @@ pub fn get_tag(comptime t : usize) ?*get_tag_type(t) {
 			return @alignCast(@ptrCast(tag));
 		}
 		tag = @ptrFromInt(@intFromPtr(tag) + tag.size);
-		// todo: replace by ft.mem.alignForward
-		tag = @ptrFromInt(@import("std").mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));
+		tag = @ptrFromInt(ft.mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));
 	}
 	return null;
 }
@@ -205,7 +204,6 @@ pub fn list_tags() void {
 	while (tag.type != multiboot2_h.MULTIBOOT_TAG_TYPE_END) {
 		tty.printk("tag: type {d} size {d}\n", .{tag.type, tag.size});
 		tag = @ptrFromInt(@intFromPtr(tag) + tag.size);
-		// todo: replace by ft.mem.alignForward
-		tag = @ptrFromInt(@import("std").mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));
+		tag = @ptrFromInt(ft.mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));
 	}
 }
