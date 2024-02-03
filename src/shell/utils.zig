@@ -42,25 +42,25 @@ pub fn print_prompt(status_code: usize) void {
 }
 
 pub fn memory_dump(start_address: usize, end_address: usize) void {
-    var start = @min(start_address, end_address);
-    var end = @max(start_address, end_address);
+    var start : usize = @min(start_address, end_address);
+    var end : usize = @max(start_address, end_address);
 
     var i: usize = 0;
-    while (start + i < end) : ({ i += 16; }) {
-        var ptr: usize = start + i;
+    while (start +| i < end) : ({ i +|= 16; }) {
+        var ptr: usize = start +| i;
         var offset: usize = 0;
         var offsetPreview: usize = 0;
         var line: [67]u8 = [_]u8{' '} ** 67;
 
-        _ = ft.fmt.bufPrint(&line, "{x:0>8}: ", .{start + i}) catch {};
+        _ = ft.fmt.bufPrint(&line, "{x:0>8}: ", .{start +| i}) catch {};
 
-        while (ptr + 1 < start + i + 16 and ptr < end) : ({
-            ptr += 2;
+        while (ptr +| 1 < start +| i +| 16 and ptr < end) : ({
+            ptr +|= 2;
             offset += 5;
             offsetPreview += 2;
         }) {
-            var byte1: u8 = @as(*u8, @ptrFromInt(ptr)).*;
-            var byte2: u8 = @as(*u8, @ptrFromInt(ptr + 1)).*;
+            var byte1: u8 = @as(*allowzero u8, @ptrFromInt(ptr)).*;
+            var byte2: u8 = @as(*allowzero u8, @ptrFromInt(ptr +| 1)).*;
 
             _ = ft.fmt.bufPrint(line[10 + offset..], "{x:0>2}{x:0>2} ", .{byte1, byte2}) catch {};
             _ = ft.fmt.bufPrint(line[51 + offsetPreview..], "{s}{s}", .{

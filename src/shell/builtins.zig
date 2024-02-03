@@ -55,7 +55,7 @@ pub fn hexdump(args: [][]u8) usize {
 		utils.print_error("{s}", .{"Bad arguments"});
 		return 2;
 	};
-	utils.memory_dump(begin, begin + len);
+	utils.memory_dump(begin, begin +| len);
 	return 0;
 }
 
