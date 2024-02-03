@@ -38,7 +38,10 @@ export fn init(eax : u32, ebx : *multiboot.info_header) void {
 
 pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
 	const tty = @import("tty/tty.zig");
+	const utils = @import("shell/utils.zig");
 
-	tty.printk("panic: {s}\n", .{msg});
+	tty.printk("{s}@ Kernel Panic\n{s}\n", .{
+		utils.red, msg
+	});
 	while (true) {}
 }
