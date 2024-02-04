@@ -1,6 +1,6 @@
 const ft = @import("../ft/ft.zig");
 const tty = @import("tty.zig");
-const ports = @import("../io/ports.zig");
+const ps2 = @import("../drivers/ps2/ps2.zig");
 const keymap = @import("keyboard/keymap.zig");
 const scanmap = @import("keyboard/scanmap.zig");
 const scanmap_normal = scanmap.scanmap_normal;
@@ -113,7 +113,7 @@ pub fn kb_read() void {
 }
 
 fn handler() void {
-	const scan_code : u8 = ports.inb(ports.Ports.keyboard_data);
+	const scan_code : u8 = ps2.get_data();
 	const index : u8 = scan_code & SCANCODE_MASK_INDEX;
 	const released : u16 = scan_code & SCANCODE_MASK_RELEASED;
 
@@ -137,7 +137,7 @@ fn handler() void {
 }
 
 fn is_key_available() bool {
-	return ports.inb(ports.Ports.keyboard_status) & 1 == 1;
+	return ps2.get_status().output_buffer == 1;
 }
 
 /// Is designed to crudely simulate the keyboard interrupt handler

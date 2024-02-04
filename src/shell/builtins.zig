@@ -2,6 +2,7 @@ const ft = @import("../ft/ft.zig");
 const tty = @import("../tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("utils.zig");
+const ps2 = @import("../drivers/ps2/ps2.zig");
 const CmdError = @import("../shell.zig").CmdError;
 
 pub fn stack(_: anytype) CmdError!void {
@@ -68,4 +69,15 @@ pub fn keymap(args: [][]u8) CmdError!void {
 		2 => km.set_keymap(args[1]) catch return CmdError.InvalidParameter,
 		else => return CmdError.InvalidNumberOfArguments
 	}
+}
+
+pub fn reboot(_: [][]u8) CmdError!void {
+	// Try to reboot using PS/2 Controller
+	ps2.cpu_reset();
+
+	// If it fails, try the page fault method
+	asm volatile ("jmp 0xFFFF");
+
+	utils.print_error("Reboot failed", .{});
+	return CmdError.OtherError;
 }
