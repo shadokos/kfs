@@ -20,6 +20,7 @@ pub const bg_white = "\x1b[47m";
 pub const reset = "\x1b[0m";
 
 const prompt: *const [2:0]u8 = "$>";
+extern var stack_bottom: [*]u8;
 
 pub fn ensure_newline() void {
 	tty.printk("{s}\x1b[{d}C\r", .{
@@ -114,6 +115,7 @@ pub inline fn print_stack() void {
 				yellow, si.fp, reset, yellow, old_fp, reset,
 			});
 			link = true;
+			if (si.fp > @intFromPtr(stack_bottom)) break ;
 			tty.printk("   \xC0\xC4\xC2" ++ "\xC4"**10 ++ "\xD9\n", .{});
 			tty.printk("\xDA" ++ "\xC4"**4 ++ "\xD9\n", .{});
 			tty.printk("\xB3  \xDA" ++ "\xC4"**12 ++ "\xBF\n", .{});
@@ -125,12 +127,12 @@ pub inline fn print_stack() void {
 		} else {
 			tty.printk("{s}\xB3 {s}0x{x:0>8}{s} \xB3 <- {s}0x{x:0>8}{s}\n", .{
         		if (link) "\xC0> " else "   ",
-        		yellow, @as(*const usize, @ptrFromInt(si.fp)).*, reset, yellow, si.fp, reset,
+        		yellow, @as(*align(1) const usize, @ptrFromInt(si.fp)).*, reset, yellow, si.fp, reset,
         	});
-			tty.printk("   \xC0" ++ "\xC4"**12 ++ "\xD9\n", .{});
 			break;
 		}
 	}
+	tty.printk("   \xC0" ++ "\xC4"**12 ++ "\xD9\n", .{});
 }
 
 pub inline fn dump_stack() void {
@@ -169,12 +171,11 @@ pub inline fn dump_stack() void {
 		esp = si.fp + @sizeOf(usize);
 		tty.printk("\n", .{});
 		if (si.next()) |addr| {
+			if (si.fp > @intFromPtr(stack_bottom)) break ;
 			pc = addr;
-		} else {
-			tty.printk("\xCD" ** tty.width ++ "\n", .{});
-			break;
-		}
+		} else break;
 	}
+	tty.printk("\xCD" ** tty.width ++ "\n", .{});
 }
 
 pub fn print_mmap() void {
