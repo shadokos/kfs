@@ -182,7 +182,6 @@ pub fn controller_self_test() ControllerError!void {
 	set_configuration(conf);
 }
 
-// Test the PS/2 port, port = (0: first port, 1: second port)
 pub fn port_test(port: enum {FirstPort, SecondPort}) ControllerError!bool {
 	log("Testing {s} PS/2 port", .{ if (port == .FirstPort) "first" else "second" }, 1);
 
