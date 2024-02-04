@@ -94,9 +94,11 @@ fn _validate(comptime T: type, comptime name: []const u8, entry: anytype) ACPI_e
 				else @sizeOf(@TypeOf(entry.*));
 
 	return if (_checksum(entry, len)) b: {
-		tty.printk("ACPI: {s}: checksum:\t{s}OK{s}\n", .{
-			utils.magenta++name++utils.reset, utils.green, utils.reset
-		});
+		tty.printk("ACPI: {s}: checksum:\t{s}OK{s}\t({s}0x{x:0>8}{s})\t{s}{d}{s} bytes\n", .{
+        	utils.magenta++name++utils.reset, utils.green, utils.reset,
+        	utils.blue, @intFromPtr(entry), utils.reset,
+        	utils.yellow, len, utils.reset
+        });
 		break :b @as(PTR(T), @ptrFromInt(@intFromPtr(entry)));
 	} else ACPI_error.entry_invalid;
 }
@@ -110,7 +112,7 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(entry_
 		const header: PTR(ACPISDT_Header) = @ptrFromInt(entry);
 
 		if (ft.mem.eql(u8, &header.signature, name)) {
-			tty.printk("ACPI: {s}: Search:\t\t{s}OK{s}\t({s}0x{x}{s})\n", .{
+			tty.printk("ACPI: {s}: Search:\t\t{s}OK{s}\t({s}0x{x:0>8}{s})\n", .{
 				utils.magenta++name++utils.reset,
 				utils.green, utils.reset,
 				utils.blue, entry, utils.reset
@@ -123,16 +125,26 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(entry_
 }
 
 fn _get_rsdp() ACPI_error!PTR(RSDP) {
+	var rsdp: PTR(RSDP) = undefined;
+
 	tty.printk("ACPI: {s}RSDP{s}: Retrieving from mutliboot2 header\n", .{
 		utils.magenta, utils.reset
 	});
-	return if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD)) |tag| {
-		tty.printk("ACPI: {s}: Found tag\n", .{ utils.magenta++"ACPI_OLD"++utils.reset });
-		return _validate(RSDP, "RSDP", &tag.rsdp);
+	if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD)) |tag| {
+		tty.printk("\t\t- Found ACPI_OLD tag\n", .{});
+		rsdp = &tag.rsdp;
 	} else if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW)) |tag| {
-		tty.printk("ACPI: {s}: Found tag\n", .{ utils.magenta++"ACPI_NEW"++utils.reset });
-		return _validate(RSDP, "RSDP", &tag.rsdp);
-	} else ACPI_error.entry_not_found;
+		tty.printk("\t\t- Found ACPI_NEW tag\n", .{});
+		rsdp = &tag.rsdp;
+	} else
+		return ACPI_error.entry_not_found;
+
+	rsdp = _validate(RSDP, "RSDP", rsdp) catch |err| return err;
+
+	tty.printk("\t\t- oem: {s}\n\t\t- revision: {d}\n\t\t- rsdt: 0x{x}\n", .{
+		rsdp.oemid, rsdp.revision, @intFromPtr(rsdp.rsdt_address)
+	});
+	return rsdp;
 }
 
 fn _get_rsdt(rsdp: PTR(RSDP)) ACPI_error!PTR(RSDT) {
@@ -148,15 +160,17 @@ fn _get_s5(dsdt: PTR(DSDT)) ACPI_error!PTR(S5Object) {
 
 	for (0..dsdt.header.length) |i| {
 		if (ft.mem.eql(u8, data[i..i+5], "_S5_\x12")) {
-			if (!(data[i-1] == 0x08 or (data[i-1] == 0x5A and data[i-2] == 0x08))) continue;
+			if (!(data[i-1] == 0x08 or (data[i-1] == 0x5C and data[i-2] == 0x08))) continue;
 
-			tty.printk("ACPI: {s}:\tSearch\t\t{s}OK{s}\t({s}0x{x}{s})\n", .{
+			tty.printk("ACPI: {s}:\tSearch\t\t{s}OK{s}\t({s}0x{x:0>8}{s})\n", .{
 				utils.magenta++"_S5"++utils.reset,
 				utils.green, utils.reset,
 				utils.blue, @intFromPtr(data) + i, utils.reset
 			});
 			const s5: PTR(S5Object) = @ptrFromInt(@as(usize, @intFromPtr(&dsdt.data)) + i + 4);
-			tty.printk("ACPI: S5: {x:0>14}\n", .{ @as(u56, @bitCast(s5.*))});
+			tty.printk("ACPI: {s}:\t0x{x:0>14}\n", .{
+				utils.magenta++"_S5"++utils.reset, @as(u56, @bitCast(s5.*))
+			});
 			return s5;
 		}
 	}
@@ -172,25 +186,24 @@ pub fn init() u32 {
 
 	acpi.fadt = &facp.fadt;
 	acpi.SMI_CMD = &facp.fadt.smi_command_port;
-	acpi.PM1a_CNT = facp.fadt.pm1a_control_block;
-	acpi.PM1b_CNT = facp.fadt.pm1b_control_block;
 	acpi.ACPI_ENABLE = &facp.fadt.acpi_enable;
 	acpi.ACPI_DISABLE = &facp.fadt.acpi_disable;
+
+	// https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/04_ACPI_Hardware_Specification/ACPI_Hardware_Specification.html#pm1-control-registers-2
 	acpi.PM1a_CNT = facp.fadt.pm1a_control_block;
 	acpi.PM1b_CNT = facp.fadt.pm1b_control_block;
+	acpi.PM1_CNT_LEN = facp.fadt.pm1_control_length;
 	acpi.SLP_TYPa = @as(u16, s5.slp_typ_a_num) << 10;
     acpi.SLP_TYPb = @as(u16, s5.slp_typ_b_num) << 10;
-	acpi.PM1_CNT_LEN = facp.fadt.pm1_control_length;
+    acpi.SLP_EN = 1 << 13;
 
-	tty.printk("ACPI: PM1a_CNT: {s}0x{x}{s}, (SLP_TYPa | SLP_EN): {s}0x{x}{s}\n", .{
-    	utils.blue, acpi.PM1a_CNT, utils.reset,
-    	utils.blue, acpi.SLP_TYPa | acpi.SLP_EN, utils.reset
-    });
+	tty.printk("\t\t- (SLP_TYPa | SLP_EN): 0x{x}\n", .{ acpi.SLP_TYPa | acpi.SLP_EN });
+	tty.printk("\t\t- (PM1a_CNT): 0x{x}\n", .{ acpi.PM1a_CNT });
     tty.printk("ACPI: Initiliazation:\t"++utils.green++"OK"++utils.reset++"\n", .{});
 	return 0;
 }
 
-pub fn shutdown() bool {
+pub fn power_off() bool {
 	ports.outw(acpi.PM1a_CNT, acpi.SLP_TYPa | acpi.SLP_EN);
 	return false;
 }

@@ -71,7 +71,7 @@ pub fn keymap(args: [][]u8) CmdError!void {
 }
 
 pub fn shutdown(_: [][]u8) CmdError!void {
-	_ = @import("../drivers/acpi/acpi.zig").shutdown();
+	_ = @import("../drivers/acpi/acpi.zig").power_off();
 	utils.print_error("Failed to shutdown\n", .{});
 	return CmdError.OtherError;
 }
