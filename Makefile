@@ -17,8 +17,10 @@ ARCH=i386
 SRCDIR = src
 
 SRC = linker.ld \
+	../Makefile \
 	../build.zig \
 	boot.zig \
+	drivers/ps2/ps2.zig \
 	gdt.zig \
 	kernel.zig \
 	multiboot.zig \
