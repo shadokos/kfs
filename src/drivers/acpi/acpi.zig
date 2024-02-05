@@ -14,6 +14,9 @@ pub const DSDT = entry_type("DSDT");
 pub const ACPI_error = error{
 	entry_not_found,
 	entry_invalid,
+	no_smi_command_port,
+	no_known_enable_method,
+	enable_failed,
 };
 
 pub const RSDP = extern struct {
@@ -37,6 +40,13 @@ pub const ACPISDT_Header = extern struct {
 };
 
 var acpi : ACPI = .{};
+
+fn _is_enabled(control_block: enum {pm1a, pm1b}) bool {
+	return switch (control_block) {
+		.pm1a => (ports.inw(acpi.fadt.pm1a_control_block) & acpi.SCI_EN) != 0,
+		.pm1b => (ports.inw(acpi.fadt.pm1b_control_block) & acpi.SCI_EN) != 0,
+	};
+}
 
 fn entry_type(comptime name: []const u8) type {
 	const names = .{ "RSDT", "FACP", "DSDT" };
@@ -73,11 +83,13 @@ fn PTR(comptime T: anytype) type {
 	return *align(1) T;
 }
 
-inline fn acpi_strerror(comptime name: []const u8, err: ACPI_error) []const u8 {
+pub fn acpi_strerror(comptime name: []const u8, err: ACPI_error) []const u8 {
 	return switch (err) {
 		ACPI_error.entry_not_found => "ACPI: " ++ name ++ " not found",
 		ACPI_error.entry_invalid => "ACPI: Failed to validate " ++ name ++ " (invalid checksum)",
-		else => unreachable,
+		ACPI_error.no_smi_command_port => "ACPI: No SMI command port found",
+		ACPI_error.no_known_enable_method => "ACPI: No known enable method",
+		ACPI_error.enable_failed => "ACPI: Failed to enable",
 	};
 }
 
@@ -177,7 +189,33 @@ fn _get_s5(dsdt: PTR(DSDT)) ACPI_error!PTR(S5Object) {
 	return ACPI_error.entry_not_found;
 }
 
-pub fn init() u32 {
+pub fn power_off() bool {
+	ports.outw(acpi.fadt.pm1a_control_block, acpi.SLP_TYPa | acpi.SLP_EN);
+	return false;
+}
+
+pub fn enable() ACPI_error!void {
+	tty.printk("ACPI: Enabling\n", .{});
+	if (_is_enabled(.pm1a)) { tty.printk("ACPI: Already enabled\n", .{}); return ; }
+	if (acpi.fadt.smi_command_port == 0) return ACPI_error.no_smi_command_port;
+	if (acpi.fadt.acpi_enable == 0) return ACPI_error.no_known_enable_method;
+
+	tty.printk("\t\t- send acpi enable command to SMI command port\n", .{});
+	ports.outb(acpi.fadt.smi_command_port, acpi.fadt.acpi_enable);
+
+	tty.printk("\t\t- waiting for enable\n", .{});
+	// TODO: use a sleep instead of a busy loop
+	var i : usize = 0;
+	while (i < acpi.TIMEOUT) : (i += 1) if (_is_enabled(.pm1a)) break;
+	if (acpi.fadt.pm1b_control_block != 0)
+		while (i < acpi.TIMEOUT) : (i += 1) if (_is_enabled(.pm1b)) break;
+
+	if (i == acpi.TIMEOUT) return ACPI_error.enable_failed;
+	tty.printk("\t\t- Done\n", .{});
+	tty.printk("ACPI: Enabled\n", .{});
+}
+
+pub fn init() void {
 	const rsdp = _get_rsdp() catch |err| @panic(acpi_strerror("RSDP", err));
 	const rsdt = _get_rsdt(rsdp) catch |err| @panic(acpi_strerror("RSDT", err));
 	const facp = _find_entry(rsdt, "FACP") catch |err| @panic(acpi_strerror("FACP", err));
@@ -185,25 +223,16 @@ pub fn init() u32 {
 	const s5 = _get_s5(dsdt) catch |err| @panic(acpi_strerror("_S5", err));
 
 	acpi.fadt = &facp.fadt;
-	acpi.SMI_CMD = &facp.fadt.smi_command_port;
-	acpi.ACPI_ENABLE = &facp.fadt.acpi_enable;
-	acpi.ACPI_DISABLE = &facp.fadt.acpi_disable;
 
 	// https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/04_ACPI_Hardware_Specification/ACPI_Hardware_Specification.html#pm1-control-registers-2
-	acpi.PM1a_CNT = facp.fadt.pm1a_control_block;
-	acpi.PM1b_CNT = facp.fadt.pm1b_control_block;
-	acpi.PM1_CNT_LEN = facp.fadt.pm1_control_length;
 	acpi.SLP_TYPa = @as(u16, s5.slp_typ_a_num) << 10;
     acpi.SLP_TYPb = @as(u16, s5.slp_typ_b_num) << 10;
     acpi.SLP_EN = 1 << 13;
+    acpi.SCI_EN = 1;
 
 	tty.printk("\t\t- (SLP_TYPa | SLP_EN): 0x{x}\n", .{ acpi.SLP_TYPa | acpi.SLP_EN });
-	tty.printk("\t\t- (PM1a_CNT): 0x{x}\n", .{ acpi.PM1a_CNT });
-    tty.printk("ACPI: Initiliazation:\t"++utils.green++"OK"++utils.reset++"\n", .{});
-	return 0;
-}
+	tty.printk("\t\t- (PM1a_CNT): 0x{x}\n", .{ acpi.fadt.pm1a_control_block });
+    tty.printk("ACPI: Initialization:\t"++utils.green++"OK"++utils.reset++"\n", .{});
 
-pub fn power_off() bool {
-	ports.outw(acpi.PM1a_CNT, acpi.SLP_TYPa | acpi.SLP_EN);
-	return false;
+    enable() catch |err| @panic(acpi_strerror("", err));
 }
