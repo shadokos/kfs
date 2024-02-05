@@ -2,7 +2,6 @@ const ft = @import("../ft/ft.zig");
 const tty = @import("../tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("utils.zig");
-const ps2 = @import("../drivers/ps2/ps2.zig");
 const CmdError = @import("../shell.zig").CmdError;
 
 pub fn stack(_: anytype) CmdError!void {
@@ -73,7 +72,7 @@ pub fn keymap(args: [][]u8) CmdError!void {
 
 pub fn reboot(_: [][]u8) CmdError!void {
 	// Try to reboot using PS/2 Controller
-	ps2.cpu_reset();
+	@import("../drivers/ps2/ps2.zig").cpu_reset();
 
 	// If it fails, try the page fault method
 	asm volatile ("jmp 0xFFFF");
