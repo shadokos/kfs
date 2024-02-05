@@ -8,8 +8,8 @@ const ports = @import("../../io/ports.zig");
 const ACPI = @import("types/acpi.zig").ACPI;
 const S5Object = @import("types/s5.zig").S5Object;
 
-pub const RSDT = entry_type("RSDT");
-pub const DSDT = entry_type("DSDT");
+pub const RSDT = _entry_type("RSDT");
+pub const DSDT = _entry_type("DSDT");
 
 pub const ACPI_error = error{
 	entry_not_found,
@@ -48,31 +48,31 @@ fn _is_enabled(control_block: enum {pm1a, pm1b}) bool {
 	};
 }
 
-fn entry_type(comptime name: []const u8) type {
+fn _entry_type(comptime name: []const u8) type {
 	const names = .{ "RSDT", "FACP", "DSDT" };
 	var index: ?usize = null;
 
 	for (names, 0..) |n, i| if (ft.mem.eql(u8, n, name)) { index = i; };
 
-	if (index == null) @compileError("ACPI: Unknown entry type: '" ++ name ++ "'");
-
-	const array = [_]type {
-		extern struct { // RSDT
-			pointer_to_other_sdt: usize,
-		},
-		extern struct { // FACP
-			fadt: @import("types/fadt.zig").FADT,
-		},
-		extern struct {
-			data: u8,
-		}, // DSDT
-	};
-	var ret = struct {
-		header: ACPISDT_Header,
-	};
-	var tmp = @typeInfo(ret);
-	tmp.Struct.fields = @typeInfo(ret).Struct.fields ++ @typeInfo(array[index.?]).Struct.fields;
-	return @Type(tmp);
+	if (index) |i| {
+		const array = [_]type {
+			extern struct { // RSDT
+				pointer_to_other_sdt: usize,
+			},
+			extern struct { // FACP
+				fadt: @import("types/fadt.zig").FADT,
+			},
+			extern struct {
+				data: u8,
+			}, // DSDT
+		};
+		var ret = struct {
+			header: ACPISDT_Header,
+		};
+		var tmp = @typeInfo(ret);
+		tmp.Struct.fields = @typeInfo(ret).Struct.fields ++ @typeInfo(array[i]).Struct.fields;
+		return @Type(tmp);
+	} else @compileError("ACPI: Unknown entry type: '" ++ name ++ "'");
 }
 
 fn PTRI(comptime T: anytype) type {
@@ -115,12 +115,11 @@ fn _validate(comptime T: type, comptime name: []const u8, entry: anytype) ACPI_e
 	} else ACPI_error.entry_invalid;
 }
 
-fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(entry_type(name)) {
+fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry_type(name)) {
 	const entries = (rsdt.header.length - @sizeOf(ACPISDT_Header)) / @sizeOf(usize);
 
-	for (0..entries) |i| {
-		const entry_addr: PTRI(usize) = @ptrFromInt(@intFromPtr(&rsdt.pointer_to_other_sdt));
-		const entry = entry_addr[i];
+	const entry_addr: PTRI(usize) = @ptrFromInt(@intFromPtr(&rsdt.pointer_to_other_sdt));
+	for (entry_addr[0..entries]) |entry| {
 		const header: PTR(ACPISDT_Header) = @ptrFromInt(entry);
 
 		if (ft.mem.eql(u8, &header.signature, name)) {
@@ -130,7 +129,7 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(entry_
 				utils.blue, entry, utils.reset
 			});
 
-			return _validate(entry_type(name), name, @as(PTR(entry_type(name)), @ptrFromInt(entry)));
+			return _validate(_entry_type(name), name, @as(PTR(_entry_type(name)), @ptrFromInt(entry)));
 		}
 	}
 	return ACPI_error.entry_not_found;
@@ -163,7 +162,7 @@ fn _get_rsdt(rsdp: PTR(RSDP)) ACPI_error!PTR(RSDT) {
 	return _validate(RSDT, "RSDT", rsdp.rsdt_address);
 }
 
-fn _get_dsdt(facp: PTR(entry_type("FACP"))) ACPI_error!PTR(DSDT) {
+fn _get_dsdt(facp: PTR(_entry_type("FACP"))) ACPI_error!PTR(DSDT) {
 	return _validate(DSDT, "DSDT", @as(PTR(DSDT), @ptrFromInt(facp.fadt.dsdt)));
 }
 
@@ -189,9 +188,8 @@ fn _get_s5(dsdt: PTR(DSDT)) ACPI_error!PTR(S5Object) {
 	return ACPI_error.entry_not_found;
 }
 
-pub fn power_off() bool {
+pub fn power_off() void {
 	ports.outw(acpi.fadt.pm1a_control_block, acpi.SLP_TYPa | acpi.SLP_EN);
-	return false;
 }
 
 pub fn enable() ACPI_error!void {
