@@ -30,6 +30,7 @@ export fn init(eax : u32, ebx : *multiboot.info_header) void {
 	} else @panic("No multiboot2 magic number");
 
 	@import("gdt.zig").setup();
+	@import("drivers/ps2/ps2.zig").init();
 
 	kernel.main();
 }
