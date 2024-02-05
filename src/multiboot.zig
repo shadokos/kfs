@@ -31,6 +31,7 @@ fn get_header_type(comptime types : []const u32) type {
 
 pub const header_type = get_header_type(([_]u32{
 	multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP,
+	multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD,
 	multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW
 })[0..]);
 
