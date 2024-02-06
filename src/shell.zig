@@ -37,8 +37,7 @@ pub fn shell() u8 {
 		var data: [max_line_size]u8 = undefined;
 		const data_len: usize = tty.get_reader().read(&data) catch return 1;
 
-		var line: *const[]u8 = &data[0..data_len + 1];
-		line.*[data_len] = 0;
+		var line: *const[]u8 = &data[0..data_len];
 
 		// Tokenize the line
 		const args = token.tokenize(@constCast(line)) catch |e| {
