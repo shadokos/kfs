@@ -6,6 +6,13 @@ pub const max_tokens = 32;
 pub const Tokens = [max_tokens][]u8;
 var tokens: Tokens = undefined;
 
+const Tokenizer = struct {
+	quote: enum { none, single, double } = .none,
+	quote_offset: usize = 0,
+	index: usize = 0,
+	offset: usize = 0,
+};
+
 pub const TokenizerError = error {
 	InvalidQuote,
 	MaxTokensReached,
@@ -21,33 +28,35 @@ fn _skip_and_fill_whitespaces(data: *[]u8, i: *usize) void {
 	@memset(data.*[start..i.*], 0);
 }
 
+pub fn _slice_token(data: *[]u8, tokenizer: *Tokenizer, i: *usize) (TokenizerError || error{EmptyToken})!void {
+	const slice = @constCast(data.*[tokenizer.offset..i.*]);
+	_skip_and_fill_whitespaces(data, i);
+	tokenizer.offset = i.*;
+
+	if (slice.len == 0) return error.EmptyToken;
+	if (tokenizer.index == max_tokens) return error.MaxTokensReached;
+	tokens[tokenizer.index] = slice;
+    tokenizer.index += 1;
+}
+
 pub fn tokenize(data: *[]u8) TokenizerError![][]u8 {
- 	var quote: enum { none, single, double } = .none;
- 	var quote_offset: usize = 0;
-	var index: usize = 0;
-	var offset: usize = 0;
+	var tokenizer = Tokenizer{};
 
 	var i: usize = 0;
 	while (i < data.*.len) {
 		const c = &data.*[i];
- 		switch (quote) {
+ 		switch (tokenizer.quote) {
 			.none => switch (c.*) {
 				0, 9...13, 32 => {
 					c.* = 0;
-					const slice = @constCast(data.*[offset..i]);
-
-					_skip_and_fill_whitespaces(data, &i);
-					offset = i;
-
-					if (slice.len == 0 or slice[0] == 0) continue ;
-
-					if (index == max_tokens) return TokenizerError.MaxTokensReached;
-					tokens[index] = slice;
-					index += 1;
+					_slice_token(data, &tokenizer, &i) catch |err| switch (err) {
+						error.EmptyToken => continue,
+						else => |e| return e,
+					};
 				},
 				'\'', '"' => {
-					quote = if (c.* == '\'') .single else .double;
-					quote_offset = i;
+					tokenizer.quote = if (c.* == '\'') .single else .double;
+					tokenizer.quote_offset = i;
 					i += 1;
 				},
 				else => {
@@ -55,11 +64,11 @@ pub fn tokenize(data: *[]u8) TokenizerError![][]u8 {
 				}
 			},
 			.single, .double => if (
-				(quote == .single and c.* == '\'') or
-				(quote == .double and c.* == '"')
+				(tokenizer.quote == .single and c.* == '\'') or
+				(tokenizer.quote == .double and c.* == '"')
 			) {
-				quote = .none;
-				ft.mem.copyForwards(u8, data.*[quote_offset..i - 1], data.*[quote_offset + 1..i]);
+				tokenizer.quote = .none;
+				ft.mem.copyForwards(u8, data.*[tokenizer.quote_offset..i - 1], data.*[tokenizer.quote_offset + 1..i]);
 				ft.mem.copyForwards(u8, data.*[i - 1..data.*.len - 1], data.*[i + 1..data.*.len]);
 				@memset(data.*[data.*.len - 2..data.*.len], 0);
 				i -|= 1;
@@ -68,6 +77,10 @@ pub fn tokenize(data: *[]u8) TokenizerError![][]u8 {
 			}
 		}
 	}
-	if (quote != .none) return TokenizerError.InvalidQuote;
-	return tokens[0..index];
+	if (tokenizer.quote != .none) return TokenizerError.InvalidQuote;
+	_slice_token(data, &tokenizer, &i) catch |err| switch (err) {
+		error.EmptyToken => {},
+		else => |e| return e,
+	};
+	return tokens[0..tokenizer.index];
 }
