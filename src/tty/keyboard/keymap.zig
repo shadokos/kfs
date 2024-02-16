@@ -3,7 +3,7 @@ const ft = @import("../../ft/ft.zig");
 const keymaps = @import("keymap_index.zig");
 const keyboard = @import("../keyboard.zig");
 
-var current_map : [232][6]u16 = keymaps.@"us-std";
+var current_map : * const[232][6]u16 = &keymaps.@"us-std";
 
 pub const MAP_COLS:		u8	= 6;
 pub const NB_SCANCODES:	u8	= @typeInfo(InputKey).Enum.fields.len;
@@ -48,7 +48,7 @@ pub inline fn L(comptime scancode: u16) u16 {
 pub fn set_keymap(name : []const u8) error{KeymapNotFound}!void {
 	inline for (@typeInfo(keymaps).Struct.decls) |decl| {
 		if (ft.mem.eql(u8, decl.name, name)) {
-			current_map = @field(keymaps, decl.name);
+			current_map = &@field(keymaps, decl.name);
 			return;
 		}
 	}
