@@ -105,6 +105,8 @@ pub fn MapperT(comptime PageFrameAllocatorType : type) type {
 			const virtual_pages : usize = (ft.mem.alignBackward(usize, @intFromPtr(virtual), paging.page_size));
 			const physical_pages = ft.mem.alignBackward(paging.PhysicalPtr, physical, paging.page_size);
 
+			// printk("map (v->p) : 0x{x:0>8} -> 0x{x:0>8}\n", .{virtual_pages, physical_pages});
+
 			for (0..ft.math.divCeil(usize, len, paging.page_size) catch unreachable) |p| {
 				try self.map_one(@ptrFromInt(virtual_pages + p * paging.page_size), physical_pages + p * paging.page_size);
 			}

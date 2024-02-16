@@ -82,14 +82,14 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 			}
 		}
 
-		pub fn map_anywhere(self : *Self, physical : paging.PhysicalPtr, len : usize) (PageFrameAllocatorType.Error || VirtualAddressesAllocatorType.Error)!paging.VirtualPtr {
-
+		pub fn map_anywhere(self : *Self, physical : paging.PhysicalPtr, len : usize, allocType : AllocType) (PageFrameAllocatorType.Error || VirtualAddressesAllocatorType.Error)!paging.VirtualPtr {
 			const physical_pages = ft.mem.alignBackward(paging.PhysicalPtr, physical, paging.page_size);
-			const npages = ft.math.divCeil(usize, len, paging.page_size) catch @panic("map_anywhere");
-			const virtual = try self.alloc_virtual_space(npages, .KernelSpace); // todo
+			const npages = (ft.mem.alignForward(paging.PhysicalPtr, physical + len, paging.page_size) - physical_pages) / paging.page_size;
+			// printk("coucou {d}\n", .{npages});
+			const virtual = try self.alloc_virtual_space(npages, allocType); // todo
 
 			try self.mapper.map(virtual, physical_pages, npages * paging.page_size);
-			return @ptrCast(virtual);
+			return @ptrFromInt(@intFromPtr(virtual) + physical % paging.page_size);
 		}
 
 		pub fn map(self : *Self, physical : paging.PhysicalPtr, virtual: paging.VirtualPtr, n : usize) void {
@@ -97,8 +97,10 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 		}
 
 		pub fn unmap(self : *Self, virtual: paging.VirtualPtr, n : usize) void {
-			self.mapper.unmap(@ptrCast(@alignCast(virtual)), n);
-			self.userAddressesAllocator.free_space(@intFromPtr(virtual) / paging.page_size, n) catch @panic("double unmap"); // todo
+			const virtual_pages : paging.VirtualPagePtr = @ptrFromInt(ft.mem.alignBackward(usize, @as(usize, @intFromPtr(virtual)), paging.page_size)); // todo
+			const npages = (ft.mem.alignForward(usize, @as(usize, @intFromPtr(virtual)) + n, paging.page_size) - @intFromPtr(virtual_pages)) / paging.page_size;
+			self.mapper.unmap(virtual_pages, npages);
+			self.free_virtual_space(virtual_pages, npages) catch @panic("double unmap");
 		}
 
 		pub fn alloc_pages_opt(self : *Self, n : usize, options : AllocOptions) (PageFrameAllocatorType.Error || VirtualAddressesAllocatorType.Error)!paging.VirtualPagePtr
@@ -126,6 +128,13 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 			// self.unmap(@ptrCast(address), n);
 			self.mapper.unmap(@ptrCast(@alignCast(address)), n);
 			self.free_virtual_space(address, n) catch @panic("double free"); // todo
+		}
+
+		pub fn print(self : *Self) void {
+			printk("User space:\n", .{});
+			self.userAddressesAllocator.print();
+			printk("Kernel space:\n", .{});
+			kernelAddressesAllocator.print();
 		}
 	};
 }
