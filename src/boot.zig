@@ -33,19 +33,21 @@ export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
 }
 
 comptime {
-_ = @import("trampoline.zig");
+	_ = @import("trampoline.zig");
 }
 
-export fn init(eax : u32, ebx : *multiboot.info_header) callconv(.C) void {
+export fn init(eax : u32, ebx : u32) callconv(.C) void {
 	if (eax == multiboot2_h.MULTIBOOT2_BOOTLOADER_MAGIC) {
-		multiboot_info = @ptrFromInt(paging.low_half + @intFromPtr(ebx));
+		multiboot_info = @ptrFromInt(paging.low_half + ebx);
 	} else @panic("No multiboot2 magic number");
 
 	@import("gdt.zig").setup();
+	@import("memory.zig").init();
+
+	multiboot_info = multiboot.map(ebx);
 
 	@import("drivers/ps2/ps2.zig").init();
 	// @import("./drivers/acpi/acpi.zig").init();
-	@import("memory.zig").init();
 
 	kernel.main();
 }

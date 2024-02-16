@@ -1,5 +1,6 @@
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const boot = @import("boot.zig");
+const paging = @import("memory/paging.zig");
 const tty = @import("tty/tty.zig");
 const ft = @import("ft/ft.zig");
 
@@ -207,4 +208,11 @@ pub fn list_tags() void {
 		tag = @ptrFromInt(@intFromPtr(tag) + tag.size);
 		tag = @ptrFromInt(ft.mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));
 	}
+}
+
+pub fn map(ptr : paging.PhysicalPtr) *info_header {
+	const memory = @import("memory.zig");
+	const header : *info_header = @ptrCast(@alignCast(memory.virtualPageAllocator.map_anywhere(ptr, @sizeOf(info_header), .KernelSpace) catch @panic("can't map multiboot_info")));
+	defer memory.virtualPageAllocator.unmap(@ptrCast(header), @sizeOf(info_header));
+	return @ptrCast(@alignCast(memory.virtualPageAllocator.map_anywhere(ptr, header.total_size, .KernelSpace) catch @panic("can't map multiboot_info")));
 }
