@@ -1,0 +1,52 @@
+const ft = @import("../ft/ft.zig");
+const paging = @import("paging.zig");
+const Mapping = @import("mapping.zig");
+
+pub const EarlyVirtualAddressesAllocator = struct {
+	address : usize,
+	size : usize,
+
+	pub const Error = error{NoSpaceFound};
+
+	const Self = @This();
+
+	// early virtual address space allocator
+	pub fn alloc_space(self : *Self, size : usize) Error!usize {
+		_ = size; // todo
+		const first_dir : paging.dir_idx = @intCast(self.address >> 10); // todo
+		const last_dir : paging.dir_idx = first_dir + @as(paging.dir_idx, @intCast(ft.math.divCeil(usize, self.size, 1 << 10) catch unreachable));
+
+		for (paging.page_dir_ptr[first_dir..last_dir], 0..) |dir_entry, dir_index| {
+			if (dir_entry.present) {
+				const table = Mapping.get_table_ptr(@intCast(dir_index));
+				const last_entry = self.size % (1 << 10);
+				for (table[0..last_entry], 0..) |table_entry, table_index| {
+					if (!Mapping.is_page_mapped(table_entry)) {
+						return @as(u32, @bitCast(
+							paging.VirtualPtrStruct{
+								.dir_index = @intCast(dir_index),
+								.table_index = @intCast(table_index),
+								.page_index = 0,
+							}
+						)) / paging.page_size;
+					}
+				}
+			} else {
+				return @as(u32, @bitCast(
+					paging.VirtualPtrStruct{
+						.dir_index = @intCast(dir_index),
+						.table_index = 0,
+						.page_index = 0,
+					}
+				)) / paging.page_size;
+			}
+		}
+		return Error.NoSpaceFound;
+	}
+	// early virtual address space allocator
+	pub fn free_space(self : *Self, address : usize, size : usize) Error!void {
+		_ = self;
+		_ = address;
+		_ = size;
+	}
+};

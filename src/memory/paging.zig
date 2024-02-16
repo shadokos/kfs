@@ -99,3 +99,7 @@ pub const kernel_virtual_space_size = kernel_virtual_space_top - low_half;
 pub const page_dir_ptr : *[page_directory_size]page_directory_entry = @ptrFromInt(page_dir);
 pub const page_table_table_ptr : *[page_table_size]page_table_entry = @ptrFromInt(page_table_table);
 // pub const kernel_tables_ptr : *[256][page_table_size]page_table_entry = @ptrFromInt(kernel_tables);
+
+pub fn is_user_space(p : VirtualPagePtr) bool {
+	return @intFromPtr(p) < low_half;
+}

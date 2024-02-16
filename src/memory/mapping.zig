@@ -3,7 +3,26 @@ const ft = @import("../ft/ft.zig");
 const printk = @import("../tty/tty.zig").printk;
 const VirtualAddressesAllocator = @import("virtual_addresses_allocator.zig").VirtualAddressesAllocator;
 
-pub fn mapping(comptime PageFrameAllocatorType : type) type {
+pub fn get_physical_ptr(virtual : paging.VirtualPagePtr) paging.PhysicalPtr {
+	const virtualStruct : paging.VirtualPtrStruct = @bitCast(@as(u32, @intFromPtr(virtual)));
+	const table : *[paging.page_table_size]paging.page_table_entry = get_table_ptr(virtualStruct.dir_index);
+	const page : paging.PhysicalPtr = @as(paging.PhysicalPtr, table[virtualStruct.table_index].address_fragment) << 12;
+	return page + virtualStruct.page_index;
+}
+
+pub fn is_page_mapped(table_entry : paging.page_table_entry) bool {
+	return @as(u32, @bitCast(table_entry)) != 0;
+}
+
+pub fn get_table_ptr(table : paging.dir_idx) *[paging.page_table_size]paging.page_table_entry {
+	return @ptrFromInt(@as(u32, @bitCast(paging.VirtualPtrStruct{
+	.dir_index = paging.page_dir >> 22,
+	.table_index = table,
+	.page_index = 0,
+	})));
+}
+
+pub fn MapperT(comptime PageFrameAllocatorType : type) type {
 	return struct {
 		pageFrameAllocator : *PageFrameAllocatorType = undefined,
 
@@ -41,18 +60,6 @@ pub fn mapping(comptime PageFrameAllocatorType : type) type {
 			)));
 
 			@memset(table_virtual_ptr[0..], paging.page_table_entry{});
-		}
-
-		pub fn get_table_ptr(table : paging.dir_idx) *[paging.page_table_size]paging.page_table_entry {
-			return @ptrFromInt(@as(u32, @bitCast(paging.VirtualPtrStruct{
-				.dir_index = paging.page_dir >> 22,
-				.table_index = table,
-				.page_index = 0,
-			})));
-		}
-
-		pub fn is_page_mapped(table_entry : paging.page_table_entry) bool {
-			return @as(u32, @bitCast(table_entry)) != 0;
 		}
 
 		fn map_one(self : *Self, virtual: paging.VirtualPagePtr, physical : paging.PhysicalPtr) PageFrameAllocatorType.Error!void {
@@ -129,13 +136,6 @@ pub fn mapping(comptime PageFrameAllocatorType : type) type {
     				e.address_fragment = @intCast(physical >> 12);
     			}
     		}
-		}
-
-		pub fn get_physical_ptr(virtual : paging.VirtualPagePtr) paging.PhysicalPtr {
-			const virtualStruct : paging.VirtualPtrStruct = @bitCast(@as(u32, @intFromPtr(virtual)));
-			const table : *[paging.page_table_size]paging.page_table_entry = get_table_ptr(virtualStruct.dir_index);
-			const page : paging.PhysicalPtr = @as(paging.PhysicalPtr, table[virtualStruct.table_index].address_fragment) << 12;
-			return page + virtualStruct.page_index;
 		}
 	};
 }
