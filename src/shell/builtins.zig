@@ -86,3 +86,7 @@ pub fn reboot(_: [][]u8) CmdError!void {
 	utils.print_error("Reboot failed", .{});
 	return CmdError.OtherError;
 }
+
+pub fn vm(_: [][]u8) CmdError!void {
+	@import("../memory.zig").virtualPageAllocator.print();
+}
