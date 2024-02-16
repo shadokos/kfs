@@ -48,7 +48,7 @@ pub const width = 80;
 pub const height = 25;
 
 /// address of the mmio vga buffer
-var mmio_buffer: [*]u16 = @ptrFromInt(0xB8000);
+var mmio_buffer: [*]u16 = @ptrFromInt(0xC00B8000); // todo
 
 /// wether or not the cursor is on the screen.
 /// initialized to false because we need to change its size on boot
