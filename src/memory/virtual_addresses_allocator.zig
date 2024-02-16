@@ -100,14 +100,11 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 		}
 
 		pub fn set_used(self : *Self, address : usize, size : usize) (Error || PageAllocator.Error)!void {
-			var current_node : ?*Node = self.tree[@intFromEnum(AVL_type.Size)];
-			var best_fit : ?*Node = null;
+			var current_node : ?*Node = self.tree[@intFromEnum(AVL_type.Address)];
 			// @import("../tty/tty.zig").printk("whouhwho {d} {d}\n", .{address, size});
 
 			while (current_node) |n| {
-				// @import("../tty/tty.zig").printk("coucou {d} {d}\n", .{n.avl[@intFromEnum(AVL_type.Address)].value, n.avl[@intFromEnum(AVL_type.Size)].value});
 				if (n.avl[@intFromEnum(AVL_type.Address)].value > address) {
-					best_fit = n;
 					current_node = n.avl[@intFromEnum(AVL_type.Address)].l;
 				} else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value < address) {
 					// @import("../tty/tty.zig").printk("asdfqwerty \n", .{});
@@ -115,6 +112,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				} else break;
 			}
 			if (current_node) |n| {
+				// @import("../tty/tty.zig").printk("whouhwho {d} {d}\n", .{address, size});
 				// @import("../tty/tty.zig").printk("coucou2 {d} {d}\n", .{n.avl[@intFromEnum(AVL_type.Address)].value, n.avl[@intFromEnum(AVL_type.Size)].value});
 				if (address + size > n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value)
 					return Error.NoSpaceFound;
