@@ -33,6 +33,7 @@ SRC = linker.ld \
 	memory/page_frame_allocator.zig \
 	memory/linear_allocator.zig \
 	memory/virtual_addresses_allocator.zig \
+	memory/early_virtual_addresses_allocator.zig \
 	memory/virtual_page_allocator.zig \
 	memory/mapping.zig \
 	kernel.zig \
