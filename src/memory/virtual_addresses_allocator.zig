@@ -71,17 +71,23 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				} else if (n.avl[@intFromEnum(AVL_type.Size)].value < size) {
 					current_node = n.avl[@intFromEnum(AVL_type.Size)].r;
 				} else {
+					// @import("../tty/tty.zig").printk("bonjou\rn",.{});
 					best_fit = n;
 					break;
 				}
 			}
 			if (best_fit) |n| {
 				self.used_space += size;
+				// @import("../tty/tty.zig").printk("size: {d} {d}\n",.{n.avl[@intFromEnum(AVL_type.Size)].value, size});
 				if (n.avl[@intFromEnum(AVL_type.Size)].value == size) {
 					const ret = n.avl[@intFromEnum(AVL_type.Address)].value;
 					self.remove_from_tree(n, AVL_type.Size);
+					// self.print();
 					self.remove_from_tree(n, AVL_type.Address);
 					self.free_node(n);
+					// @import("../tty/tty.zig").printk("coucou\n",.{});
+
+					// self.print();
 					return ret;
 				} else {
 					const ret = n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value - size;
@@ -140,27 +146,25 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 		}
 
 		pub fn free_space(self : *Self, address : usize, size : usize) (Error || PageAllocator.Error)!void {
-			// var node = try self.alloc_node();
-			// node.avl[@intFromEnum(AVL_type.Address)].value = address;
-			// node.avl[@intFromEnum(AVL_type.Size)].value = size;
 			var current_node : ?*Node = self.tree[@intFromEnum(AVL_type.Size)];
 			var left : ?*Node = null;
 			var right : ?*Node = null;
+			// self.print();
 
 			// first check if there is other nodes to merge with this one
 			while (current_node) |n| {
-				if (n.avl[@intFromEnum(AVL_type.Address)].value > address + size) {
+				if (n.avl[@intFromEnum(AVL_type.Address)].value >= address + size) {
+					if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value == address) {
+						// we found a node to merge on the left
+						left = n;
+					}
 					current_node = n.avl[@intFromEnum(AVL_type.Address)].l;
-				} else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value < address) {
+				} else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value <= address) {
+					if (n.avl[@intFromEnum(AVL_type.Address)].value == address + size) {
+						// we found a node to merge on the right
+						right = n;
+					}
 					current_node = n.avl[@intFromEnum(AVL_type.Address)].r;
-				} else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value == address) {
-					current_node = n.avl[@intFromEnum(AVL_type.Address)].l;
-				// we found a node to merge on the left
-					left = n;
-				} else if (n.avl[@intFromEnum(AVL_type.Address)].value == address + size) {
-					current_node = n.avl[@intFromEnum(AVL_type.Address)].r;
-				// we found a node to merge on the right
-					right = n;
 				} else @panic("free_space");
 			}
 
@@ -191,6 +195,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				}
 			}
 			self.used_space -= size;
+			// self.print();
 		}
 
 		fn add_to_tree(self : *Self, n : *Node, field : AVL_type) void {
@@ -226,9 +231,10 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 		}
 
 		fn remove_from_tree(self : *Self, n : *Node, field : AVL_type) void {
-			n.avl[@intFromEnum(field)].p = null;
 
 			var ref : *?*Node = self.node_ref(n, field);
+			// @import("../tty/tty.zig").printk("n: 0x{x} p: 0x{x} ref 0x{x}\n",.{@intFromPtr(n), @intFromPtr(n.avl[@intFromEnum(field)].p), @intFromPtr(ref)});
+			n.avl[@intFromEnum(field)].p = null;
 
 			if (n.avl[@intFromEnum(field)].l) |l| {
 				if (n.avl[@intFromEnum(field)].r) |_| {
@@ -248,11 +254,22 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 		}
 
 		fn node_ref(self : *Self, n : *Node, field : AVL_type) *?*Node {
-			return if (n.avl[@intFromEnum(field)].p) |p|
-						(if (p.avl[@intFromEnum(field)].l) |*pl| (if (pl.* == n) &p.avl[@intFromEnum(field)].l
-								else if (p.avl[@intFromEnum(field)].r) |_| &p.avl[@intFromEnum(field)].r else unreachable) else unreachable
-						)
-					else &self.tree[@intFromEnum(field)];
+			if (n.avl[@intFromEnum(field)].p) |p| {
+				if (p.avl[@intFromEnum(field)].l) |*pl| {
+					if (pl.* == n) {
+						return &p.avl[@intFromEnum(field)].l;
+					}
+				}
+				if (p.avl[@intFromEnum(field)].r) |*pr| {
+					if (pr.* == n) {
+						return &p.avl[@intFromEnum(field)].r;
+					}
+				}
+				@panic("invalid tree");
+			}
+			else {
+				return &self.tree[@intFromEnum(field)];
+			}
 		}
 
 		fn swap_nodes(self : *Self, a : *Node, b : *Node, field : AVL_type) void {
@@ -327,24 +344,27 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 
 		fn print_node(self : *Self, n : *Node, field : AVL_type, depth : u32) void {
 			const printk = @import("../tty/tty.zig").printk;
-			if (n.l) |l| {
-				self.print_node(l, depth + 1);
+			if (n.avl[@intFromEnum(field)].l) |l| {
+				self.print_node(l, field, depth + 1);
 			}
 			for (0..depth) |_| {
 				printk(" ", .{});
 			}
-			printk("{d}\n", .{n.avl[@intFromEnum(field)].value});
-			if (n.r) |r| {
-				self.print_node(r, depth + 1);
+			printk("0x{x} (n: 0x{x:0>8} p: 0x{x:0>8})\n", .{n.avl[@intFromEnum(field)].value, @as(u32, @intFromPtr(n)), @as(u32, @intFromPtr(n.avl[@intFromEnum(field)].p))});
+			if (n.avl[@intFromEnum(field)].r) |r| {
+				self.print_node(r, field, depth + 1);
 			}
 		}
 
 		pub fn print(self : *Self) void {
+			const printk = @import("../tty/tty.zig").printk;
 			if (self.tree[@intFromEnum(AVL_type.Address)]) |r| {
-				self.print_node(r, AVL_type.Address);
+				printk("\naddress tree:\n", .{});
+				self.print_node(r, AVL_type.Address, 0);
 			}
 			if (self.tree[@intFromEnum(AVL_type.Size)]) |r| {
-				self.print_node(r, AVL_type.Size);
+				printk("\nsize tree:\n", .{});
+				self.print_node(r, AVL_type.Size, 0);
 			}
 		}
 	};
