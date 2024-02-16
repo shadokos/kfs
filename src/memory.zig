@@ -10,7 +10,7 @@ const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const mapping = @import("memory/mapping.zig").mapping;
 const VirtualPageAllocator = @import("memory/virtual_page_allocator.zig").VirtualPageAllocator;
 
-const VirtualPageAllocatorType = VirtualPageAllocator(PageFrameAllocator);
+pub const VirtualPageAllocatorType = VirtualPageAllocator(PageFrameAllocator);
 
 pub var virtualPageAllocator : VirtualPageAllocatorType = .{};
 
