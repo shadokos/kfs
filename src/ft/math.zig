@@ -4,9 +4,9 @@ pub fn log2(x: anytype) @TypeOf(x)
 {
 	switch (@typeInfo(@TypeOf(x))) {
 		.Int, .ComptimeInt => {
-			var i = 0;
-			var absolute = if (x > 0) x else -x;
-			while ((absolute >> i) > 1) : (i += 1) {}
+			var i : usize = 0;
+			var absolute = abs(@TypeOf(x), x);
+			while ((absolute >> @intCast(i)) > 1) : (i += 1) {}
 			return i;
 		},
 		else => unreachable // todo
@@ -28,7 +28,10 @@ pub fn IntFittingRange(comptime from: comptime_int, comptime to: comptime_int) t
 }
 
 pub fn abs(comptime T: type, n: T) T {
-	return if (n < 0) -n else n;
+	return switch (@typeInfo(T)) {
+		.Int => |int| if (int.signedness == .signed and n < 0) -n else n,
+		else => if (n < 0) -n else n
+	};
 }
 
 pub fn divCeil(comptime T: type, numerator: T, denominator: T) !T {
