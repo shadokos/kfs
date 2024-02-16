@@ -20,6 +20,7 @@ SRC = linker.ld \
 	../Makefile \
 	../build.zig \
 	boot.zig \
+	trampoline.zig \
 	drivers/ps2/ps2.zig \
 	gdt.zig \
 	drivers/acpi/acpi.zig \
@@ -29,7 +30,11 @@ SRC = linker.ld \
 	memory.zig \
 	memory/buddy_allocator.zig \
 	memory/static_allocator.zig \
+	memory/page_frame_allocator.zig \
 	memory/linear_allocator.zig \
+	memory/virtual_addresses_allocator.zig \
+	memory/virtual_page_allocator.zig \
+	memory/mapping.zig \
 	kernel.zig \
 	multiboot.zig \
 	tty/tty.zig \
@@ -101,7 +106,6 @@ $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 	$(ZIG) build \
 		--prefix $(BOOTDIR) \
 		-Dname=$(notdir $(BIN)) \
-		-Doptimize=ReleaseSafe \
 		--cache-dir $(ZIGCACHE) \
 		--summary all \
 		--verbose

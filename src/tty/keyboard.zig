@@ -104,6 +104,7 @@ pub fn kb_read() void {
 
 		const c = make_break(scancode) orelse continue;
 
+
 		switch (c) {
 			0...0xff => send_to_tty(&[1]u8 {@intCast(c)}),
 			keymap.HOME...keymap.INSRT => send_to_tty(keymap.escape_map[c - keymap.HOME]),

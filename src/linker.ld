@@ -1,3 +1,4 @@
+OUTPUT_FORMAT("elf32-i386")
 /* The bootloader will look at this image and start execution at the symbol
    designated as the entry point. */
 ENTRY(_entry)
@@ -13,55 +14,46 @@ VERSION {
    kernel image. */
 SECTIONS
 {
-	/* It used to be universally recommended to use 1M as a start offset,
-	   as it was effectively guaranteed to be available under BIOS systems.
-	   However, UEFI has made things more complicated, and experimental data
-	   strongly suggests that 2M is a safer place to load. In 2016, a new
-	   feature was introduced to the multiboot2 spec to inform bootloaders
-	   that a kernel can be loaded anywhere within a range of addresses and
-	   will be able to relocate itself to run from such a loader-selected
-	   address, in order to give the loader freedom in selecting a span of
-	   memory which is verified to be available by the firmware, in order to
-	   work around this issue. This does not use that feature, so 2M was
-	   chosen as a safer option than the traditional 1M. */
- 
-	/* First put the multiboot header, as it is required to be put very early
-	   in the image or the bootloader won't recognize the file format.
-	   Next we'll put the .text section. */
-
 	.gdt 0x800 : {
 		KEEP(*(.GDT))
 	}
 
 	. = 1M;
 
-	.multiboot  : ALIGN(4K) {
+	.multiboot ALIGN(4K) : {
 		KEEP(*(.multiboot))
 	}
 
-	.text : ALIGN(4K)
+	.bootstrap ALIGN(4K) : {
+		KEEP(*(.boostrap))
+		KEEP(*(.bootstrap_code))
+	}
+
+	. += 0xC0000000;
+
+	.text ALIGN(4K) : AT (ADDR (.text) - 0xC0000000)
 	{
-		*(.text)
+		KEEP(*(.text*))
 	}
  
 	/* Read-only data. */
-	.rodata : ALIGN(4K)
+	.rodata ALIGN(4K) : AT (ADDR (.rodata) - 0xC0000000)
 	{
-		*(.rodata)
+		KEEP(*(.rodata*))
 	}
  
 	/* Read-write data (initialized) */
-	.data : ALIGN(4K)
+	.data ALIGN(4K) : AT (ADDR (.data) - 0xC0000000)
 	{
-		*(.data)
+		KEEP(*(.data))
 	}
  
 	/* Read-write data (uninitialized) and stack */
-	.bss : ALIGN(4K)
+	.bss ALIGN(4K) : AT (ADDR (.bss) - 0xC0000000)
 	{
 		*(COMMON)
 		*(.bss)
 	}
 
- 	kernel_end = .;
+ 	kernel_end = . - 0xC0000000;
 }

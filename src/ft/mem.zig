@@ -74,3 +74,9 @@ pub fn alignForward(comptime T: type, addr: T, alignment: T) T {
 pub fn isAligned(addr: usize, alighment: usize) bool {
 	return addr & ~(alighment - 1) == addr;
 }
+
+pub fn swap(comptime T: type, a: *T, b: *T) void {
+	const tmp : T = a.*;
+	a.* = b.*;
+	b.* = tmp;
+}

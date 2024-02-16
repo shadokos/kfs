@@ -20,16 +20,16 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 		allocator : ?*AllocatorType = null,
 
 		/// store information about pages (like flags) (mem_map[0] store information for page mem[0])
-		mem_map : []page_frame_descriptor = undefined,
+		mem_map : []page_frame_descriptor = ([0]page_frame_descriptor{})[0..],
 
 		/// see https://wiki.osdev.org/Page_Frame_Allocation
-		bit_map : []Bit = undefined,
+		bit_map : []Bit = ([0]Bit{})[0..],
 
 		/// see https://wiki.osdev.org/Page_Frame_Allocation
 		free_lists : [max_order + 1] ?*page_frame_descriptor = .{null} ** (max_order + 1),
 
 		/// the total number of pages
-		total_pages : usize = undefined,
+		total_pages : usize = 0,
 
 		/// represent a bit in the bit map
 		const Bit = enum(u1) {
@@ -96,7 +96,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 
 		/// break a page for order order (if everything go fine, after this call, at least one page is free at order order)
 		fn break_for(self : *Self, order : order_t) Error!void {
-			if (self.free_lists[order] != null)
+			if (self.free_lists[order] != null or order == max_order)
 				return ;
 			if (order < max_order)
 				try self.break_for(order + 1);
@@ -114,7 +114,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 		}
 
 		/// allocate one page of order order
-		pub fn alloc_page(self : *Self, order : order_t) Error!idx_t {
+		pub fn alloc_page_block(self : *Self, order : order_t) Error!idx_t {
 			try self.break_for(order);
 			if (self.free_lists[order]) |p| {
 				const idx = self.idx_from_frame(p);
@@ -125,15 +125,16 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			} else unreachable;
 		}
 
-		/// free one page previously allocated with alloc_page on the same allocator instance
-		pub fn free_page(self : *Self, page_index : idx_t) void {
+		/// free one page previously allocated with alloc_page_block on the same allocator instance
+		pub fn free_page_block(self : *Self, page_index : idx_t) void {
 			var frame : *page_frame_descriptor = self.frame_from_idx(page_index);
 			var order : order_t = frame.order;
 			var page_idx : idx_t = page_index;
 			var buddy_idx : idx_t = buddy(page_index, order);
 
+
 			if (self.bit(page_idx, order).* == .Free)
-				@panic("double free in free_page");
+				@panic("double free in free_page_block");
 
 			while (self.bit(buddy_idx, order).* == .Free and order < max_order) : (buddy_idx = buddy(page_index, order)) {
 				self.bit(buddy_idx, order).* = .Taken;
@@ -148,6 +149,27 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 				self.bit(page_idx, order).* = .Free;
 				self.lst_add(order, page_idx);
 			}
+		}
+
+		pub fn alloc_pages(self : *Self, n : usize) Error!idx_t {
+			var order : order_t = @intCast(ft.math.log2(n));
+			if (@as(usize, 1) << order < n) {
+				order += 1;
+			}
+
+			return self.alloc_page_block(order);
+			// todo: non power of 2 sizes
+		}
+
+		pub fn alloc_pages_hint(self : *Self, hint : idx_t, n : usize) Error!idx_t {
+			_ = hint;
+			return self.alloc_pages(n);
+			// todo: non power of 2 sizes
+		}
+
+		pub fn free_pages(self : *Self, first : idx_t) void {
+			return self.free_page_block(first);
+			// todo: non power of 2 sizes
 		}
 
 		/// set the underlying allocator
@@ -173,7 +195,8 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 		pub fn max_possible_space(self : *Self, comptime T: type) T {
 			if (self.allocator) |a| {
 				const available_space = a.remaining_space();
-				const average_page_cost : f32 = @sizeOf(page_frame_descriptor) + (((@as(idx_t, 1) << max_order) - 1) / max_order) / 8;
+				// const average_page_cost : f32 = @sizeOf(page_frame_descriptor) + (((@as(idx_t, 1) << max_order) - 1) / max_order) / 8;
+				const average_page_cost : f32 = @sizeOf(page_frame_descriptor) + 0.25;
 
 				var ret : usize = @intFromFloat(@as(f32, @floatFromInt(available_space)) / average_page_cost);
 				while (@sizeOf(page_frame_descriptor) * ret + (ft.math.divCeil(usize, bitmap_size(ret), 8) catch 0) > available_space) {
@@ -182,6 +205,10 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 				return @as(T, @intCast(ret)) * @sizeOf(page);
 			}
 			else @panic("no allocator!");
+		}
+
+		pub fn size_for(pages : usize) usize {
+			return bitmap_size(pages) + pages * @sizeOf(page_frame_descriptor);
 		}
 
 		/// init an instance (if the underlying allocator is set)
@@ -193,9 +220,8 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			if (self.allocator) |a| {
 				self.mem_map = a.alloc(page_frame_descriptor, self.total_pages) catch @panic("not enough space to allocate mem_map");
 				@memset(self.mem_map, .{.flags = .{.available = false}});
-
 				self.bit_map = a.alloc(Bit, bitmap_size(self.total_pages)) catch @panic("not enough space to allocate bitmap");
-				@memset(@as([*]align(1) usize, @ptrFromInt(@intFromPtr(self.bit_map.ptr)))[0..(ft.math.divCeil(usize, self.bit_map.len, 32) catch 0)], 0);
+				@memset(self.bit_map, .Taken);
 			}
 			else @panic("no allocator!");
 		}
