@@ -10,9 +10,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 
 		free_nodes : ?*Node = null,
 
-		node_pages : ?*NodePage = null,
-
-		boostrap_page : NodePage align(paging.page_size) = .{},
+		node_pages : ?* allowzero NodePage = null,
 
 		used_space : usize = 0,
 
@@ -21,11 +19,11 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			Address
 		};
 
-		const Node = extern struct {
+		const Node = struct {
 			avl : [2]AVL_hdr = .{.{}, .{}},
 			next : ?*@This() = null,
 
-			const AVL_hdr = extern struct {
+			const AVL_hdr = struct {
 				l : ?*Node = null,
 				r : ?*Node = null,
 				p : ?*Node = null,
@@ -33,12 +31,12 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			};
 		};
 
-		const NodePage = extern struct {
+		const NodePage = struct {
 			hdr : Header = .{},
 			nodes : [nodes_per_pages]Node = undefined,
 
-			const Header = extern struct {
-				next : ?*NodePage = null,
+			const Header = struct {
+				next : ?* allowzero NodePage = null,
 				first_node : usize = 0,
 				free_nodes_count : usize = (paging.page_size - @sizeOf(@This())) / @sizeOf(Node),
 			};
@@ -304,7 +302,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			else return null;
 		}
 
-		fn page_of_node(n : *Node) *NodePage {
+		fn page_of_node(n : *Node) * allowzero NodePage {
 			return @ptrFromInt(ft.mem.alignBackward(usize, @intFromPtr(n), paging.page_size));
 		}
 
@@ -325,7 +323,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				}
 			}
 
-			const new_page : *NodePage = @ptrCast(@alignCast(try self.pageAllocator.alloc_pages(1)));
+			const new_page : * allowzero NodePage = @ptrCast((try self.pageAllocator.alloc_pages(1)));
 
 			new_page.* = .{};
 			new_page.hdr.next = self.node_pages;
