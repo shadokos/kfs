@@ -17,16 +17,29 @@ pub const kernel_end = @extern([*]u8, .{.name = "kernel_end"});
 pub var multiboot_info : *multiboot.info_header = undefined;
 
 export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
+	_ = @import("trampoline.zig");
 	asm volatile(
+		// find physical address of stack bottom
 		\\ mov $stack_bottom, %esp
 		\\ sub $0xc0000000, %esp
+
+		// load physical address of the bottom of the stack (value pointed by stack_bottom)
 		\\ mov (%esp), %esp
 		\\ sub $0xc0000000, %esp
+
+		// set ebp
 		\\ movl %esp, %ebp
+
+		// preserve ebx and eax for init
 		\\ push %ebx
 		\\ push %eax
+
+		// jump to low half
 		\\ call trampoline_jump
+
+		// now set the stack at its virtual address
 		\\ add $0xc0000000, %esp
+
 		\\ call init
 	);
 	while (true) {}
@@ -38,16 +51,21 @@ comptime {
 
 export fn init(eax : u32, ebx : u32) callconv(.C) void {
 	if (eax == multiboot2_h.MULTIBOOT2_BOOTLOADER_MAGIC) {
-		multiboot_info = @ptrFromInt(paging.low_half + ebx);
+		multiboot_info = @ptrFromInt(paging.low_half + ebx); // TODO!
 	} else @panic("No multiboot2 magic number");
 
+	@import("trampoline.zig").clean();
+
 	@import("tty/tty.zig").init();
-	@import("gdt.zig").setup();
+
 	@import("memory.zig").init();
+
+	// @import("gdt.zig").setup();
 
 	multiboot_info = multiboot.map(ebx);
 
 	@import("drivers/ps2/ps2.zig").init();
+
 	// @import("./drivers/acpi/acpi.zig").init();
 
 	kernel.main();

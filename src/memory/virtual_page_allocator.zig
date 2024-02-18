@@ -37,20 +37,20 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 
 		pub fn init(self : *Self, _pageFrameAllocator : *PageFrameAllocatorType) Error!void {
 			self.pageFrameAllocator = _pageFrameAllocator;
+
 			try self.mapper.init(self.pageFrameAllocator);
 			self.earlyUserAddressesAllocator = .{
-				.address = 0,
-				.size = paging.low_half / paging.page_size
+				.address = 0, // todo
+				.size = (paging.low_half / paging.page_size)
 			};
-			try self.userAddressesAllocator.init(self, 0, paging.low_half / paging.page_size);
+			try self.userAddressesAllocator.init(self, 0, (paging.low_half / paging.page_size));
 			self.initialized = true;
 		}
 
 		pub fn global_init(_pageAllocator : anytype) Error!void {
 			kernelAddressesAllocator = .{};
-			// try earlyKernelAddressesAllocator.init(_pageAllocator, paging.low_half / paging.page_size, paging.kernel_virtual_space_size / paging.page_size);
 			try kernelAddressesAllocator.init(_pageAllocator, paging.low_half / paging.page_size, paging.kernel_virtual_space_size / paging.page_size);
-			try kernelAddressesAllocator.set_used(ft.math.divCeil(usize, paging.low_half, paging.page_size) catch unreachable, ft.math.divCeil(usize, @intFromPtr(@import("../boot.zig").kernel_end), paging.page_size) catch unreachable);
+			try kernelAddressesAllocator.set_used(ft.math.divCeil(usize, paging.low_half, paging.page_size) catch unreachable, ft.math.divCeil(usize, @import("../trampoline.zig").kernel_size, paging.page_size) catch unreachable);
 		}
 
 		pub fn alloc_virtual_space(self : *Self, npages : usize, allocType : AllocType) (PageFrameAllocatorType.Error || VirtualAddressesAllocatorType.Error)!paging.VirtualPagePtr {
@@ -99,21 +99,28 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 		pub fn unmap(self : *Self, virtual: paging.VirtualPtr, n : usize) void {
 			const virtual_pages : paging.VirtualPagePtr = @ptrFromInt(ft.mem.alignBackward(usize, @as(usize, @intFromPtr(virtual)), paging.page_size)); // todo
 			const npages = (ft.mem.alignForward(usize, @as(usize, @intFromPtr(virtual)) + n, paging.page_size) - @intFromPtr(virtual_pages)) / paging.page_size;
+			// printk("npages: \x1b[31m{d}\x1b[0m ", .{npages});
 			self.mapper.unmap(virtual_pages, npages);
 			self.free_virtual_space(virtual_pages, npages) catch @panic("double unmap");
 		}
 
+		pub fn unmap_raw(self : *Self, virtual: paging.VirtualPtr, n : usize) void {
+			const virtual_pages : paging.VirtualPagePtr = @ptrFromInt(ft.mem.alignBackward(usize, @as(usize, @intFromPtr(virtual)), paging.page_size)); // todo
+			const npages = (ft.mem.alignForward(usize, @as(usize, @intFromPtr(virtual)) + n, paging.page_size) - @intFromPtr(virtual_pages)) / paging.page_size;
+			self.mapper.unmap(virtual_pages, npages);
+		}
+
 		pub fn alloc_pages_opt(self : *Self, n : usize, options : AllocOptions) (PageFrameAllocatorType.Error || VirtualAddressesAllocatorType.Error)!paging.VirtualPagePtr
 		{
-			// const virtual = switch (options) {
-			// 	.KernelSpace => try kernelAddressesAllocator.alloc_virtual_space(n),
-			// 	.UserSpace => try self.alloc_virtual_space(n),
-			// };
 			const virtual = try self.alloc_virtual_space(n, options.type);
-			const physical = self.pageFrameAllocator.alloc_pages(n) catch |err| {
-				try self.free_virtual_space(virtual, n);
-				return err;
-			};
+			// printk("virtual {x}", .{@intFromPtr(virtual)});
+
+			errdefer self.free_virtual_space(virtual, n) catch unreachable;
+
+			const physical = try self.pageFrameAllocator.alloc_pages(n);
+			errdefer self.pageFrameAllocator.free_pages(physical);
+
+			// printk(", physical {x}\n", .{physical});
 			try self.mapper.map(virtual, physical, n * paging.page_size);
 			return @ptrCast(virtual);
 		}

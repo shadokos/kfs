@@ -1,7 +1,7 @@
 const paging = @import("memory/paging.zig");
 const ft = @import("ft/ft.zig");
 
-const kernel_size = 0x10_000_000;
+pub const kernel_size = 0x10_000_000;
 
 const page_count = ft.math.divCeil(comptime_int, kernel_size, paging.page_size) catch unreachable;
 
@@ -19,56 +19,22 @@ fn get_page_tables() [table_count][1024]paging.page_table_entry {
 	return ret;
 }
 
-export const page_tables : ([table_count][1024]paging.page_table_entry) align(4096) linksection(".bootstrap")  = get_page_tables();
+pub export const page_tables : ([table_count][1024]paging.page_table_entry) align(4096) linksection(".bootstrap")  = get_page_tables();
 
-fn get_page_directory() [1024]paging.page_directory_entry
-{
-	var ret : [1024]paging.page_directory_entry = .{paging.page_directory_entry{}} ** 1024;
-	for (0..table_count) |i| {
-		ret[i].present = true;
-		ret[i].writable = true;
-		ret[i].address_fragment = i;
-		ret[768 + i] = ret[i];
-	}
-	return ret;
-}
-
-
-pub const page_directory : [1024]paging.page_directory_entry align(4096) linksection(".bootstrap") = get_page_directory();
+pub var page_directory : [1024]paging.page_directory_entry align(4096) linksection(".bootstrap") = undefined;
 
 export fn trampoline_jump() linksection(".bootstrap_code") callconv(.C) void {
 
-	asm volatile (
-	 \\ loop:
-	 \\ cmpl $0, %edx
-	 \\ je loop_end
-	 \\ dec %edx
-	 // \\ mov (%eax, %edx, 4), %ecx
-	 \\ movl %edx, %ecx
-	 \\ shll $12 , %ecx
-	 \\ addl %ebx, %ecx
-	 \\ orl $3, %ecx
-	 \\ mov %ecx, (%eax, %edx, 4)
-	 \\ addl $768, %edx
-	 \\ mov %ecx, (%eax, %edx, 4)
-	 \\ subl $768, %edx
-	 \\ jmp loop
-	 \\ loop_end:
-	 :
-	 : [_] "{eax}" (&page_directory),
-	   [_] "{ebx}" (@intFromPtr(&page_tables)),
-	   [_] "{edx}" (table_count),
-	);
+	// fill the page directory
+	for (0..table_count) |t| {
+		page_directory[t] = .{.present = true, .writable = true, .address_fragment = @intCast(t + @intFromPtr(&page_tables) / paging.page_size)};
+		page_directory[768 + t] = page_directory[t];
+	}
 
-	asm volatile(
-	\\ mov %eax, %ecx
-	\\ orl $3, %ecx
-	\\ mov %ecx, (%eax, %ebx, 4)
-	 :
-	 : [_] "{eax}" (&page_directory),
-	   [_] "{ebx}" (paging.page_dir >> 22),
-	);
+	// add one entry for the page directory itself
+	@as(*[1024]u32, @ptrCast(&page_directory))[paging.page_dir >> 22] = @intFromPtr(&page_directory) | 3;
 
+	// load the page directory and enable paging
 	asm volatile(
 	 \\ mov %eax, %cr3
 	 \\ mov %cr0, %eax
@@ -77,4 +43,9 @@ export fn trampoline_jump() linksection(".bootstrap_code") callconv(.C) void {
 	 :
 	 : [_] "{eax}" (&page_directory),
 	);
+}
+
+/// remove identity paging of the kernel
+pub fn clean() void {
+	@memset(paging.page_dir_ptr[0..(paging.low_half >> 22)], paging.page_directory_entry{});
 }
