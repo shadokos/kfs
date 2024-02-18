@@ -32,7 +32,7 @@ pub const page = [page_size]u8;
 
 pub const PhysicalPtr = u32;
 pub const VirtualPtr = *allowzero void;
-pub const VirtualPagePtr = *allowzero page;
+pub const VirtualPagePtr = *allowzero align(4096) page;
 
 pub const dir_idx = u10;
 pub const table_idx = u10;
@@ -96,8 +96,8 @@ pub const low_half = 0xC0000000;
 pub const kernel_virtual_space_top = temporary_page;
 pub const kernel_virtual_space_size = kernel_virtual_space_top - low_half;
 
-pub const page_dir_ptr : *[page_directory_size]page_directory_entry = @ptrFromInt(page_dir);
-pub const page_table_table_ptr : *[page_table_size]page_table_entry = @ptrFromInt(page_table_table);
+pub const page_dir_ptr : * align(4096) [page_directory_size]page_directory_entry = @ptrFromInt(page_dir);
+pub const page_table_table_ptr : * align(4096) [page_table_size]page_table_entry = @ptrFromInt(page_table_table);
 // pub const kernel_tables_ptr : *[256][page_table_size]page_table_entry = @ptrFromInt(kernel_tables);
 
 pub fn is_user_space(p : VirtualPagePtr) bool {
