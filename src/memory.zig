@@ -7,7 +7,7 @@ const PageFrameAllocator = @import("memory/page_frame_allocator.zig").PageFrameA
 const paging = @import("memory/paging.zig");
 const multiboot = @import("multiboot.zig");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
-const mapping = @import("memory/mapping.zig").mapping;
+const mapping = @import("memory/mapping.zig");
 const VirtualPageAllocator = @import("memory/virtual_page_allocator.zig").VirtualPageAllocator;
 
 pub const VirtualPageAllocatorType = VirtualPageAllocator(PageFrameAllocator);
@@ -32,72 +32,29 @@ var total_space : u64 = undefined;
 extern var stack_bottom : [*]u8;
 
 pub fn map_kernel() void {
-	const page_dir_physical = pageFrameAllocator.alloc_pages(1) catch @panic("cannot allocate");
-		paging.page_dir_ptr[511] = .{
-			.address_fragment = @intCast(page_dir_physical >> paging.page_bits), // todo: secure the cast
-			.present = true,
-			.writable = true,
-		};
-
-
-	const page_dir_ptr : *[paging.page_table_size]paging.page_table_entry = @ptrFromInt(@as(u32, @bitCast(
-		paging.VirtualPtrStruct{
-		.dir_index = paging.page_dir >> 22,
-		.table_index = 511,
-		.page_index = 0,
+	const tables : * align(4096) [256][paging.page_table_size]paging.page_table_entry = @ptrCast((virtualPageAllocator.alloc_pages_opt(256, .{.type = .KernelSpace}) catch @panic("todo")));
+	defer virtualPageAllocator.unmap(@ptrCast(tables), 256);
+	for (0..254) |i| {
+		if (paging.page_table_table_ptr[768 + i].present) {
+			@memcpy(tables[i][0..], mapping.get_table_ptr(@intCast(768 + i))[0..]);
+			paging.page_dir_ptr[768 + i].address_fragment = @intCast(mapping.get_physical_ptr(@ptrCast(&tables[i])) >> 12);
+		} else {
+			@memset(tables[i][0..], paging.page_table_entry{});
+			paging.page_dir_ptr[768 + i].address_fragment = @intCast(mapping.get_physical_ptr(@ptrCast(&tables[i])) >> 12);
+			paging.page_table_table_ptr[768 + i].present = true;
 		}
-	)));
-
-	@memset(page_dir_ptr, paging.page_table_entry{});
-
-	// const physical = pageFrameAllocator.alloc_pages(256) catch @panic("cannot allocate");
-	for (0..256) |table| {
-		printk("table: {d}\n", .{table});
-		// const current_physical = physical + paging.page_size * table;
-		const current_physical = pageFrameAllocator.alloc_pages(1) catch @panic("cannot allocate");
-		paging.page_dir_ptr[512] = .{
-			.address_fragment = @intCast(current_physical >> paging.page_bits), // todo: secure the cast
-			.present = true,
-			.writable = true,
-		};
-
-		const table_virtual_ptr : *[paging.page_table_size]paging.page_table_entry = @ptrFromInt(@as(u32, @bitCast(
-			paging.VirtualPtrStruct{
-			.dir_index = paging.page_dir >> 22,
-			.table_index = 512,
-			.page_index = 0,
-			}
-		)));
-
-		for (0..1024) |p| {
-			// table_virtual_ptr[p] = before[p];
-			table_virtual_ptr[p] = .{
-				.address_fragment = @intCast((table << 10) + p), // todo: secure the cast
-				.present = true,
-				.writable = true,
-			};
-		}
-
-		page_dir_ptr[768 + table] = .{
-			.address_fragment = @intCast(current_physical >> paging.page_bits), // todo: secure the cast
-			.present = true,
-			.writable = true,
-		};
-		page_dir_ptr[table] = page_dir_ptr[768 + table];
 	}
 
-	page_dir_ptr[1023] = .{
-		.address_fragment = @intCast(page_dir_physical >> paging.page_bits), // todo: secure the cast
-		.present = true,
-		.writable = true,
-	};
+	for (&@import("trampoline.zig").page_tables) |*table| {
+		pageFrameAllocator.free_pages(@intFromPtr(table));
+		const mapped = virtualPageAllocator.map_anywhere(@intFromPtr(table), paging.page_size, .KernelSpace) catch @panic("todo");
+		@memset(@as(*[4096]u8, @ptrCast(@alignCast(mapped))), 0);
+		virtualPageAllocator.unmap(mapped, paging.page_size);
+	}
 
-	asm volatile (
-	\\ mov %eax, %cr3
-	:
-	: [_] "{eax}" (page_dir_physical),
-	);
-	while (true) {}
+	const kernel_aligned_begin = ft.mem.alignForward(usize, @intFromPtr(boot.kernel_end), paging.page_size);
+	const kernel_aligned_end = ft.mem.alignForward(usize, @import("trampoline.zig").kernel_size + @intFromPtr(boot.kernel_end), paging.page_size);
+	virtualPageAllocator.unmap_raw(@ptrFromInt(paging.low_half + kernel_aligned_begin), kernel_aligned_end - kernel_aligned_begin);
 }
 
 pub fn init() void {
@@ -108,19 +65,17 @@ pub fn init() void {
 	pageFrameAllocator.init(total_space);
 
 	check_mem_availability();
-
 	// map_kernel();
-	//
+//
+
 	virtualPageAllocator.init(&pageFrameAllocator) catch @panic("cannot init virtualPageAllocator");
+
 	VirtualPageAllocatorType.global_init(&virtualPageAllocator) catch @panic("cannot global_init virtualPageAllocator");
-	// virtualPageAllocator.map_kernel();
-
-// mapper.init(&pageFrameAllocator) catch @panic("cannot init mapper");
-
+	map_kernel();
 }
+
 fn check_mem_availability() void {
 	const page_size = @sizeOf(paging.page);
-
 	if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP)) |t| {
 		var iter = multiboot.mmap_it{.base = t};
 		while (iter.next()) |e| {
