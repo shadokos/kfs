@@ -81,13 +81,24 @@ fn make_break(scancode: u16) ?u16 {
 				locks.num_lock = !locks.num_lock;
 			keyState.num_down = make;
 		},
-		keymap.PGUP => if (make) if (!@import("build_options").posix) tty.get_tty().scroll(1) else return c,
-		keymap.PGDN => if (make) if (!@import("build_options").posix) tty.get_tty().scroll(-1) else return c,
+		keymap.PGUP, keymap.PGDN => if (make) {
+			if (!@import("build_options").posix) {
+				if (keyState.shift) {
+					tty.get_tty().scroll(if (c == keymap.PGUP) tty.height else -tty.height);
+				} else {
+					tty.get_tty().scroll(if (c == keymap.PGUP) 1 else -1);
+				}
+			} else return c;
+		},
 		keymap.AF1...keymap.AF10 => if (keyState.ctrl and !make) {
 			tty.set_tty(@intCast(c - keymap.AF1)) catch unreachable;
 		},
-		else => if (make and c != 0)
-				return c,
+		else => if (make and c != 0) {
+			if (!@import("build_options").posix) {
+				tty.get_tty().reset_scroll();
+			}
+			return c;
+		},
 	}
 	return null;
 }

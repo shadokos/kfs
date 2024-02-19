@@ -485,6 +485,14 @@ pub fn TtyN(comptime history_size: u32) type {
             self.view();
         }
 
+		/// reset scroll to the bottom of the terminal
+		pub fn reset_scroll(self : *Self) void {
+			if (self.scroll_offset != 0)
+			{
+				self.scroll_offset = 0;
+				self.view();
+			}
+		}
 
 		/// enable vga cursor
 		pub fn enable_cursor(_: *Self) void {
