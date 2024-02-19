@@ -311,51 +311,108 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
 				};
 
 				const arg_object = @field(args, @typeInfo(@TypeOf(args)).Struct.fields[arg_pos].name);
-				switch (specifier) {
-					.string => {
-								if (@typeInfo(@TypeOf(arg_object)) != .Pointer and @typeInfo(@TypeOf(arg_object)) != .Array) {
-									@compileError("object is not a string");
-								}
-								const slice = switch (@typeInfo(@TypeOf(arg_object))) {
-									 .Pointer => |p| switch (p.size) {
-										.One => arg_object.*[0..],
-										.Slice => arg_object,
-										else => arg_object
-									},
-									.Array => |_| arg_object[0..],
-									else => unreachable
-								};
-								try formatBuf(slice, options, writer);
-							},
-					.decimal => switch (@typeInfo(@TypeOf(arg_object))) {
-									.Int, .ComptimeInt => try formatInt(arg_object, 10, Case.lower, options, writer),
-									else => @compileError("object is not an int")
-								},
-					.lower_hexa, .upper_hexa => switch (@typeInfo(@TypeOf(arg_object))) {
-									.Int, .ComptimeInt => try formatInt(arg_object, 16, if (specifier == .lower_hexa) Case.lower else Case.upper, options, writer),
-									else => @compileError("object is not an int")
-								},
-					.octal => switch (@typeInfo(@TypeOf(arg_object))) {
-									.Int, .ComptimeInt => try formatInt(arg_object, 8, Case.lower, options, writer),
-									else => @compileError("object is not an int")
-								},
-					.binary => switch (@typeInfo(@TypeOf(arg_object))) {
-									.Int, .ComptimeInt => try formatInt(arg_object, 2, Case.lower, options, writer),
-									else => @compileError("object is not an int")
-								},
-					else => {}
-				}
+				try formatObj(arg_object, specifier, options, writer);
             }
         } else if (comptime accept("}", &fmt_copy) catch unreachable) |_| {
             if (comptime accept("}", &fmt_copy) catch null) |c| {
-                try writer.writeByte(c);
+				try writer.writeByte(c);
             } else {
             	@compileError("missing opening {");
             }
         } else if (comptime accept(null, &fmt_copy) catch unreachable) |c| {
+			comptime var next = 0;
+			comptime {
+				while (next < fmt_copy.len and fmt_copy[next] != '{') {
+					next += 1;
+				}
+			}
 			try writer.writeByte(c);
+			_ = try writer.write(fmt_copy[0..next]);
+			fmt_copy = fmt_copy[next..];
         }
     }
+}
+
+pub fn formatObj(obj: anytype, comptime specifier : Specifier, comptime options: FormatOptions, writer: anytype) !void {
+	switch (@typeInfo(@TypeOf(obj))) {
+		.Bool => |_| {
+			try formatBuf(if (obj) "true" else "false", options, writer);
+		},
+		.Int, .ComptimeInt =>  {
+			switch(specifier) {
+				.decimal => try formatInt(obj, 10, Case.lower, options, writer),
+				.lower_hexa, .upper_hexa => try formatInt(obj, 16, if (specifier == .lower_hexa) Case.lower else Case.upper, options, writer),
+				.octal => try formatInt(obj, 8, Case.lower, options, writer),
+				.binary => try formatInt(obj, 2, Case.lower, options, writer),
+				else => @compileError("invalid specifier")
+			}
+		},
+		.Pointer => |pointer| {
+			switch (pointer.size) {
+				.One => {
+					switch (specifier) {
+						.address => {
+							_ = try writer.write(@typeName(pointer.child));
+							try writer.writeByte('@');
+							try formatInt(@intFromPtr(obj), 16, Case.lower, .{.width = @sizeOf(*u8) * 2, .alignment = .right, .fill = '0'}, writer);
+						},
+						else => {
+							try formatObj(obj.*, specifier, options, writer);
+						}
+					}
+				},
+				.Many, .C, .Slice => {
+					switch (specifier) {
+						.string => {
+							try formatBuf(obj, options, writer);
+						},
+						.address => {
+							_ = try writer.write(@typeName(@TypeOf(obj)));
+							try writer.writeByte('@');
+							try formatInt(@intFromPtr(obj), 16, Case.lower, .{.width = @sizeOf(*u8) * 2, .alignment = .right, .fill = '0'}, writer);
+						},
+						else => {
+							@compileError("invalid specifier: " ++ @tagName(specifier));
+						}
+					}
+				},
+			}
+		},
+		.Array => |_| {
+			switch (specifier) {
+				.string => {
+					try formatBuf(obj[0..], options, writer);
+				},
+				else => {
+					@compileError("invalid specifier");
+				}
+			}
+		},
+		// .Struct,
+		// .ComptimeFloat,
+		// .Float,
+		.Optional, .Null => {
+			if (obj) |value| {
+				try formatObj(value, specifier, options, writer);
+			} else {
+				try formatBuf("null", options, writer);
+			}
+		},
+		// .ErrorUnion,
+		// .ErrorSet,
+		.Enum => {
+			_ = try writer.write(@typeName(@TypeOf(obj)));
+			try writer.writeByte('.');
+			try formatBuf(@tagName(obj), options, writer);
+		},
+		.EnumLiteral => {
+			try writer.writeByte('.');
+			try formatBuf(@tagName(obj), options, writer);
+		},
+		// .Union,
+		// .Vector,
+		else => {@compileError("can't format type " ++ @typeName(@TypeOf(obj)));}
+	}
 }
 
 pub fn formatBuf(buf: []const u8, options: FormatOptions, writer: anytype) !void
