@@ -2,13 +2,15 @@ const ft = @import("../ft.zig");
 
 pub fn Writer(
 	comptime Context: type,
-	comptime Error: type,
-	comptime callback: fn(context: Context, bytes: []const u8) Error!usize,
+	comptime _Error: type,
+	comptime callback: fn(context: Context, bytes: []const u8) _Error!usize,
 ) type {
 	return struct {
 		context: Context,
 
 		const Self = @This();
+
+		pub const Error = _Error;
 
 		pub fn print(self: Self, comptime format: []const u8, args: anytype) Error!void {
 			return ft.fmt.format(self, format, args);

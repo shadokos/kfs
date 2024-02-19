@@ -4,6 +4,7 @@ const termios = @import("termios.zig");
 const cc_t = termios.cc_t;
 const keyboard = @import("keyboard.zig");
 const ports = @import("../io/ports.zig");
+const BufferWriter = @import("buffer_writer.zig").BufferWriter;
 
 /// The colors available for the console
 pub const Color = enum(u8) {
@@ -206,15 +207,17 @@ pub fn TtyN(comptime history_size: u32) type {
         	else c;
         }
 
-		/// return true if te char c is an end of line in the current termios configuration
+		/// return true if the char c is an end of line in the current termios configuration
         fn is_end_of_line(self: *Self, c: u8) bool {
         	return c == '\n' or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOL)] or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)];
         }
 
+		/// return true if the char must be translated by ECHOCTL
         fn is_echoctl(self: Self, c : u8) bool {
 			return c & 0b11100000 == 0 and c != '\t' and c != '\n' and c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTART)] and c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTOP)];
         }
 
+		/// erase one char from the buffer
         fn erase_char(self: *Self) void {
         	if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE)
 			{
@@ -556,11 +559,12 @@ pub const Tty = TtyN(1000);
 pub const max_tty = 9;
 
 ///	array of all the available ttys
-pub var tty_array: [max_tty + 1]Tty = [1]Tty{Tty{}} ** 10;
+pub var tty_array: [max_tty + 1]Tty = [1]Tty{Tty{}} ** (max_tty + 1);
 
 /// index of the active tty
 pub var current_tty: u8 = 0;
 
+/// return the active tty
 pub fn get_tty() *Tty {
 	return &tty_array[current_tty];
 }
@@ -580,10 +584,23 @@ pub inline fn get_reader() Tty.Reader {
 
 /// return the writer object of the current tty
 pub inline fn get_writer() Tty.Writer {
-	return tty_array[current_tty].writer();
+	return get_tty().writer();
 }
 
-/// print a formatted string to the current terminal
+/// The BufferWriter type for Tty
+const TtyBufferWriter = BufferWriter(Tty.Writer, Tty.Writer.Error, Tty.Writer.write, width);
+
+/// Array of BufferWriters, each one wrapping one instance of Tty
+var ttyBufferWriter = init : {
+	comptime var array : [max_tty + 1]TtyBufferWriter = undefined;
+	for (0..max_tty + 1) |i| {
+		array[i] = TtyBufferWriter{.context = tty_array[i].writer()};
+	}
+	break :init array;
+};
+
+/// print a formatted string to the current terminal using WriterBuffers
 pub inline fn printk(comptime fmt: []const u8, args: anytype) void {
-	get_writer().print(fmt, args) catch {};
+	ttyBufferWriter[current_tty].print(fmt, args) catch {};
+	ttyBufferWriter[current_tty].flush() catch {};
 }
