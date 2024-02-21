@@ -130,6 +130,10 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 			self.free_virtual_space(address, n) catch @panic("double free"); // todo
 		}
 
+		pub fn get_page_frame_descriptor(self : *Self, address : paging.VirtualPagePtr) *paging.page_frame_descriptor {
+			return self.pageFrameAllocator.get_page_frame_descriptor(mapping.get_physical_ptr(address));
+		}
+
 		pub fn print(self : *Self) void {
 			printk("User space:\n", .{});
 			self.userAddressesAllocator.print();

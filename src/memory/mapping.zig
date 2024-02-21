@@ -3,7 +3,7 @@ const ft = @import("../ft/ft.zig");
 const printk = @import("../tty/tty.zig").printk;
 const VirtualAddressesAllocator = @import("virtual_addresses_allocator.zig").VirtualAddressesAllocator;
 
-pub fn get_physical_ptr(virtual : paging.VirtualPagePtr) paging.PhysicalPtr {
+pub fn get_physical_ptr(virtual : paging.VirtualPagePtr) paging.PhysicalPtr { // todo error
 	const virtualStruct : paging.VirtualPtrStruct = @bitCast(@as(u32, @intFromPtr(virtual)));
 	const table : *[paging.page_table_size]paging.page_table_entry = get_table_ptr(virtualStruct.dir_index);
 	const page : paging.PhysicalPtr = @as(paging.PhysicalPtr, table[virtualStruct.table_index].address_fragment) << 12;
