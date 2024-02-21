@@ -58,4 +58,11 @@ pub const PageFrameAllocator = struct {
 		else
 			self.non_addressable_space_allocator.free_pages(@intCast(ptr / @sizeOf(paging.page)));
 	}
+
+	pub fn get_page_frame_descriptor(self : *Self, ptr : paging.PhysicalPtr) *paging.page_frame_descriptor {
+		return if (ptr < paging.physical_memory_max)
+			self.addressable_space_allocator.frame_from_idx(@intCast(ptr / @sizeOf(paging.page))) // todo: div can overflow
+		else
+			self.non_addressable_space_allocator.frame_from_idx(@intCast(ptr / @sizeOf(paging.page)));
+	}
 };
