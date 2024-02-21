@@ -344,7 +344,7 @@ pub fn formatObj(obj: anytype, comptime specifier : Specifier, comptime options:
 				.lower_hexa, .upper_hexa => try formatInt(obj, 16, if (specifier == .lower_hexa) Case.lower else Case.upper, options, writer),
 				.octal => try formatInt(obj, 8, Case.lower, options, writer),
 				.binary => try formatInt(obj, 2, Case.lower, options, writer),
-				else => @compileError("invalid specifier")
+				else => try formatInt(obj, 10, Case.lower, options, writer),
 			}
 		},
 		.Pointer => |pointer| {
