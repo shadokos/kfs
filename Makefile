@@ -27,6 +27,7 @@ SRC = linker.ld \
 	drivers/acpi/types/acpi.zig \
 	drivers/acpi/types/s5.zig \
 	drivers/acpi/types/s5.zig \
+	drivers/vga/text.zig \
 	memory.zig \
 	memory/buddy_allocator.zig \
 	memory/static_allocator.zig \
