@@ -27,6 +27,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				l : ?*Node = null,
 				r : ?*Node = null,
 				p : ?*Node = null,
+				balance_factor : i8 = 0,
 				value : usize = undefined,
 			};
 		};
@@ -145,7 +146,6 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			var current_node : ?*Node = self.tree[@intFromEnum(AVL_type.Size)];
 			var left : ?*Node = null;
 			var right : ?*Node = null;
-			// self.print();
 
 			// first check if there is other nodes to merge with this one
 			while (current_node) |n| {
@@ -194,9 +194,82 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			// self.print();
 		}
 
+		fn rotate(self : *Self, n : *Node, field : AVL_type, comptime dir : []const u8) void{
+			const other_dir = comptime if (ft.mem.eql(u8, dir, "l")) "r" else "l";
+			const ref = self.node_ref(n, field);
+
+			var l : *Node = @field(n.avl[@intFromEnum(field)], dir) orelse return;
+			var op : ?*Node = n.avl[@intFromEnum(field)].p;
+			if (comptime ft.mem.eql(u8, dir, "l")) {
+				n.avl[@intFromEnum(field)].balance_factor -= 1;
+				n.avl[@intFromEnum(field)].balance_factor -= l.avl[@intFromEnum(field)].balance_factor;
+
+				l.avl[@intFromEnum(field)].balance_factor -= 1;
+			} else {
+				n.avl[@intFromEnum(field)].balance_factor += 1;
+				n.avl[@intFromEnum(field)].balance_factor -= l.avl[@intFromEnum(field)].balance_factor;
+
+				l.avl[@intFromEnum(field)].balance_factor += 1;
+			}
+
+
+			@field(n.avl[@intFromEnum(field)], dir) = @field(l.avl[@intFromEnum(field)], other_dir);
+			if (@field(n.avl[@intFromEnum(field)], dir)) |nl|
+				nl.avl[@intFromEnum(field)].p = n;
+
+			@field(l.avl[@intFromEnum(field)], other_dir) = n;
+			if (@field(l.avl[@intFromEnum(field)], other_dir)) |lr|
+				lr.avl[@intFromEnum(field)].p = l;
+
+			ref.* = l;
+			l.avl[@intFromEnum(field)].p = op;
+		}
+
+		fn check_node(self : *Self, n : *Node, field : AVL_type) i32 {
+			var dl : i32 = if (n.avl[@intFromEnum(field)].l) |l| self.check_node(l, field) else 0;
+			var dr : i32 = if (n.avl[@intFromEnum(field)].r) |r| self.check_node(r, field) else 0;
+			if (dl - dr != n.avl[@intFromEnum(field)].balance_factor or n.avl[@intFromEnum(field)].balance_factor > 1 or n.avl[@intFromEnum(field)].balance_factor < -1) {
+				self.print();
+				@panic("invalid tree in " ++ @typeName(Self));
+			}
+			return @max(dl, dr) + 1;
+		}
+
+		fn fix(self : *Self, n : *Node, field : AVL_type, change : i8) void {
+			if (n.avl[@intFromEnum(field)].p) |p| {
+				if (p.avl[@intFromEnum(field)].l) |pl| if (pl == n) {
+					p.avl[@intFromEnum(field)].balance_factor += change;
+				};
+				if (p.avl[@intFromEnum(field)].r) |pr| if (pr == n) {
+					p.avl[@intFromEnum(field)].balance_factor -= change;
+				};
+
+				if (p.avl[@intFromEnum(field)].balance_factor == 0) {
+					return;
+				} else if (p.avl[@intFromEnum(field)].balance_factor == 1 or p.avl[@intFromEnum(field)].balance_factor == -1) {
+					return self.fix(p, field, change);
+				} else if (p.avl[@intFromEnum(field)].balance_factor == 2) {
+					if (p.avl[@intFromEnum(field)].l) |l| if (l.avl[@intFromEnum(field)].balance_factor < 0) {
+						self.rotate(l, field, "r");
+					};
+					self.rotate(p, field, "l");
+				} else if (p.avl[@intFromEnum(field)].balance_factor == -2) {
+					if (p.avl[@intFromEnum(field)].r) |r| if (r.avl[@intFromEnum(field)].balance_factor > 0) {
+						self.rotate(r, field, "l");
+					};
+					self.rotate(p, field, "r");
+				} else unreachable;
+			}
+		}
+
 		fn add_to_tree(self : *Self, n : *Node, field : AVL_type) void {
+
+			// @import("../tty/tty.zig").printk("add 0x{x} to {}\n",.{@intFromPtr(n), field});
+
 			n.avl[@intFromEnum(field)].l = null;
 			n.avl[@intFromEnum(field)].r = null;
+			n.avl[@intFromEnum(field)].p = null;
+			n.avl[@intFromEnum(field)].balance_factor = 0;
 
 			if (self.tree[@intFromEnum(field)]) |root| {
 				var current_node : *Node = root;
@@ -224,12 +297,19 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				self.tree[@intFromEnum(field)] = n;
 				n.avl[@intFromEnum(field)].p = null;
 			}
+			self.fix(n, field, 1);
+			if (@import("build_options").optimize == .Debug) {
+				_ = if (self.tree[@intFromEnum(field)]) |r| self.check_node(r, field);
+			}
 		}
 
 		fn remove_from_tree(self : *Self, n : *Node, field : AVL_type) void {
 
+			// @import("../tty/tty.zig").printk("remove 0x{x} from {}\n",.{@intFromPtr(n), field});
+
 			var ref : *?*Node = self.node_ref(n, field);
-			// @import("../tty/tty.zig").printk("n: 0x{x} p: 0x{x} ref 0x{x}\n",.{@intFromPtr(n), @intFromPtr(n.avl[@intFromEnum(field)].p), @intFromPtr(ref)});
+			self.fix(n, field, -1);
+
 			n.avl[@intFromEnum(field)].p = null;
 
 			if (n.avl[@intFromEnum(field)].l) |l| {
@@ -247,6 +327,10 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				ref.* = r;
 				r.avl[@intFromEnum(field)].p = n.avl[@intFromEnum(field)].p;
 			} else ref.* = null;
+
+			if (@import("build_options").optimize == .Debug) {
+				_ = if (self.tree[@intFromEnum(field)]) |r| self.check_node(r, field);
+			}
 		}
 
 		fn node_ref(self : *Self, n : *Node, field : AVL_type) *?*Node {
@@ -273,6 +357,8 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			const b_ref = self.node_ref(b, field);
 
 			ft.mem.swap(?*Node, a_ref, b_ref);
+			ft.mem.swap(i8, &a.avl[@intFromEnum(field)].balance_factor, &b.avl[@intFromEnum(field)].balance_factor);
+			ft.mem.swap(?*Node, &a.avl[@intFromEnum(field)].p, &b.avl[@intFromEnum(field)].p);
 			ft.mem.swap(?*Node, &a.avl[@intFromEnum(field)].l, &b.avl[@intFromEnum(field)].l);
 			if (a.avl[@intFromEnum(field)].l) |l| {
 				l.avl[@intFromEnum(field)].p = a;
@@ -287,7 +373,6 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			if (b.avl[@intFromEnum(field)].r) |r| {
 				r.avl[@intFromEnum(field)].p = b;
 			}
-			ft.mem.swap(?*Node, &a.avl[@intFromEnum(field)].p, &b.avl[@intFromEnum(field)].p);
 		}
 
 		fn next_node(n : *Node, field : AVL_type) ?*Node { // todo
@@ -346,7 +431,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			for (0..depth) |_| {
 				printk(" ", .{});
 			}
-			printk("0x{x} (n: 0x{x:0>8} p: 0x{x:0>8})\n", .{n.avl[@intFromEnum(field)].value, @as(u32, @intFromPtr(n)), @as(u32, @intFromPtr(n.avl[@intFromEnum(field)].p))});
+			printk("0x{x} (n: 0x{x:0>8} p: 0x{x:0>8}) balance_factor: {d}\n", .{n.avl[@intFromEnum(field)].value, @as(u32, @intFromPtr(n)), @as(u32, @intFromPtr(n.avl[@intFromEnum(field)].p)), n.avl[@intFromEnum(field)].balance_factor});
 			if (n.avl[@intFromEnum(field)].r) |r| {
 				self.print_node(r, field, depth + 1);
 			}
@@ -354,14 +439,15 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 
 		pub fn print(self : *Self) void {
 			const printk = @import("../tty/tty.zig").printk;
+			printk("\naddress tree:\n", .{});
 			if (self.tree[@intFromEnum(AVL_type.Address)]) |r| {
-				printk("\naddress tree:\n", .{});
 				self.print_node(r, AVL_type.Address, 0);
 			}
+			printk("\nsize tree:\n", .{});
 			if (self.tree[@intFromEnum(AVL_type.Size)]) |r| {
-				printk("\nsize tree:\n", .{});
 				self.print_node(r, AVL_type.Size, 0);
 			}
+			printk("\n", .{});
 		}
 	};
 }
