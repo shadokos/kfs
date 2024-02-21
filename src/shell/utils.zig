@@ -193,3 +193,12 @@ pub fn print_mmap() void {
 		tty.printk("\xC8{s:\xCD<18}\xCF{s:\xCD^18}\xCF{s:\xCD<18}\xBC\n", .{"", "", ""}); // 14
 	}
 }
+
+pub fn show_palette() void {
+	for (0..8) |i| {
+		tty.printk("\x1b[{d}m" ++ "\xdb" ** 10 ++ "\x1b[0m", .{30 + i});
+	}
+	for (0..8) |i| {
+		tty.printk("\x1b[2m\x1b[{d}m" ++ "\xdb" ** 10 ++ "\x1b[0m", .{30 + i});
+	}
+}

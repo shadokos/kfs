@@ -70,6 +70,28 @@ pub fn keymap(args: [][]u8) CmdError!void {
 	}
 }
 
+pub fn theme(args: [][]u8) CmdError!void {
+	const t = @import("../tty/themes.zig");
+	switch(args.len) {
+		1 => {
+			const list = t.theme_list;
+			tty.printk("Available themes:\n\n", .{});
+			for (list) |e| {
+				tty.printk(" - {s}\n", .{e});
+			}
+			tty.printk("\n", .{});
+			tty.printk("Current palette:\n", .{});
+			utils.show_palette();
+		},
+		2 => {
+			tty.get_tty().set_theme(t.get_theme(args[1]) orelse return CmdError.InvalidParameter);
+			tty.printk("\x1b[2J\x1b[H", .{});
+			utils.show_palette();
+		},
+		else => return CmdError.InvalidNumberOfArguments
+	}
+}
+
 pub fn shutdown(_: [][]u8) CmdError!void {
 	@import("../drivers/acpi/acpi.zig").power_off();
 	utils.print_error("Failed to shutdown\n", .{});
