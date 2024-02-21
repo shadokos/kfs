@@ -4,6 +4,8 @@ const termios = @import("termios.zig");
 const cc_t = termios.cc_t;
 const keyboard = @import("keyboard.zig");
 const ports = @import("../io/ports.zig");
+const vga = @import("../drivers/vga/text.zig");
+const themes = @import("themes.zig");
 
 /// The colors available for the console
 pub const Color = enum(u8) {
@@ -106,6 +108,9 @@ pub fn TtyN(comptime history_size: u32) type {
 		/// current termios configuration
         config: termios.termios = .{},
 
+		/// current theme
+		theme : ?themes.Theme = themes.default,
+
 		const input_buffer_pos_t = ft.meta.Int(.unsigned, ft.math.log2(MAX_INPUT)); // todo
 
         /// Writer object type
@@ -129,10 +134,16 @@ pub fn TtyN(comptime history_size: u32) type {
 
         const Self = @This();
 
+		pub fn init(self: *Self) void {
+			self.reset_color();
+			self.refresh_theme();
+			self.view();
+		}
+
         /// clear line line in the history buffer
         pub fn clear_line(self: *Self, line: u32) void {
             for (0..width) |i|
-                self.history_buffer[line][i] = BLANK_CHAR;
+                self.history_buffer[line][i] = self.blank_char();
         }
 
 		/// move the curser of line_offset vertically and col_offset horizontally
@@ -279,7 +290,10 @@ pub fn TtyN(comptime history_size: u32) type {
 			var char : u16 = c;
 			char |= self.current_color << 8;
 			if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.dim)) == 0) {
-				char |= 1 << 3 << 8;
+				char |= @as(u16, 0b00001000) << 8;
+			}
+			if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.blink)) != 0) {
+				char |= @as(u16, 0b10000000) << 8;
 			}
 			if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.reverse)) != 0) {
 				var swap = char;
@@ -457,19 +471,29 @@ pub fn TtyN(comptime history_size: u32) type {
 
         /// set the background color for the next chars
         pub fn set_background_color(self: *Self, color: Color) void {
-            self.current_color &= 0x00ff;
+            self.current_color &= 0x0f;
             self.current_color |= @intFromEnum(color) << 4;
         }
 
         /// set the font color for the next chars
         pub fn set_font_color(self: *Self, color: Color) void {
-            self.current_color &= 0xff00;
+            self.current_color &= 0xf0;
             self.current_color |= @intFromEnum(color);
         }
 
+        /// set the font color for the next chars
+        pub fn reset_color(self: *Self) void {
+			if (self.theme) |t| {
+				self.set_font_color(@enumFromInt(t.foreground_idx));
+				self.set_background_color(@enumFromInt(t.background_idx));
+			} else {
+				self.set_font_color(Color.light_grey);
+				self.set_background_color(Color.black);
+			}
+        }
+
 		pub fn blank_char(self: *Self) u16 {
-			_ = self;
-			return ' ' | (@as(u16, 0) << 12) | (@as(u16, 15) << 8);
+			return ' ' | (@as(u16, if (self.theme) |t| t.background_idx else 0) << 12) | (@as(u16, (if (self.theme) |t| t.foreground_idx else 15)) << 8);
 		}
 
 		/// soft scroll in the terminal history
@@ -560,6 +584,7 @@ pub fn set_tty(n: u8) !void {
 		return error.InvalidTty;
 	current_tty = n;
 	tty_array[current_tty].view();
+	tty_array[current_tty].refresh_theme();
 }
 
 /// return the reader object of the current tty
@@ -575,4 +600,10 @@ pub inline fn get_writer() Tty.Writer {
 /// print a formatted string to the current terminal
 pub inline fn printk(comptime fmt: []const u8, args: anytype) void {
 	get_writer().print(fmt, args) catch {};
+}
+
+pub fn init() void {
+	for (tty_array[0..]) |*t| {
+		t.init();
+	}
 }
