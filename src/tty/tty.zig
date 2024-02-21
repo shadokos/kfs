@@ -42,12 +42,9 @@ pub const BLANK_CHAR = ' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8
 const MAX_INPUT : usize = 4096; // must be a power of 2
 
 /// screen width
-pub const width = 80;
+pub const width = vga.width;
 /// screen height
-pub const height = 25;
-
-/// address of the mmio vga buffer
-var mmio_buffer: [*]u16 = @ptrFromInt(0xC00B8000); // todo
+pub const height = vga.height;
 
 /// wether or not the cursor is on the screen.
 /// initialized to false because we need to change its size on boot
@@ -470,6 +467,11 @@ pub fn TtyN(comptime history_size: u32) type {
             self.current_color |= @intFromEnum(color);
         }
 
+		pub fn blank_char(self: *Self) u16 {
+			_ = self;
+			return ' ' | (@as(u16, 0) << 12) | (@as(u16, 15) << 8);
+		}
+
 		/// soft scroll in the terminal history
         pub fn scroll(self: *Self, off: i32) void {
             if (off > 0) {
@@ -482,25 +484,6 @@ pub fn TtyN(comptime history_size: u32) type {
             self.view();
         }
 
-
-		/// enable vga cursor
-		pub fn enable_cursor(_: *Self) void {
-        	const cursor_start : u8 = 0;
-        	const cursor_end : u8 = 15;
-        	ports.outb(.vga_idx_reg, 0x0A);
-        	ports.outb(.vga_io_reg, (ports.inb(.vga_io_reg) & 0xC0) | cursor_start);
-        	ports.outb(.vga_idx_reg, 0x0B);
-        	ports.outb(.vga_io_reg, (ports.inb(.vga_io_reg) & 0xE0) | cursor_end);
-			cursor_enabled = true;
-        }
-
-		/// disable vga cursor
-        pub fn disable_cursor(_: *Self) void {
-			ports.outb(.vga_idx_reg, 0x0A);
-			ports.outb(.vga_io_reg, 0x20);
-			cursor_enabled = false;
-        }
-
 		/// print the cursor at the current position on the screen
         fn put_cursor(self: *Self) void {
         	const offset = (self.head_line + history_size - self.scroll_offset) % history_size;
@@ -510,22 +493,28 @@ pub fn TtyN(comptime history_size: u32) type {
 					self.pos.line > (offset - height) and self.pos.line <= offset;
 			if (is_visible)
 			{
-				if (!cursor_enabled)
-					self.enable_cursor();
+				vga.enable_cursor();
 
 				const pos = self.get_state().pos;
-				const index: u32 = pos.line * width + pos.col;
-				ports.outb(.vga_idx_reg, 0x0F);
-				ports.outb(.vga_io_reg, @intCast(index & 0xff));
-				ports.outb(.vga_idx_reg, 0x0E);
-				ports.outb(.vga_io_reg, @intCast((index >> 8) & 0xff));
-			}
-			else
-			{
-				if (cursor_enabled)
-					self.disable_cursor();
+				vga.set_cursor_pos(@intCast(pos.col), @intCast(pos.line)); // todo: int casts
+			} else {
+				vga.disable_cursor();
 			}
         }
+
+
+		/// set the theme
+		pub fn set_theme(self: *Self, _theme : themes.Theme) void {
+			self.theme = _theme;
+			self.refresh_theme();
+		}
+
+		pub fn refresh_theme(self: *Self) void {
+			if (self.theme) |t| {
+				vga.set_palette(t.palette);
+			}
+		}
+
 
         /// print the buffer to the vga buffer
         pub fn view(self: *Self) void {
@@ -535,13 +524,13 @@ pub fn TtyN(comptime history_size: u32) type {
                 for (0..width) |c| {
                     const view_line = (history_size + history_size + self.head_line + 1 -| height -| self.scroll_offset) % history_size;
                     const buffer_line = (view_line + l) % history_size;
-                    mmio_buffer[l * width + c] = if (((buffer_line < self.head_line or (buffer_line == self.head_line))) or (self.head_line < view_line and buffer_line >= view_line))
-                        switch (self.history_buffer[buffer_line][c]) {
-							0 => BLANK_CHAR,
+					vga.put_char(l, c, if (((buffer_line < self.head_line or (buffer_line == self.head_line))) or (self.head_line < view_line and buffer_line >= view_line))
+						switch (self.history_buffer[buffer_line][c]) {
+							0 => self.blank_char(),
 							else => |char| char
-                        }
-                    else
-						BLANK_CHAR;
+						}
+						else
+							self.blank_char());
                 }
             }
 			self.put_cursor();
