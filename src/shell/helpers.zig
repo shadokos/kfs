@@ -67,6 +67,15 @@ pub fn keymap() void {
 	});
 }
 
+
+pub fn theme() void {
+	print_helper(Help{
+		.name = "theme",
+		.description = "Set theme or list available themes",
+		.usage = "theme [<name>]"
+	});
+}
+
 pub fn reboot() void {
 	print_helper(Help{
 		.name = "reboot",

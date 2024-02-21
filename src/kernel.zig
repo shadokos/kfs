@@ -4,7 +4,7 @@ const shell = @import("./shell.zig").shell;
 const paging = @import("memory/paging.zig");
 
 pub fn main() void {
-    printk("hello, \x1b[32m{d}\x1b[37m\n", .{42});
+    printk("hello, \x1b[32m{d}\x1b[0m\n", .{42});
     printk("a = alloc(1)\n", .{});
     var a = @import("memory.zig").virtualPageAllocator.alloc_pages(1) catch @as(paging.VirtualPagePtr, @ptrFromInt(0));
     printk("a: 0x{x:0>8}\n", .{@intFromPtr(a)});
