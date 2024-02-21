@@ -41,6 +41,7 @@ export fn init(eax : u32, ebx : u32) callconv(.C) void {
 		multiboot_info = @ptrFromInt(paging.low_half + ebx);
 	} else @panic("No multiboot2 magic number");
 
+	@import("tty/tty.zig").init();
 	@import("gdt.zig").setup();
 	@import("memory.zig").init();
 

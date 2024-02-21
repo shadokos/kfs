@@ -23,8 +23,7 @@ return struct {
 		switch (n) {
 			@intFromEnum(tty.Attribute.reset) => {
 				terminal.attributes = 0;
-				terminal.set_font_color(tty.Color.white);
-				terminal.set_background_color(tty.Color.black);
+				terminal.reset_color();
 			},
 			@intFromEnum(tty.Attribute.bold)...@intFromEnum(tty.Attribute.hidden) => {terminal.attributes |= @as(u16, 1) << @intCast(n);},
 			30...37 => {terminal.set_font_color(
@@ -36,8 +35,8 @@ return struct {
 					34 => tty.Color.blue,
 					35 => tty.Color.magenta,
 					36 => tty.Color.cyan,
-					37 => tty.Color.white,
-					else => tty.Color.white
+					37 => tty.Color.light_grey,
+					else => tty.Color.light_grey
 				}
 			); },
 			40...47 => {terminal.set_background_color(
@@ -49,7 +48,7 @@ return struct {
 					44 => tty.Color.blue,
 					45 => tty.Color.magenta,
 					46 => tty.Color.cyan,
-					47 => tty.Color.white,
+					47 => tty.Color.light_grey,
 					else => tty.Color.black
 				}
 			); },
