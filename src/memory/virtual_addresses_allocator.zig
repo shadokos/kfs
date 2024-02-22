@@ -150,18 +150,18 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			// first check if there is other nodes to merge with this one
 			while (current_node) |n| {
 				if (n.avl[@intFromEnum(AVL_type.Address)].value >= address + size) {
-					if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value == address) {
-						// we found a node to merge on the left
-						left = n;
-					}
-					current_node = n.avl[@intFromEnum(AVL_type.Address)].l;
-				} else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value <= address) {
 					if (n.avl[@intFromEnum(AVL_type.Address)].value == address + size) {
 						// we found a node to merge on the right
 						right = n;
 					}
+					current_node = n.avl[@intFromEnum(AVL_type.Address)].l;
+				} else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value <= address) {
+					if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value == address) {
+					// we found a node to merge on the left
+						left = n;
+					}
 					current_node = n.avl[@intFromEnum(AVL_type.Address)].r;
-				} else @panic("free_space");
+				} else @panic("free_space"); // todo (return a double free error)
 			}
 
 			if (left) |l| {
