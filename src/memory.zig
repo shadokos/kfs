@@ -33,7 +33,7 @@ extern var stack_bottom : [*]u8;
 
 pub fn map_kernel() void {
 	const tables : * align(4096) [256][paging.page_table_size]paging.page_table_entry = @ptrCast((virtualPageAllocator.alloc_pages_opt(256, .{.type = .KernelSpace}) catch @panic("todo")));
-	defer virtualPageAllocator.unmap(@ptrCast(tables), 256);
+	defer virtualPageAllocator.unmap(@ptrCast(tables), 256 * paging.page_size);
 	for (0..254) |i| {
 		if (paging.page_table_table_ptr[768 + i].present) {
 			@memcpy(tables[i][0..], mapping.get_table_ptr(@intCast(768 + i))[0..]);
@@ -52,9 +52,9 @@ pub fn map_kernel() void {
 		virtualPageAllocator.unmap(mapped, paging.page_size);
 	}
 
-	const kernel_aligned_begin = ft.mem.alignForward(usize, @intFromPtr(boot.kernel_end), paging.page_size);
-	const kernel_aligned_end = ft.mem.alignForward(usize, @import("trampoline.zig").kernel_size + @intFromPtr(boot.kernel_end), paging.page_size);
-	virtualPageAllocator.unmap_raw(@ptrFromInt(paging.low_half + kernel_aligned_begin), kernel_aligned_end - kernel_aligned_begin);
+	const kernel_aligned_begin = ft.mem.alignForward(usize, @intFromPtr(boot.kernel_end) + paging.low_half, paging.page_size);
+	const kernel_aligned_end = ft.mem.alignForward(usize, @import("trampoline.zig").kernel_size + paging.low_half, paging.page_size);
+	virtualPageAllocator.unmap(@ptrFromInt(kernel_aligned_begin), kernel_aligned_end - kernel_aligned_begin);
 }
 
 pub fn init() void {
@@ -65,12 +65,11 @@ pub fn init() void {
 	pageFrameAllocator.init(total_space);
 
 	check_mem_availability();
-	// map_kernel();
-//
 
 	virtualPageAllocator.init(&pageFrameAllocator) catch @panic("cannot init virtualPageAllocator");
 
 	VirtualPageAllocatorType.global_init(&virtualPageAllocator) catch @panic("cannot global_init virtualPageAllocator");
+
 	map_kernel();
 }
 
