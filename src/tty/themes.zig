@@ -20,6 +20,10 @@ fn color_diff(l : vga.Color, r : vga.Color) usize {
 /// try to convert a gogh theme to a vga theme
 pub fn convert(theme : Theme) Theme {
 	var ret : Theme = theme;
+	ft.mem.swap(vga.Color, &ret.palette[1], &ret.palette[4]);
+	ft.mem.swap(vga.Color, &ret.palette[3], &ret.palette[6]);
+	ft.mem.swap(vga.Color, &ret.palette[8 + 1], &ret.palette[8 + 4]);
+	ft.mem.swap(vga.Color, &ret.palette[8 + 3], &ret.palette[8 + 6]);
 	for (ret.palette[0..16], 0..) |c, i| {
 		if (color_diff(theme.foreground, c) < color_diff(theme.foreground, theme.palette[ret.foreground_idx])) {
 			ret.foreground_idx = i;
