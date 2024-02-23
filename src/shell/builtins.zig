@@ -117,6 +117,31 @@ pub fn vm(_: [][]u8) CmdError!void {
 	@import("../memory.zig").virtualPageAllocator.print();
 }
 
+pub fn kmalloc(args: [][]u8) CmdError!void {
+	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+	const slab = @import("../memory/slab.zig");
+	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+	const obj : *usize = @alignCast(slab.kmalloc(nb) catch {
+		tty.printk("Failed to allocate {d} bytes\n", .{nb});
+		return CmdError.OtherError;
+	});
+	tty.printk("Allocated {d} bytes at 0x{x}\n", .{nb, @intFromPtr(obj)});
+}
+
+pub fn kfree(args: [][]u8) CmdError!void {
+	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+	const slab = @import("../memory/slab.zig");
+	const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+	if (!ft.mem.isAligned(addr, @sizeOf(usize))) return CmdError.OtherError;
+	slab.kfree(@ptrFromInt(addr));
+}
+
+pub fn slabinfo(_: [][]u8) CmdError!void {
+	const slab = @import("../memory/slab.zig");
+	slab.slabinfo();
+}
+
 pub fn multiboot_info(_: [][]u8) CmdError!void {
 	tty.printk("{*}\n", .{@import("../boot.zig").multiboot_info});
 	@import("../multiboot.zig").list_tags();
