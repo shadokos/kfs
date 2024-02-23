@@ -160,7 +160,7 @@ const Cache = struct {
 	slab_partial: ?*Slab = null,
 	slab_empty: ?*Slab = null,
 	allocator: *VirtualPageAllocatorType = undefined,
-	order: u5 = 0,
+	pages_per_slab: usize = 0,
 	name: [CACHE_NAME_LEN]u8 = undefined,
 	nb_slab: usize = 0,
 	nb_active_slab: usize = 0,
@@ -175,15 +175,15 @@ const Cache = struct {
 		order: u5
 	) void {
 		self.* = Cache{};
-		self.order = order;
 		self.allocator = allocator;
+		self.pages_per_slab = @as(usize, 1) << order;
 
 		// TODO: Check if the size is valid
 		// Align to usize
 		self.size_obj = ((obj_size - 1 + @sizeOf(usize)) / @sizeOf(usize)) * @sizeOf(usize);
 
 		// Calculate the available space for the slab ((page_size * 2^order) - sise of slab header)
-		const available = (PAGE_SIZE * (@as(usize, 1) << @truncate(order))) - @sizeOf(Self);
+		const available = (PAGE_SIZE * self.pages_per_slab) - @sizeOf(Self);
 
 		self.obj_per_slab = 0;
 		while (true) {
@@ -202,11 +202,11 @@ const Cache = struct {
 
 	pub fn grow(self: *Self, nb_slab: usize) Error!void {
 		for (0..nb_slab) |_| {
-			var obj = self.allocator.alloc_pages(@as(usize, 1) << self.order) catch return Error.AllocationFailed;
+			var obj = self.allocator.alloc_pages(self.pages_per_slab) catch return Error.AllocationFailed;
 			var slab: *Slab = @ptrCast(@alignCast(obj));
 			slab.init(self) catch return Error.AllocationFailed;
 
-			for (0..(@as(usize, 1) << self.order)) |i| {
+			for (0..self.pages_per_slab) |i| {
 				const page_addr = @as(usize, @intFromPtr(obj)) + (i * PAGE_SIZE);
 				tty.printk("init page: 0x{x}\n", .{page_addr});
 				var page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(page_addr));
@@ -294,14 +294,18 @@ const Cache = struct {
 
 		object_in_use += (nb_slab_full * self.obj_per_slab);
 
+		var name_len: usize = 1;
+		for (self.name) |c| { if (c == 0) break else name_len += 1; }
 		tty.printk("\x1b[31m{s}\x1b[0m: ", .{self.name});
-		tty.printk("{d} ", .{self.size_obj});
-		tty.printk("{d} ", .{self.obj_per_slab});
-		tty.printk("{d} ", .{object_in_use});
-		tty.printk("{d} ", .{self.nb_slab});
-		tty.printk("{d} ", .{nb_slab_empty});
-		tty.printk("{d} ", .{nb_slab_partial});
-		tty.printk("{d} ", .{nb_slab_full});
+		for (name_len..@max(name_len, CACHE_NAME_LEN)) |_| tty.printk(" ", .{});
+		tty.printk("{d: >5} ", .{self.size_obj});
+		tty.printk("{d: >5} ", .{self.obj_per_slab});
+		tty.printk("{d: >5} ", .{object_in_use});
+		tty.printk("{d: >5}  ", .{self.pages_per_slab});
+		tty.printk("{d: >5}  ", .{self.nb_slab});
+		tty.printk("{d: >5}  ", .{nb_slab_empty});
+		tty.printk("{d: >5} ", .{nb_slab_partial});
+		tty.printk("{d: >5} ", .{nb_slab_full});
 		tty.printk("\n", .{});
 	}
 };
@@ -338,14 +342,15 @@ pub fn global_cache_init(allocator: *VirtualPageAllocatorType) void {
 }
 
 pub fn slabinfo() void {
-	tty.printk("\x1b[36mName\x1b[0m, ", .{});
-	tty.printk("\x1b[36mo size\x1b[0m, ", .{});
-	tty.printk("\x1b[36mo/slab\x1b[0m, ", .{});
-	tty.printk("\x1b[36mo inuse\x1b[0m, ", .{});
-	tty.printk("\x1b[36mslabs\x1b[0m, ", .{});
-	tty.printk("\x1b[36mse\x1b[0m, ", .{});
-	tty.printk("\x1b[36msp\x1b[0m, ", .{});
-	tty.printk("\x1b[36msf\x1b[0m, ", .{});
+	tty.printk(" "**16, .{});
+	tty.printk(" \x1b[36msize\x1b[0m", .{});
+	tty.printk("   \x1b[36mo/s\x1b[0m", .{});
+	tty.printk("  \x1b[36mact.\x1b[0m", .{});
+	tty.printk("   \x1b[36mp/s\x1b[0m", .{});
+	tty.printk("  \x1b[36mslabs\x1b[0m", .{});
+	tty.printk("  \x1b[36mempty\x1b[0m", .{});
+	tty.printk("  \x1b[36mpart.\x1b[0m", .{});
+	tty.printk("  \x1b[36mfull\x1b[0m", .{});
 	tty.printk("\n", .{});
 	var node: ?*Cache = global_cache.next;
 	while (node) |n| : (node = n.next) n.debug();
