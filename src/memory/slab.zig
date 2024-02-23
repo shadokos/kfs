@@ -80,14 +80,14 @@ const Slab = struct {
 
 		// Initialize the bitmap just after the slab header
 		var hma: [*]usize = @ptrFromInt(@intFromPtr(self) + @sizeOf(Self));
-		self.bitmap.init(hma, self.header.cache.obj_per_slab);
+		self.bitmap.init(hma, cache.obj_per_slab);
 
 		// Initialize the objects, just after the bitmap
 		var start: usize = @intFromPtr(self) + @sizeOf(Self) + self.bitmap.get_size();
-		self.data = @as([*]?u16, @ptrFromInt(start))[0..self.header.cache.obj_per_slab * (self.header.cache.size_obj / @sizeOf(usize))];
+		self.data = @as([*]?u16, @ptrFromInt(start))[0..cache.obj_per_slab * (cache.size_obj / @sizeOf(usize))];
 
-		for (0..self.header.cache.obj_per_slab) |i| {
-			self.data[i * (self.header.cache.size_obj / @sizeOf(usize))] = if (i + 1 < self.header.cache.obj_per_slab) @truncate(i + 1) else null;
+		for (0..cache.obj_per_slab) |i| {
+			self.data[i * (cache.size_obj / @sizeOf(usize))] = if (i + 1 < cache.obj_per_slab) @truncate(i + 1) else null;
 		}
 	}
 
@@ -154,6 +154,8 @@ const Cache = struct {
 	const Self = @This();
 	const Error = error{ AllocationFailed };
 
+	next: ?*Cache = null,
+	prev: ?*Cache = null,
 	slab_full:	?*Slab = null,
 	slab_partial: ?*Slab = null,
 	slab_empty: ?*Slab = null,
@@ -192,8 +194,9 @@ const Cache = struct {
 		}
 		if (self.obj_per_slab == 0 or self.obj_per_slab >= (1 << 16)) return ;
 
+		const name_len = @min(name.len, CACHE_NAME_LEN);
 		@memset(self.name[0..CACHE_NAME_LEN], 0);
-		@memcpy(self.name[0..name.len], name[0..name.len]);
+		@memcpy(self.name[0..name_len], name[0..name_len]);
 		self.debug();
 	}
 
@@ -303,35 +306,35 @@ const Cache = struct {
 	}
 };
 
-var init = false;
 var global_cache: Cache = .{};
-
-var cache_entries: [14]*Cache = undefined;
+var kmalloc_caches: [14]*Cache = undefined;
 
 pub fn create_cache(name: []const u8, obj_size: usize, order: u5) Cache.Error!*Cache {
 	var cache: *Cache = @ptrCast(@alignCast(global_cache.alloc_one() catch |e| return e));
-	tty.printk("cache [{s}] allocated: 0x{x}\n", .{name, @intFromPtr(cache)});
 	cache.init(name, global_cache.allocator, obj_size, order);
+	cache.next = global_cache.next;
+	if (global_cache.next) |next| next.prev = cache;
+	global_cache.next = cache;
 	return cache;
 }
 
 pub fn global_cache_init(allocator: *VirtualPageAllocatorType) void {
 	tty.printk("global_cache_init\n", .{});
-	global_cache.init("Global Cache", allocator, @sizeOf(Cache), 0);
- 	cache_entries[0]  = create_cache("kmalloc_4",    4,     0) catch @panic("Failed to allocate kmalloc_4 cache");
-	cache_entries[1]  = create_cache("kmalloc_8",    8,     0) catch @panic("Failed to allocate kmalloc_8 cache");
-	cache_entries[2]  = create_cache("kmalloc_16",   16,    0) catch @panic("Failed to allocate kmalloc_16 cache");
-	cache_entries[3]  = create_cache("kmalloc_32",   32,    0) catch @panic("Failed to allocate kmalloc_32 cache");
-	cache_entries[4]  = create_cache("kmalloc_64",   64,    0) catch @panic("Failed to allocate kmalloc_64 cache");
-	cache_entries[5]  = create_cache("kmalloc_128",  128,   0) catch @panic("Failed to allocate kmalloc_128 cache");
-	cache_entries[6]  = create_cache("kmalloc_256",  256,   1) catch @panic("Failed to allocate kmalloc_256 cache");
-	cache_entries[7]  = create_cache("kmalloc_512",  512,   2) catch @panic("Failed to allocate kmalloc_512 cache");
-	cache_entries[8]  = create_cache("kmalloc_1k",   1024,  3) catch @panic("Failed to allocate kmalloc_1024 cache");
-	cache_entries[9]  = create_cache("kmalloc_2k",   2048,  3) catch @panic("Failed to allocate kmalloc_2048 cache");
-	cache_entries[10] = create_cache("kmalloc_4k",   4096,  3) catch @panic("Failed to allocate kmalloc_4096 cache");
-	cache_entries[11] = create_cache("kmalloc_8k",   8192,  4) catch @panic("Failed to allocate kmalloc_8192 cache");
-	cache_entries[12] = create_cache("kmalloc_16k",  16384, 5) catch @panic("Failed to allocate kmalloc_16384 cache");
-	cache_entries[13] = create_cache("kmalloc_32k",  32768, 5) catch @panic("Failed to allocate kmalloc_32768 cache");
+	global_cache.init("cache", allocator, @sizeOf(Cache), 0);
+ 	kmalloc_caches[0]  = create_cache("kmalloc_4",    4,     0) catch @panic("Failed to allocate kmalloc_4 cache");
+	kmalloc_caches[1]  = create_cache("kmalloc_8",    8,     0) catch @panic("Failed to allocate kmalloc_8 cache");
+	kmalloc_caches[2]  = create_cache("kmalloc_16",   16,    0) catch @panic("Failed to allocate kmalloc_16 cache");
+	kmalloc_caches[3]  = create_cache("kmalloc_32",   32,    0) catch @panic("Failed to allocate kmalloc_32 cache");
+	kmalloc_caches[4]  = create_cache("kmalloc_64",   64,    0) catch @panic("Failed to allocate kmalloc_64 cache");
+	kmalloc_caches[5]  = create_cache("kmalloc_128",  128,   0) catch @panic("Failed to allocate kmalloc_128 cache");
+	kmalloc_caches[6]  = create_cache("kmalloc_256",  256,   1) catch @panic("Failed to allocate kmalloc_256 cache");
+	kmalloc_caches[7]  = create_cache("kmalloc_512",  512,   2) catch @panic("Failed to allocate kmalloc_512 cache");
+	kmalloc_caches[8]  = create_cache("kmalloc_1k",   1024,  3) catch @panic("Failed to allocate kmalloc_1024 cache");
+	kmalloc_caches[9]  = create_cache("kmalloc_2k",   2048,  3) catch @panic("Failed to allocate kmalloc_2048 cache");
+	kmalloc_caches[10] = create_cache("kmalloc_4k",   4096,  3) catch @panic("Failed to allocate kmalloc_4096 cache");
+	kmalloc_caches[11] = create_cache("kmalloc_8k",   8192,  4) catch @panic("Failed to allocate kmalloc_8192 cache");
+	kmalloc_caches[12] = create_cache("kmalloc_16k",  16384, 5) catch @panic("Failed to allocate kmalloc_16384 cache");
+	kmalloc_caches[13] = create_cache("kmalloc_32k",  32768, 5) catch @panic("Failed to allocate kmalloc_32768 cache");
 }
 
 pub fn slabinfo() void {
@@ -344,26 +347,27 @@ pub fn slabinfo() void {
 	tty.printk("\x1b[36msp\x1b[0m, ", .{});
 	tty.printk("\x1b[36msf\x1b[0m, ", .{});
 	tty.printk("\n", .{});
+	var node: ?*Cache = global_cache.next;
+	while (node) |n| : (node = n.next) n.debug();
 	global_cache.debug();
-	for (cache_entries) |c| c.debug();
 }
 
 pub fn kmalloc(size: usize) Cache.Error!* align(1) usize {
 	return switch(size) {
-		0...4 => cache_entries[0].alloc_one() catch Cache.Error.AllocationFailed,
-		5...8 => cache_entries[1].alloc_one() catch Cache.Error.AllocationFailed,
-		9...16 => cache_entries[2].alloc_one() catch Cache.Error.AllocationFailed,
-		17...32 => cache_entries[3].alloc_one() catch Cache.Error.AllocationFailed,
-		33...64 => cache_entries[4].alloc_one() catch Cache.Error.AllocationFailed,
-		65...128 => cache_entries[5].alloc_one() catch Cache.Error.AllocationFailed,
-		129...256 => cache_entries[6].alloc_one() catch Cache.Error.AllocationFailed,
-		257...512 => cache_entries[7].alloc_one() catch Cache.Error.AllocationFailed,
-		513...1024 => cache_entries[8].alloc_one() catch Cache.Error.AllocationFailed,
-		1025...2048 => cache_entries[9].alloc_one() catch Cache.Error.AllocationFailed,
-		2049...4096 => cache_entries[10].alloc_one() catch Cache.Error.AllocationFailed,
-		4097...8192 => cache_entries[11].alloc_one() catch Cache.Error.AllocationFailed,
-		8193...16384 => cache_entries[12].alloc_one() catch Cache.Error.AllocationFailed,
-		16385...32768 => cache_entries[13].alloc_one() catch Cache.Error.AllocationFailed,
+		0...4 => kmalloc_caches[0].alloc_one() catch Cache.Error.AllocationFailed,
+		5...8 => kmalloc_caches[1].alloc_one() catch Cache.Error.AllocationFailed,
+		9...16 => kmalloc_caches[2].alloc_one() catch Cache.Error.AllocationFailed,
+		17...32 => kmalloc_caches[3].alloc_one() catch Cache.Error.AllocationFailed,
+		33...64 => kmalloc_caches[4].alloc_one() catch Cache.Error.AllocationFailed,
+		65...128 => kmalloc_caches[5].alloc_one() catch Cache.Error.AllocationFailed,
+		129...256 => kmalloc_caches[6].alloc_one() catch Cache.Error.AllocationFailed,
+		257...512 => kmalloc_caches[7].alloc_one() catch Cache.Error.AllocationFailed,
+		513...1024 => kmalloc_caches[8].alloc_one() catch Cache.Error.AllocationFailed,
+		1025...2048 => kmalloc_caches[9].alloc_one() catch Cache.Error.AllocationFailed,
+		2049...4096 => kmalloc_caches[10].alloc_one() catch Cache.Error.AllocationFailed,
+		4097...8192 => kmalloc_caches[11].alloc_one() catch Cache.Error.AllocationFailed,
+		8193...16384 => kmalloc_caches[12].alloc_one() catch Cache.Error.AllocationFailed,
+		16385...32768 => kmalloc_caches[13].alloc_one() catch Cache.Error.AllocationFailed,
 		else => Cache.Error.AllocationFailed,
 	};
 }
