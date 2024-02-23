@@ -38,6 +38,7 @@ SRC = linker.ld \
 	memory/early_virtual_addresses_allocator.zig \
 	memory/virtual_page_allocator.zig \
 	memory/mapping.zig \
+	memory/slab.zig \
 	kernel.zig \
 	multiboot.zig \
 	tty/tty.zig \

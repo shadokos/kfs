@@ -60,6 +60,7 @@ export fn init(eax : u32, ebx : u32) callconv(.C) void {
 
 	@import("memory.zig").init();
 
+	@import("memory/slab.zig").global_cache_init(&@import("memory.zig").virtualPageAllocator);
 	// @import("gdt.zig").setup();
 
 	multiboot_info = multiboot.map(ebx);
