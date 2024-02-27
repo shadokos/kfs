@@ -287,8 +287,8 @@ pub fn init() void {
 	// if (available_ports.p2 == 1)
 	// 	enable_second_port();
 	if (available_ports.p1 == 1) {
-		enable_first_port();
 		enable_translation();
+		enable_first_port();
 	}
 	log("Controller initialized", .{}, 0);
 }
