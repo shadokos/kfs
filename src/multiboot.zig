@@ -33,7 +33,8 @@ fn get_header_type(comptime types : []const u32) type {
 pub const header_type = get_header_type(([_]u32{
 	multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP,
 	multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD,
-	multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW
+	multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW,
+	multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS
 })[0..]);
 
 pub fn get_header() header_type {
@@ -43,6 +44,59 @@ pub fn get_header() header_type {
 
 	return ret;
 }
+
+pub const section_entry = packed struct {
+	sh_name: u32,
+	sh_type: ShType,
+	sh_flags: ShFlags,
+	sh_addr: u32,
+	sh_offset: u32,
+	sh_size: u32,
+	sh_link: u32,
+	sh_info: u32,
+	sh_addralign: u32,
+	sh_entsize: u32,
+
+	const ShType = enum(u32) {
+		SHT_NULL = 0x0,
+		SHT_PROGBITS = 0x1,
+		SHT_SYMTAB = 0x2,
+		SHT_STRTAB = 0x3,
+		SHT_RELA = 0x4,
+		SHT_HASH = 0x5,
+		SHT_DYNAMIC = 0x6,
+		SHT_NOTE = 0x7,
+		SHT_NOBITS = 0x8,
+		SHT_REL = 0x9,
+		SHT_SHLIB = 0x0A,
+		SHT_DYNSYM = 0x0B,
+		SHT_INIT_ARRAY = 0x0E,
+		SHT_FINI_ARRAY = 0x0F,
+		SHT_PREINIT_ARRAY = 0x10,
+		SHT_GROUP = 0x11,
+		SHT_SYMTAB_SHNDX = 0x12,
+		SHT_NUM = 0x13,
+		SHT_LOOS = 0x60000000,
+	};
+
+	const ShFlags = packed struct(u32) {
+		SHF_WRITE : bool,
+		SHF_ALLOC : bool,
+		SHF_EXECINSTR : bool,
+		SHF_MERGE : bool,
+		SHF_STRINGS : bool,
+		SHF_INFO_LINK : bool,
+		SHF_LINK_ORDER : bool,
+		SHF_OS_NONCONFORMING : bool,
+		SHF_GROUP : bool,
+		SHF_TLS : bool,
+		padding : u22,
+		// SHF_MASKOS : bool,
+		// SHF_MASKPROC : bool,
+		// SHF_MASKPROC : bool,
+		// SHF_EXCLUDE : bool,
+	};
+};
 
 pub const mmap_entry = extern struct {
 	base : u64,
@@ -59,6 +113,20 @@ pub const mmap_it = extern struct {
 	pub fn next(self : *@This()) ?*mmap_entry {
 		const ret : *mmap_entry = @ptrFromInt(@intFromPtr(&self.base.first_entry) + self.base.entry_size * self.index);
 		if (@intFromPtr(ret) >= @intFromPtr(self.base) + self.base.size)
+			return null;
+		self.index += 1;
+		return ret;
+	}
+};
+
+pub const section_hdr_it = extern struct {
+	base : *tag_type,
+	index : usize = 0,
+
+	const tag_type = get_tag_type(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS);
+	pub fn next(self : *@This()) ?*section_entry {
+		const ret : *section_entry = @ptrFromInt(@intFromPtr(self.base) + @sizeOf(tag_type) + self.base.entsize * self.index);
+		if (self.base.entsize == 0 or @intFromPtr(ret) >= @intFromPtr(self.base) + self.base.size)
 			return null;
 		self.index += 1;
 		return ret;
@@ -113,12 +181,9 @@ fn get_tag_type(comptime n : comptime_int) type {
 			first_color_info: u8, // todo
 		},
 		extern struct { // MULTIBOOT_TAG_TYPE_ELF_SECTIONS
-			size : u32,
-			num : u16,
-			entsize : u16,
-			shndx : u16,
-			reserved : u16,
-			first_section : u8, // todo
+			num : u32,
+			entsize : u32,
+			shndx : u32,
 		},
 		extern struct { // MULTIBOOT_TAG_TYPE_APM
 			version : u16,

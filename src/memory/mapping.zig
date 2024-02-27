@@ -47,7 +47,7 @@ pub fn MapperT(comptime PageFrameAllocatorType : type) type {
 			self.page_directory[table] = .{
 				.address_fragment = @intCast(table_physical_ptr >> paging.page_bits), // todo: secure the cast
 				.present = true,
-				.owner = .User,
+				.owner = if (table >= (paging.low_half >> 22)) .Supervisor else .User,
 				.writable = true,
 			};
 
@@ -112,6 +112,18 @@ pub fn MapperT(comptime PageFrameAllocatorType : type) type {
 			}
 		}
 
+		pub fn set_rights(self : *Self, virtual: paging.VirtualPagePtr, len : usize, writable : bool) void {
+			for (0..len) |i| {
+				const virtualStruct : paging.VirtualPtrStruct = @bitCast(@intFromPtr(virtual) + i * paging.page_size);
+				if (!self.page_directory[virtualStruct.dir_index].present) {
+					@panic("invalid unmap");
+					// return; // todo
+				}
+				const table = get_table_ptr(virtualStruct.dir_index);
+				table[virtualStruct.table_index].writable = writable;
+			}
+		}
+
 		pub fn activate(self : *Self) void {
 			asm volatile (
              \\ mov %eax, %cr3
@@ -125,6 +137,7 @@ pub fn MapperT(comptime PageFrameAllocatorType : type) type {
     		self.page_directory[paging.page_dir >> 22] = .{
 				.present = true,
 				.writable = true,
+				.owner = .Supervisor,
     			.address_fragment = @intCast(get_physical_ptr(@ptrCast(&self.page_directory)) >> 12)
     		};
     		self.activate();

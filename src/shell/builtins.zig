@@ -54,6 +54,10 @@ pub fn mmap(_: [][]u8) CmdError!void {
 	utils.print_mmap();
 }
 
+pub fn elf(_: [][]u8) CmdError!void {
+	utils.print_elf();
+}
+
 pub fn keymap(args: [][]u8) CmdError!void {
 	const km = @import("../tty/keyboard/keymap.zig");
 	switch(args.len) {
@@ -111,4 +115,9 @@ pub fn reboot(_: [][]u8) CmdError!void {
 
 pub fn vm(_: [][]u8) CmdError!void {
 	@import("../memory.zig").virtualPageAllocator.print();
+}
+
+pub fn multiboot_info(_: [][]u8) CmdError!void {
+	tty.printk("{*}\n", .{@import("../boot.zig").multiboot_info});
+	@import("../multiboot.zig").list_tags();
 }
