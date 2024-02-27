@@ -50,7 +50,7 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 		pub fn global_init(_pageAllocator : anytype) Error!void {
 			kernelAddressesAllocator = .{};
 			try kernelAddressesAllocator.init(_pageAllocator, paging.low_half / paging.page_size, paging.kernel_virtual_space_size / paging.page_size);
-			try kernelAddressesAllocator.set_used(ft.math.divCeil(usize, paging.low_half, paging.page_size) catch unreachable, ft.math.divCeil(usize, @import("../trampoline.zig").kernel_size, paging.page_size) catch unreachable);
+			try kernelAddressesAllocator.set_used(paging.low_half / paging.page_size, ft.math.divCeil(usize, @import("../trampoline.zig").kernel_size, paging.page_size) catch unreachable);
 		}
 
 		pub fn alloc_virtual_space(self : *Self, npages : usize, allocType : AllocType) (PageFrameAllocatorType.Error || VirtualAddressesAllocatorType.Error)!paging.VirtualPagePtr {

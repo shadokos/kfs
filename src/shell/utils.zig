@@ -194,6 +194,18 @@ pub fn print_mmap() void {
 	}
 }
 
+pub fn print_elf() void {
+	const multiboot = @import("../multiboot.zig");
+	const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
+	if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS)) |t| {
+		var iter = multiboot.section_hdr_it{.base = t};
+		tty.printk("{s: <32} {s: <8} {s: <8} {s: <8} {s: <8}\n", .{"flags", "virtual", "physical", "size", "type"});
+		while (iter.next()) |e| {
+			tty.printk("{b:0>32} {x:0>8} {x:0>8} {x:0>8} {}\n", .{@as(u32, @bitCast(e.sh_flags)), e.sh_addr, e.sh_offset, e.sh_size, @intFromEnum(e.sh_type)});
+		}
+	}
+}
+
 pub fn show_palette() void {
 	for (0..8) |i| {
 		tty.printk("\x1b[{d}m" ++ "\xdb" ** 10 ++ "\x1b[0m", .{30 + i});
