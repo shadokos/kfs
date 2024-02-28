@@ -2,52 +2,8 @@ const tty = @import("../tty/tty.zig"); // TODO: Remove it
 const VirtualPageAllocatorType = @import("../memory.zig").VirtualPageAllocatorType;
 const PAGE_SIZE: usize = 4096;
 const CACHE_NAME_LEN = 15;
-
-const Bit = enum(u1) {
-	Taken,
-	Free,
-};
-
-const BitMap = struct {
-	const Self = @This();
-
-	nb_obj: usize = 0,
-	bits: []usize = undefined,
-
-	pub const Error = error{ OutOfBounds };
-
-	pub fn init(self: *Self, addr: [*]usize, nb_obj: usize) void {
-		var len = (nb_obj + (8 * @sizeOf(usize)) - 1) / (8 * @sizeOf(usize));
-
-		self.* = BitMap{};
-		self.nb_obj = nb_obj;
-		self.bits = addr[0..len];
-		for (self.bits) |*b| b.* = 0;
-	}
-
-	pub fn get_size(self: *Self) usize {
-		return self.bits.len * @sizeOf(usize);
-	}
-
-	pub fn set(self: *Self, index: usize, value: Bit) !void {
-		if (index >= self.nb_obj) return Error.OutOfBounds;
-
-		const i = index / (8 * @sizeOf(usize));
-		const mask = @as(usize, 1) << @truncate(index % (8*@sizeOf(usize)));
-		switch (value) {
-			.Taken => self.bits[i] |= mask,
-			.Free  => self.bits[i] &= ~mask,
-		}
-	}
-
-	pub fn get(self: *Self, index: usize) !Bit {
-		if (index >= self.nb_obj) return Error.OutOfBounds;
-
-		const i = index / (8 * @sizeOf(usize));
-		const bit = index % (8*@sizeOf(usize));
-		return  if ((self.bits[i] >> @truncate(bit)) & 1 == 1) .Taken else .Free;
-	}
-};
+const BitMap = @import("bitmap.zig").BitMap;
+const Bit = @import("bitmap.zig").Bit;
 
 const SlabState = enum {
 	Empty,
@@ -187,8 +143,8 @@ const Cache = struct {
 
 		self.obj_per_slab = 0;
 		while (true) {
-			const bitmap_size = (((self.obj_per_slab + 1) - 1 + (8 * @sizeOf(usize))) / (8 * @sizeOf(usize))) * @sizeOf(usize);
-			const total_size = bitmap_size + ((self.obj_per_slab+1) * self.size_obj);
+			const bitmap_size = BitMap.compute_size(self.obj_per_slab + 1);
+			const total_size = bitmap_size + ((self.obj_per_slab + 1) * self.size_obj);
 			if (total_size > available) break;
 			self.obj_per_slab += 1;
 		}
