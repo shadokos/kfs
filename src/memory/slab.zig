@@ -1,3 +1,4 @@
+const ft = @import("../ft/ft.zig");
 const tty = @import("../tty/tty.zig"); // TODO: Remove it
 const VirtualPageAllocatorType = @import("../memory.zig").VirtualPageAllocatorType;
 const PAGE_SIZE: usize = 4096;
@@ -135,8 +136,8 @@ const Cache = struct {
 		self.pages_per_slab = @as(usize, 1) << order;
 
 		// TODO: Check if the size is valid
-		// Align to usize
-		self.size_obj = ((obj_size - 1 + @sizeOf(usize)) / @sizeOf(usize)) * @sizeOf(usize);
+		// Align object size to usize
+		self.size_obj = ft.mem.alignForward(usize, obj_size, @sizeOf(usize));
 
 		// Calculate the available space for the slab ((page_size * 2^order) - sise of slab header)
 		const available = (PAGE_SIZE * self.pages_per_slab) - @sizeOf(Self);
