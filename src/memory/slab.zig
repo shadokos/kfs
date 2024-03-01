@@ -37,7 +37,7 @@ pub const Slab = struct {
 
 		// Initialize the bitmap just after the slab header
 		var hma: [*]usize = @ptrFromInt(@intFromPtr(self) + @sizeOf(Self));
-		self.bitmap.init(hma, cache.obj_per_slab);
+		self.bitmap = BitMap.init(hma, cache.obj_per_slab);
 
 		// Initialize the objects, just after the bitmap
 		var start: usize = @intFromPtr(self) + @sizeOf(Self) + self.bitmap.get_size();
