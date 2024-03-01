@@ -6,13 +6,13 @@ const CACHE_NAME_LEN = 15;
 const BitMap = @import("bitmap.zig").BitMap;
 const Bit = @import("bitmap.zig").Bit;
 
-const SlabState = enum {
+pub const SlabState = enum {
 	Empty,
 	Partial,
 	Full,
 };
 
-const SlabHeader = struct {
+pub const SlabHeader = struct {
 	cache: *Cache = undefined,
 	next: ?*Slab = null,
 	prev: ?*Slab = null,
@@ -20,7 +20,7 @@ const SlabHeader = struct {
 	next_free: ?u16 = 0,
 };
 
-const Slab = struct {
+pub const Slab = struct {
 	const Self = @This();
 
 	pub const Error = error{ SlabFull, SlabCorrupted, OutOfBounds, InvalidOrder, InvalidSize };
@@ -107,7 +107,7 @@ const Slab = struct {
 	}
 };
 
-const Cache = struct {
+pub const Cache = struct {
 	const Self = @This();
 	const Error = error{ AllocationFailed };
 
@@ -178,6 +178,15 @@ const Cache = struct {
 				self.slab_empty = slab;
 			}
 			self.nb_slab += 1;
+		}
+	}
+
+	pub fn shrink(self: *Self) void {
+		while (self.slab_empty) |slab| {
+			self.slab_empty = slab.header.next;
+			self.allocator.free_pages(@ptrFromInt(@intFromPtr(slab)), self.pages_per_slab);
+			self.nb_slab -= 1;
+			tty.printk("free slab: 0x{x}\n", .{@intFromPtr(slab)});
 		}
 	}
 
@@ -267,7 +276,7 @@ const Cache = struct {
 	}
 };
 
-var global_cache: Cache = .{};
+pub var global_cache: Cache = .{};
 var kmalloc_caches: [14]*Cache = undefined;
 
 pub fn create_cache(name: []const u8, obj_size: usize, order: u5) Cache.Error!*Cache {
