@@ -25,7 +25,7 @@ pub const BitMap = struct {
 
 	// return the number of usize needed to store nb_obj bits
 	pub fn compute_len(nb_obj: usize) usize {
-		return ft.mem.alignForward(usize, nb_obj, nbits) / nbits;
+		return ft.math.divCeil(usize, nb_obj, nbits) catch unreachable;
 	}
 
 	// return the number of bytes needed to store nb_obj bits
