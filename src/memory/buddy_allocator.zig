@@ -2,6 +2,7 @@
 const ft = @import("../ft/ft.zig");
 const tty = @import("../tty/tty.zig");
 const paging = @import("paging.zig");
+const bitmap = @import("bitmap.zig");
 const printk = @import("../tty/tty.zig").printk;
 const multiboot_h = @cImport({ @cInclude("multiboot.h"); });
 
@@ -23,7 +24,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 		mem_map : []page_frame_descriptor = ([0]page_frame_descriptor{})[0..],
 
 		/// see https://wiki.osdev.org/Page_Frame_Allocation
-		bit_map : []Bit = ([0]Bit{})[0..],
+		bit_map : bitmap.BitMap = undefined,
 
 		/// see https://wiki.osdev.org/Page_Frame_Allocation
 		free_lists : [max_order + 1] ?*page_frame_descriptor = .{null} ** (max_order + 1),
@@ -32,10 +33,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 		total_pages : usize = 0,
 
 		/// represent a bit in the bit map
-		const Bit = enum(u1) {
-			Taken,
-			Free,
-		};
+		const Bit = bitmap.Bit;
 
 		/// errors that can be returned by allocate
 		pub const Error = error{NotEnoughSpace};
@@ -52,12 +50,23 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			return ((@intFromPtr(f) - @intFromPtr(&self.mem_map[0])) / @sizeOf(page_frame_descriptor));
 		}
 
-		/// return a pointer to the bit corresponding to the order order of the page frame identified by page_index
-		inline fn bit(self : Self, page_index : idx_t, order : order_t) *Bit {
+		/// set the bit corresponding to the order order of the page frame identified by page_index
+		fn set_bit(self : *Self, page_index : idx_t, order : order_t, bit : Bit) void {
 			const t : u64 = self.total_pages;
 			const o : order_t = order;
 			const m : order_t = max_order;
-			return &self.bit_map[@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o)))];
+			self.bit_map.set(@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o))), bit) catch unreachable;
+		}
+
+		/// return a the bit corresponding to the order order of the page frame identified by page_index
+		fn get_bit(self : *Self, page_index : idx_t, order : order_t) Bit {
+			const t : u64 = self.total_pages;
+			const o : order_t = order;
+			const m : order_t = max_order;
+			// self.bit_map.get(@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o)))) catch unreachable,
+			// @intFromEnum(self.bit_map.get(@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o)))) catch unreachable)
+			// });
+			return self.bit_map.get(@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o)))) catch unreachable;
 		}
 
 		/// return a pointer to the bit corresponding to the order order of the buddy of the page frame identified by page_index
@@ -103,11 +112,11 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			if (self.free_lists[order + 1]) |bigger| {
 				const idx = self.idx_from_frame(bigger);
 				self.lst_remove(order + 1, idx);
-				self.bit(idx, order + 1).* = .Taken;
+				self.set_bit(idx, order + 1, .Taken);
 				self.lst_add(order, idx);
-				self.bit(idx, order).* = .Free;
+				self.set_bit(idx, order, .Free);
 				self.lst_add(order, buddy(idx, order));
-				self.bit(buddy(idx, order), order).* = .Free;
+				self.set_bit(buddy(idx, order), order, .Free);
 			} else {
 				return Error.NotEnoughSpace;
 			}
@@ -119,7 +128,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			if (self.free_lists[order]) |p| {
 				const idx = self.idx_from_frame(p);
 				self.lst_remove(order, idx);
-				self.bit(idx, order).* = .Taken;
+				self.set_bit(idx, order, .Taken);
 				p.order = order;
 				return idx;
 			} else unreachable;
@@ -133,11 +142,11 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			var buddy_idx : idx_t = buddy(page_index, order);
 
 
-			if (self.bit(page_idx, order).* == .Free)
+			if (self.get_bit(page_idx, order) == .Free)
 				@panic("double free in free_page_block");
 
-			while (self.bit(buddy_idx, order).* == .Free and order < max_order) : (buddy_idx = buddy(page_index, order)) {
-				self.bit(buddy_idx, order).* = .Taken;
+			while (self.get_bit(buddy_idx, order) == .Free and order < max_order) : (buddy_idx = buddy(page_index, order)) {
+				self.set_bit(buddy_idx, order, .Taken);
 				if (base_buddy(page_idx, order) == page_idx) {
 					self.lst_remove(order, buddy_idx);
 				} else {
@@ -146,7 +155,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 				}
 				order += 1;
 			} else {
-				self.bit(page_idx, order).* = .Free;
+				self.set_bit(page_idx, order, .Free);
 				self.lst_add(order, page_idx);
 			}
 		}
@@ -211,7 +220,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			return bitmap_size(pages) + pages * @sizeOf(page_frame_descriptor);
 		}
 
-		/// init an instance (if the underlying allocator is set)
+		/// init an instance (if the underlying allocator is set)self.bit_map
 		pub fn init(self : *Self, _total_pages : idx_t) void {
 			self.total_pages = _total_pages;
 
@@ -220,8 +229,9 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			if (self.allocator) |a| {
 				self.mem_map = a.alloc(page_frame_descriptor, self.total_pages) catch @panic("not enough space to allocate mem_map");
 				@memset(self.mem_map, .{.flags = .{.available = false}});
-				self.bit_map = a.alloc(Bit, bitmap_size(self.total_pages)) catch @panic("not enough space to allocate bitmap");
-				@memset(self.bit_map, .Taken);
+				const size = bitmap_size(self.total_pages);
+				self.bit_map = bitmap.BitMap.init(@ptrCast(a.alloc(usize, bitmap.BitMap.compute_len(size)) catch @panic("not enough space to allocate bitmap")), size);
+				for (0..size) |i| self.bit_map.set(i, .Taken) catch unreachable;
 			}
 			else @panic("no allocator!");
 		}
@@ -234,7 +244,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 				for (0..max_order + 1) |o| {
 					for (0..tty.width) |c| {
 						if (c + line < to and (o == 0 or ((line + c) % (@as(usize, 1) << @intCast(o)) == 0))) {
-							printk("{b}", .{@intFromEnum(self.bit(line + c, @intCast(o)).*)});
+							printk("{b}", .{@intFromEnum(self.get_bit(line + c, @intCast(o)))});
 						} else {
 							printk(" ", .{});
 						}
