@@ -15,8 +15,7 @@ pub const page_flag = packed struct {
 pub const page_frame_descriptor = struct {
 	flags : page_flag,
 	next : ?*page_frame_descriptor = null,
-	prev : ?*page_frame_descriptor = null,
-	order : u5 = 0,
+	prev : ?*page_frame_descriptor = null
 };
 
 pub const page_table_size = 1024;
