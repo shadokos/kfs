@@ -13,14 +13,14 @@ pub fn main() void {
     printk("b: 0x{x:0>8}\n", .{@intFromPtr(b)});
 
     printk("free(a)\n", .{});
-    @import("memory.zig").virtualPageAllocator.free_pages(a, 1);
+    @import("memory.zig").virtualPageAllocator.free_pages(a, 1) catch unreachable;
     printk("c = alloc(1)\n", .{});
     var c = @import("memory.zig").virtualPageAllocator.alloc_pages(1) catch @as(paging.VirtualPagePtr, @ptrFromInt(0));
     printk("c: 0x{x:0>8}\n", .{@intFromPtr(c)});
     printk("free(b)\n", .{});
-    @import("memory.zig").virtualPageAllocator.free_pages(b, 16);
+    @import("memory.zig").virtualPageAllocator.free_pages(b, 16) catch unreachable;
     printk("free(c)\n", .{});
-    @import("memory.zig").virtualPageAllocator.free_pages(c, 1);
+    @import("memory.zig").virtualPageAllocator.free_pages(c, 1) catch unreachable;
 
     printk("a = alloc(1)\n", .{});
     a = @import("memory.zig").virtualPageAllocator.alloc_pages(1) catch @as(paging.VirtualPagePtr, @ptrFromInt(0));
@@ -30,7 +30,7 @@ pub fn main() void {
     printk("b: 0x{x:0>8}\n", .{@intFromPtr(b)});
 
     printk("free(a)\n", .{});
-    @import("memory.zig").virtualPageAllocator.free_pages(a, 1);
+    @import("memory.zig").virtualPageAllocator.free_pages(a, 1) catch unreachable;
     printk("c = alloc(1, kernelspace)\n", .{});
     c = @import("memory.zig").virtualPageAllocator.alloc_pages_opt(1, .{.type = .KernelSpace}) catch @as(paging.VirtualPagePtr, @ptrFromInt(0));
     printk("c: 0x{x:0>8}\n", .{@intFromPtr(c)});
@@ -38,7 +38,7 @@ pub fn main() void {
     a = @import("memory.zig").virtualPageAllocator.alloc_pages(1) catch @as(paging.VirtualPagePtr, @ptrFromInt(0));
     printk("a: 0x{x:0>8}\n", .{@intFromPtr(a)});
     printk("free(c)\n", .{});
-    @import("memory.zig").virtualPageAllocator.free_pages(c, 1);
+    @import("memory.zig").virtualPageAllocator.free_pages(c, 1) catch unreachable;
     printk("c = alloc(1, kernelspace)\n", .{});
     c = @import("memory.zig").virtualPageAllocator.alloc_pages_opt(1, .{.type = .KernelSpace}) catch @as(paging.VirtualPagePtr, @ptrFromInt(0));
     printk("c: 0x{x:0>8}\n", .{@intFromPtr(c)});
