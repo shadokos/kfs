@@ -50,7 +50,7 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 		pub fn global_init(_pageAllocator : anytype) Error!void {
 			kernelAddressesAllocator = .{};
 			try kernelAddressesAllocator.init(_pageAllocator, paging.low_half / paging.page_size, paging.kernel_virtual_space_size / paging.page_size);
-			try kernelAddressesAllocator.set_used(paging.low_half / paging.page_size, ft.math.divCeil(usize, @import("../trampoline.zig").kernel_size, paging.page_size) catch unreachable);
+			try kernelAddressesAllocator.set_used(ft.math.divCeil(usize, paging.low_half, paging.page_size) catch unreachable, ft.math.divCeil(usize, @import("../trampoline.zig").kernel_size, paging.page_size) catch unreachable);
 		}
 
 		pub fn alloc_virtual_space(self : *Self, npages : usize, allocType : AllocType) (PageFrameAllocatorType.Error || VirtualAddressesAllocatorType.Error)!paging.VirtualPagePtr {
@@ -118,7 +118,7 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 			errdefer self.free_virtual_space(virtual, n) catch unreachable;
 
 			const physical = try self.pageFrameAllocator.alloc_pages(n);
-			errdefer self.pageFrameAllocator.free_pages(physical);
+			errdefer self.pageFrameAllocator.free_pages(physical, n) catch unreachable;
 
 			// printk(", physical {x}\n", .{physical});
 			try self.mapper.map(virtual, physical, n * paging.page_size);
@@ -129,9 +129,9 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 			return self.alloc_pages_opt(n, .{});
 		}
 
-		pub fn free_pages(self : *Self, address : paging.VirtualPagePtr, n : usize) void {
+		pub fn free_pages(self : *Self, address : paging.VirtualPagePtr, n : usize) !void {
 			const physical = mapping.get_physical_ptr(address);
-			self.pageFrameAllocator.free_pages(physical);
+			try self.pageFrameAllocator.free_pages(physical, n);
 			// self.unmap(@ptrCast(address), n);
 			self.mapper.unmap(@ptrCast(@alignCast(address)), n);
 			self.free_virtual_space(address, n) catch @panic("double free"); // todo

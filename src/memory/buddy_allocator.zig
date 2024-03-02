@@ -122,39 +122,28 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			}
 		}
 
-		/// allocate one page of order order
-		pub fn alloc_page_block(self : *Self, order : order_t) Error!idx_t {
-			try self.break_for(order);
-			if (self.free_lists[order]) |p| {
-				const idx = self.idx_from_frame(p);
-				self.lst_remove(order, idx);
-				self.set_bit(idx, order, .Taken);
-				p.order = order;
-				return idx;
-			} else unreachable;
-		}
-
 		/// free one page previously allocated with alloc_page_block on the same allocator instance
-		pub fn free_page_block(self : *Self, page_index : idx_t) void {
-			var frame : *page_frame_descriptor = self.frame_from_idx(page_index);
-			var order : order_t = frame.order;
+		pub fn free_page(self : *Self, page_index : idx_t) !void {
+			var order : order_t = 0;
 			var page_idx : idx_t = page_index;
 			var buddy_idx : idx_t = buddy(page_index, order);
 
 
-			if (self.get_bit(page_idx, order) == .Free)
-				@panic("double free in free_page_block");
+			// double free detection, do we want that in release mode?
+			for (0..max_order) |o| {
+				if (self.get_bit(page_idx, @truncate(o)) == .Free) {
+					@panic("double free in free_page_block"); // todo error
+				}
+			}
 
 			while (self.get_bit(buddy_idx, order) == .Free and order < max_order) : (buddy_idx = buddy(page_index, order)) {
 				self.set_bit(buddy_idx, order, .Taken);
-				if (base_buddy(page_idx, order) == page_idx) {
-					self.lst_remove(order, buddy_idx);
-				} else {
-					self.lst_remove(order, page_idx);
+				self.lst_remove(order, buddy_idx);
+				if (base_buddy(page_idx, order) == buddy_idx) {
 					page_idx = buddy_idx;
 				}
 				order += 1;
-			} else {
+			} else if (self.get_bit(buddy_idx, order) == .Taken) {
 				self.set_bit(page_idx, order, .Free);
 				self.lst_add(order, page_idx);
 			}
@@ -166,19 +155,32 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 				order += 1;
 			}
 
-			return self.alloc_page_block(order);
-			// todo: non power of 2 sizes
+			try self.break_for(order);
+			if (self.free_lists[order]) |p| {
+				const idx = self.idx_from_frame(p);
+				self.lst_remove(order, idx);
+				self.set_bit(idx, order, .Taken);
+
+				const actual_size = @as(usize, 1) << order;
+				if (n != actual_size) {
+					for ((idx + n)..(idx + actual_size)) |i| {
+						self.free_page(i) catch unreachable;
+					}
+				}
+				return idx;
+			} else unreachable;
 		}
 
 		pub fn alloc_pages_hint(self : *Self, hint : idx_t, n : usize) Error!idx_t {
-			_ = hint;
+			_ = hint; // todo: hints
 			return self.alloc_pages(n);
-			// todo: non power of 2 sizes
 		}
 
-		pub fn free_pages(self : *Self, first : idx_t) void {
-			return self.free_page_block(first);
-			// todo: non power of 2 sizes
+		pub fn free_pages(self : *Self, first : idx_t, n : usize) !void { // todo: check out of bound
+			// todo: maybe optimize this
+			for (first..(first + n)) |p| {
+				try self.free_page(p);
+			}
 		}
 
 		/// set the underlying allocator
