@@ -55,7 +55,7 @@ pub fn map_kernel() void {
 
 	// free the spaces taken by the early page tables
 	for (&@import("trampoline.zig").page_tables) |*table| {
-		pageFrameAllocator.free_pages(@intFromPtr(table));
+		pageFrameAllocator.free_pages(@intFromPtr(table), 1) catch @panic("todo");
 		const mapped = virtualPageAllocator.map_anywhere(@intFromPtr(table), paging.page_size, .KernelSpace) catch @panic("todo");
 		@memset(@as(paging.VirtualPagePtr, @ptrCast(@alignCast(mapped))), 0);
 		virtualPageAllocator.unmap(mapped, paging.page_size);
@@ -97,7 +97,7 @@ fn check_mem_availability() void {
 			while (area_begin < area_end) : (area_begin += page_size) {
 				if (area_begin < @intFromPtr(boot.kernel_end)) // area is before kernel end
 					continue;
-				pageFrameAllocator.free_pages(area_begin);
+				pageFrameAllocator.free_pages(area_begin, 1) catch @panic("todo"); // todo
 			}
 		}
 	}
