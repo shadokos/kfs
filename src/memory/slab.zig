@@ -30,22 +30,20 @@ pub const Slab = struct {
 	bitmap: BitMap = BitMap{},
 	data: []?u16 = undefined,
 
-	pub fn init(self: *Self, cache: *Cache) Error!void {
-		self.* = Slab{};
+	pub fn init(cache: *Cache, page: *usize) Slab {
+		var new = Slab{ .header = .{ .cache = cache } };
 
-		self.header.cache = cache;
+		var mem: [*]usize = @ptrFromInt(@intFromPtr(page) + @sizeOf(Slab));
+		new.bitmap = BitMap.init(mem, cache.obj_per_slab);
 
-		// Initialize the bitmap just after the slab header
-		var hma: [*]usize = @ptrFromInt(@intFromPtr(self) + @sizeOf(Self));
-		self.bitmap = BitMap.init(hma, cache.obj_per_slab);
-
-		// Initialize the objects, just after the bitmap
-		var start: usize = @intFromPtr(self) + @sizeOf(Self) + self.bitmap.get_size();
-		self.data = @as([*]?u16, @ptrFromInt(start))[0..cache.obj_per_slab * (cache.size_obj / @sizeOf(usize))];
+		var start = @intFromPtr(page) + @sizeOf(Slab) + new.bitmap.get_size();
+		new.data = @as([*]?u16, @ptrFromInt(start))[0..cache.obj_per_slab * (cache.size_obj / @sizeOf(usize))];
 
 		for (0..cache.obj_per_slab) |i| {
-			self.data[i * (cache.size_obj / @sizeOf(usize))] = if (i + 1 < cache.obj_per_slab) @truncate(i + 1) else null;
+			new.data[i * (cache.size_obj / @sizeOf(usize))] =
+				if (i + 1 < cache.obj_per_slab) @truncate(i + 1) else null;
 		}
+		return new;
 	}
 
 	pub fn alloc_object(self: *Self) Error!*usize {
@@ -109,7 +107,7 @@ pub const Slab = struct {
 
 pub const Cache = struct {
 	const Self = @This();
-	const Error = error{ AllocationFailed };
+	const Error = error{ InitializationFailed, AllocationFailed };
 
 	next: ?*Cache = null,
 	prev: ?*Cache = null,
@@ -125,43 +123,44 @@ pub const Cache = struct {
 	size_obj: usize = 0,
 
 	pub fn init(
-		self: *Self,
 		name: []const u8,
 		allocator : *VirtualPageAllocatorType,
 		obj_size: usize,
 		order: u5
-	) void {
-		self.* = Cache{};
-		self.allocator = allocator;
-		self.pages_per_slab = @as(usize, 1) << order;
+	) Error!Cache {
+		var new = Cache{
+			.allocator = allocator,
+			.pages_per_slab = @as(usize, 1) << order,
+			// align the size of the object with usize
+			.size_obj = ft.mem.alignForward(usize, obj_size, @sizeOf(usize)),
+		};
 
-		// TODO: Check if the size is valid
-		// Align object size to usize
-		self.size_obj = ft.mem.alignForward(usize, obj_size, @sizeOf(usize));
+		// Compute the available space for the slab ((page_size * 2^order) - sise of slab header)
+		const available = (PAGE_SIZE * new.pages_per_slab) - @sizeOf(Self);
 
-		// Calculate the available space for the slab ((page_size * 2^order) - sise of slab header)
-		const available = (PAGE_SIZE * self.pages_per_slab) - @sizeOf(Self);
-
-		self.obj_per_slab = 0;
+		new.obj_per_slab = 0;
 		while (true) {
-			const bitmap_size = BitMap.compute_size(self.obj_per_slab + 1);
-			const total_size = bitmap_size + ((self.obj_per_slab + 1) * self.size_obj);
+			const bitmap_size = BitMap.compute_size(new.obj_per_slab + 1);
+			const total_size = bitmap_size + ((new.obj_per_slab + 1) * new.size_obj);
 			if (total_size > available) break;
-			self.obj_per_slab += 1;
+			new.obj_per_slab += 1;
 		}
-		if (self.obj_per_slab == 0 or self.obj_per_slab >= (1 << 16)) return ;
+		if (new.obj_per_slab == 0 or new.obj_per_slab >= (1 << 16))
+			return Error.InitializationFailed;
 
 		const name_len = @min(name.len, CACHE_NAME_LEN);
-		@memset(self.name[0..CACHE_NAME_LEN], 0);
-		@memcpy(self.name[0..name_len], name[0..name_len]);
-		self.debug();
+		@memset(new.name[0..CACHE_NAME_LEN], 0);
+		@memcpy(new.name[0..name_len], name[0..name_len]);
+		new.debug();
+		return new;
 	}
 
 	pub fn grow(self: *Self, nb_slab: usize) Error!void {
 		for (0..nb_slab) |_| {
 			var obj = self.allocator.alloc_pages(self.pages_per_slab) catch return Error.AllocationFailed;
 			var slab: *Slab = @ptrCast(@alignCast(obj));
-			slab.init(self) catch return Error.AllocationFailed;
+
+			slab.* = Slab.init(self, @ptrCast(obj));
 
 			for (0..self.pages_per_slab) |i| {
 				const page_addr = @as(usize, @intFromPtr(obj)) + (i * PAGE_SIZE);
@@ -183,8 +182,8 @@ pub const Cache = struct {
 
 	pub fn shrink(self: *Self) void {
 		while (self.slab_empty) |slab| {
-			self.slab_empty = slab.header.next;
-			self.allocator.free_pages(@ptrFromInt(@intFromPtr(slab)), self.pages_per_slab);
+			self.unlink(slab);
+			self.allocator.free_pages(@ptrFromInt(@intFromPtr(slab)), self.pages_per_slab) catch unreachable;
 			self.nb_slab -= 1;
 			tty.printk("free slab: 0x{x}\n", .{@intFromPtr(slab)});
 		}
@@ -281,7 +280,11 @@ var kmalloc_caches: [14]*Cache = undefined;
 
 pub fn create_cache(name: []const u8, obj_size: usize, order: u5) Cache.Error!*Cache {
 	var cache: *Cache = @ptrCast(@alignCast(global_cache.alloc_one() catch |e| return e));
-	cache.init(name, global_cache.allocator, obj_size, order);
+
+	cache.* = Cache.init(
+		name, global_cache.allocator, obj_size, order
+	) catch @panic("Failed to initialize cache");
+
 	cache.next = global_cache.next;
 	if (global_cache.next) |next| next.prev = cache;
 	global_cache.next = cache;
@@ -290,7 +293,10 @@ pub fn create_cache(name: []const u8, obj_size: usize, order: u5) Cache.Error!*C
 
 pub fn global_cache_init(allocator: *VirtualPageAllocatorType) void {
 	tty.printk("global_cache_init\n", .{});
-	global_cache.init("cache", allocator, @sizeOf(Cache), 0);
+	global_cache = Cache.init(
+		"cache", allocator, @sizeOf(Cache), 0
+	) catch @panic("Failed to initialize global_cache");
+
  	kmalloc_caches[0]  = create_cache("kmalloc_4",    4,     0) catch @panic("Failed to allocate kmalloc_4 cache");
 	kmalloc_caches[1]  = create_cache("kmalloc_8",    8,     0) catch @panic("Failed to allocate kmalloc_8 cache");
 	kmalloc_caches[2]  = create_cache("kmalloc_16",   16,    0) catch @panic("Failed to allocate kmalloc_16 cache");
