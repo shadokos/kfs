@@ -65,4 +65,8 @@ pub const PageFrameAllocator = struct {
 		else
 			self.non_addressable_space_allocator.frame_from_idx(@intCast(ptr / @sizeOf(paging.page)));
 	}
+
+	pub fn print(self : *Self) void {
+		self.addressable_space_allocator.print();
+	}
 };
