@@ -151,7 +151,7 @@ pub const Cache = struct {
 		const name_len = @min(name.len, CACHE_NAME_LEN);
 		@memset(new.name[0..CACHE_NAME_LEN], 0);
 		@memcpy(new.name[0..name_len], name[0..name_len]);
-		new.debug();
+		//new.debug();
 		return new;
 	}
 
@@ -183,7 +183,7 @@ pub const Cache = struct {
 	pub fn shrink(self: *Self) void {
 		while (self.slab_empty) |slab| {
 			self.unlink(slab);
-			self.allocator.free_pages(@ptrFromInt(@intFromPtr(slab)), self.pages_per_slab) catch unreachable;
+			self.allocator.free_pages(@ptrCast(@alignCast(slab)), self.pages_per_slab) catch unreachable;
 			self.nb_slab -= 1;
 			tty.printk("free slab: 0x{x}\n", .{@intFromPtr(slab)});
 		}
