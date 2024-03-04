@@ -39,6 +39,7 @@ SRC = linker.ld \
 	memory/virtual_page_allocator.zig \
 	memory/mapping.zig \
 	memory/slab.zig \
+	memory/fuzzer.zig \
 	kernel.zig \
 	multiboot.zig \
 	tty/tty.zig \
@@ -61,6 +62,8 @@ SRC = linker.ld \
 	ft/io.zig \
 	ft/math.zig \
 	ft/mem.zig \
+	ft/Random.zig \
+	ft/Random/Xoroshiro128.zig \
 	ft/meta.zig \
 	shell/token.zig \
 	shell/builtins.zig \

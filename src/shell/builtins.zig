@@ -117,6 +117,22 @@ pub fn vm(_: [][]u8) CmdError!void {
 	@import("../memory.zig").virtualPageAllocator.print();
 }
 
+pub fn pm(_: [][]u8) CmdError!void {
+	@import("../memory.zig").pageFrameAllocator.print();
+}
+
+const vpa = &@import("../memory.zig").virtualPageAllocator;
+
+pub fn alloc_page(args: [][]u8) CmdError!void {
+	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+	const pages  = vpa.alloc_pages(nb) catch {
+		tty.printk("Failed to allocate {d} pages\n", .{nb});
+		return CmdError.OtherError;
+	};
+	tty.printk("Allocated {d} pages at 0x{x:0>8}\n", .{nb, @intFromPtr(pages)});
+}
+
 pub fn kmalloc(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 	const slab = @import("../memory/slab.zig");
@@ -145,4 +161,33 @@ pub fn slabinfo(_: [][]u8) CmdError!void {
 pub fn multiboot_info(_: [][]u8) CmdError!void {
 	tty.printk("{*}\n", .{@import("../boot.zig").multiboot_info});
 	@import("../multiboot.zig").list_tags();
+}
+
+const Allocator = struct {
+	const Self = @This();
+	pub fn alloc(_: *Self, comptime T: type, n: usize) ![]T {
+		const _kmalloc = @import("../memory/slab.zig").kmalloc;
+		return @as([*]T, @ptrFromInt(@intFromPtr(try _kmalloc(@sizeOf(T) * n))))[0..n];
+	}
+	pub fn free(_: *Self, ptr: anytype) void {
+		const _kfree = @import("../memory/slab.zig").kfree;
+		_kfree(ptr);
+	}
+};
+const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(Allocator);
+var fuzzer : ?Fuzzer = null;
+var allocator : Allocator = .{};
+pub fn fuzz(args: [][]u8) CmdError!void {
+	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+
+	if (fuzzer) |*f| {
+		f.fuzz(nb) catch |e| {
+			tty.printk("error: {s}\n", .{@errorName(e)});
+			f.status();
+		};
+	} else {
+		fuzzer = Fuzzer.init(&allocator);
+		return fuzz(args);
+	}
 }
