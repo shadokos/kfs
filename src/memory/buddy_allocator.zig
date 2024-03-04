@@ -99,6 +99,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 		fn lst_add(self : *Self, order : order_t, page_idx : idx_t) void {
 			const frame = self.frame_from_idx(page_idx & ~((@as(idx_t, 1) << order) - 1));
 
+			frame.prev = null;
 			frame.next = self.free_lists[order];
 			self.free_lists[order] = frame;
 		}
