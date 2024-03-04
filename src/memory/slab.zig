@@ -1,5 +1,5 @@
 const ft = @import("../ft/ft.zig");
-const tty = @import("../tty/tty.zig"); // TODO: Remove it
+const printk = @import("../tty/tty.zig").printk;
 const VirtualPageAllocatorType = @import("../memory.zig").VirtualPageAllocatorType;
 const PAGE_SIZE: usize = 4096;
 const CACHE_NAME_LEN = 15;
@@ -66,14 +66,14 @@ pub const Slab = struct {
 		if (obj_addr < @intFromPtr(&self.data[0]) or obj_addr > @intFromPtr(&self.data[self.data.len - 1])) return; // TODO: Error
 		if ((obj_addr - @intFromPtr(&self.data[0])) % self.header.cache.size_obj != 0) return; // TODO: Error
 
-		tty.printk("free object: 0x{x}\n", .{obj_addr});
+		printk("free object: 0x{x}\n", .{obj_addr});
 
 		const index: u16 = @truncate((obj_addr - @intFromPtr(&self.data[0])) / self.header.cache.size_obj);
-		tty.printk("index: {d}\n", .{index});
+		printk("index: {d}\n", .{index});
 		if (self.bitmap.get(index) catch .Free == .Free) return; // TODO: Error
-		tty.printk("{}\n", .{self.bitmap.get(index) catch .Free});
+		printk("{}\n", .{self.bitmap.get(index) catch .Free});
 		self.bitmap.set(index, Bit.Free) catch return; // TODO: Error
-		tty.printk("{}\n", .{self.bitmap.get(index) catch .Free});
+		printk("{}\n", .{self.bitmap.get(index) catch .Free});
 		switch (self.get_state()) {
 			.Empty => unreachable,
 			.Partial => if (self.header.in_use == 1) self.header.cache.move_slab(self, .Empty),
@@ -91,17 +91,17 @@ pub const Slab = struct {
 	}
 
 	pub fn debug(self: *Self) void {
-		tty.printk("self: 0x{x}\n", .{@intFromPtr(self)});
-		tty.printk("Slab Header:\n", .{});
+		printk("self: 0x{x}\n", .{@intFromPtr(self)});
+		printk("Slab Header:\n", .{});
 		inline for (@typeInfo(SlabHeader).Struct.fields) |field|
-			tty.printk("  header.{s}: 0x{x} ({d} bytes)\n", .{field.name, @intFromPtr(&@field(self.header, field.name)), @sizeOf(field.type)});
+			printk("  header.{s}: 0x{x} ({d} bytes)\n", .{field.name, @intFromPtr(&@field(self.header, field.name)), @sizeOf(field.type)});
 
-		tty.printk("Bitmap:\n", .{});
+		printk("Bitmap:\n", .{});
 		inline for (@typeInfo(BitMap).Struct.fields) |field|
-			tty.printk("  bitmap.{s}: 0x{x} ({d} bytes)\n", .{field.name, @intFromPtr(&@field(self.bitmap, field.name)), @sizeOf(field.type)});
+			printk("  bitmap.{s}: 0x{x} ({d} bytes)\n", .{field.name, @intFromPtr(&@field(self.bitmap, field.name)), @sizeOf(field.type)});
 
-		tty.printk("Data:\n", .{});
-		tty.printk("  data: 0x{x} ({d} bytes)\n", .{@intFromPtr(&self.data[0]), @sizeOf(@TypeOf(self.data))});
+		printk("Data:\n", .{});
+		printk("  data: 0x{x} ({d} bytes)\n", .{@intFromPtr(&self.data[0]), @sizeOf(@TypeOf(self.data))});
 	}
 };
 
@@ -164,7 +164,7 @@ pub const Cache = struct {
 
 			for (0..self.pages_per_slab) |i| {
 				const page_addr = @as(usize, @intFromPtr(obj)) + (i * PAGE_SIZE);
-				tty.printk("init page: 0x{x}\n", .{page_addr});
+				printk("init page: 0x{x}\n", .{page_addr});
 				var page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(page_addr));
 				page_descriptor.prev = @ptrCast(@alignCast(self));
 				page_descriptor.next = @ptrCast(@alignCast(slab));
@@ -185,7 +185,7 @@ pub const Cache = struct {
 			self.unlink(slab);
 			self.allocator.free_pages(@ptrCast(@alignCast(slab)), self.pages_per_slab) catch unreachable;
 			self.nb_slab -= 1;
-			tty.printk("free slab: 0x{x}\n", .{@intFromPtr(slab)});
+			printk("free slab: 0x{x}\n", .{@intFromPtr(slab)});
 		}
 	}
 
@@ -232,13 +232,48 @@ pub const Cache = struct {
 	}
 
 	pub fn free(self: *Self, ptr: *usize) void {
-		const addr = @intFromPtr(ptr) & ~(PAGE_SIZE - 1);
+		const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), PAGE_SIZE);
 		const page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(addr));
 
-		tty.printk("cache: 0x{x}\n", .{@intFromPtr(page_descriptor.prev)});
-		tty.printk("slab: 0x{x}\n", .{@intFromPtr(page_descriptor.next)});
+		printk("cache: 0x{x}\n", .{@intFromPtr(page_descriptor.prev)});
+		printk("slab: 0x{x}\n", .{@intFromPtr(page_descriptor.next)});
 		const slab: *Slab = @ptrCast(@alignCast(page_descriptor.next));
 		slab.free_object(ptr);
+	}
+
+	pub fn create(name: []const u8, obj_size: usize, order: u5) Error!*Cache {
+		var cache: *Cache = @ptrCast(@alignCast(global_cache.alloc_one() catch |e| return e));
+
+		cache.* = Cache.init(
+			name, global_cache.allocator, obj_size, order
+		) catch @panic("Failed to initialize cache");
+
+		cache.next = global_cache.next;
+		if (global_cache.next) |next| next.prev = cache;
+		global_cache.next = cache;
+		return cache;
+	}
+
+	pub fn destroy(cache: *Cache) void {
+		cache.shrink();
+		var lst: ?*Slab = cache.slab_full;
+
+		while (lst) |slab| {
+			lst = slab.header.next;
+			cache.allocator.free_pages(@ptrCast(@alignCast(slab)), cache.pages_per_slab) catch unreachable;
+		}
+		lst = cache.slab_partial;
+		while (lst) |slab| {
+			lst = slab.header.next;
+			cache.allocator.free_pages(@ptrCast(@alignCast(slab)), cache.pages_per_slab) catch unreachable;
+		}
+		if (cache.prev) |prev| prev.next = cache.next else global_cache.next = cache.next;
+		if (cache.next) |next| next.prev = cache.prev;
+		global_cache.free(@ptrCast(cache));
+	}
+
+	fn get_page_descriptor(self: *Self) *Slab {
+		return self.allocator.get_page_frame_descriptor(ft.mem.alignBackward(*usize, self, PAGE_SIZE));
 	}
 
 	pub fn debug(self: *Self) void {
@@ -261,69 +296,56 @@ pub const Cache = struct {
 
 		var name_len: usize = 1;
 		for (self.name) |c| { if (c == 0) break else name_len += 1; }
-		tty.printk("\x1b[31m{s}\x1b[0m: ", .{self.name});
-		for (name_len..@max(name_len, CACHE_NAME_LEN)) |_| tty.printk(" ", .{});
-		tty.printk("{d: >5} ", .{self.size_obj});
-		tty.printk("{d: >5} ", .{self.obj_per_slab});
-		tty.printk("{d: >5} ", .{object_in_use});
-		tty.printk("{d: >5}  ", .{self.pages_per_slab});
-		tty.printk("{d: >5}  ", .{self.nb_slab});
-		tty.printk("{d: >5}  ", .{nb_slab_empty});
-		tty.printk("{d: >5} ", .{nb_slab_partial});
-		tty.printk("{d: >5} ", .{nb_slab_full});
-		tty.printk("\n", .{});
+		printk("\x1b[31m{s}\x1b[0m: ", .{self.name});
+		for (name_len..@max(name_len, CACHE_NAME_LEN)) |_| printk(" ", .{});
+		printk("{d: >5} ", .{self.size_obj});
+		printk("{d: >5} ", .{self.obj_per_slab});
+		printk("{d: >5} ", .{object_in_use});
+		printk("{d: >5}  ", .{self.pages_per_slab});
+		printk("{d: >5}  ", .{self.nb_slab});
+		printk("{d: >5}  ", .{nb_slab_empty});
+		printk("{d: >5} ", .{nb_slab_partial});
+		printk("{d: >5} ", .{nb_slab_full});
+		printk("\n", .{});
 	}
 };
 
 pub var global_cache: Cache = .{};
 var kmalloc_caches: [14]*Cache = undefined;
 
-pub fn create_cache(name: []const u8, obj_size: usize, order: u5) Cache.Error!*Cache {
-	var cache: *Cache = @ptrCast(@alignCast(global_cache.alloc_one() catch |e| return e));
-
-	cache.* = Cache.init(
-		name, global_cache.allocator, obj_size, order
-	) catch @panic("Failed to initialize cache");
-
-	cache.next = global_cache.next;
-	if (global_cache.next) |next| next.prev = cache;
-	global_cache.next = cache;
-	return cache;
-}
-
 pub fn global_cache_init(allocator: *VirtualPageAllocatorType) void {
-	tty.printk("global_cache_init\n", .{});
+	printk("global_cache_init\n", .{});
 	global_cache = Cache.init(
 		"cache", allocator, @sizeOf(Cache), 0
 	) catch @panic("Failed to initialize global_cache");
 
- 	kmalloc_caches[0]  = create_cache("kmalloc_4",    4,     0) catch @panic("Failed to allocate kmalloc_4 cache");
-	kmalloc_caches[1]  = create_cache("kmalloc_8",    8,     0) catch @panic("Failed to allocate kmalloc_8 cache");
-	kmalloc_caches[2]  = create_cache("kmalloc_16",   16,    0) catch @panic("Failed to allocate kmalloc_16 cache");
-	kmalloc_caches[3]  = create_cache("kmalloc_32",   32,    0) catch @panic("Failed to allocate kmalloc_32 cache");
-	kmalloc_caches[4]  = create_cache("kmalloc_64",   64,    0) catch @panic("Failed to allocate kmalloc_64 cache");
-	kmalloc_caches[5]  = create_cache("kmalloc_128",  128,   0) catch @panic("Failed to allocate kmalloc_128 cache");
-	kmalloc_caches[6]  = create_cache("kmalloc_256",  256,   1) catch @panic("Failed to allocate kmalloc_256 cache");
-	kmalloc_caches[7]  = create_cache("kmalloc_512",  512,   2) catch @panic("Failed to allocate kmalloc_512 cache");
-	kmalloc_caches[8]  = create_cache("kmalloc_1k",   1024,  3) catch @panic("Failed to allocate kmalloc_1024 cache");
-	kmalloc_caches[9]  = create_cache("kmalloc_2k",   2048,  3) catch @panic("Failed to allocate kmalloc_2048 cache");
-	kmalloc_caches[10] = create_cache("kmalloc_4k",   4096,  3) catch @panic("Failed to allocate kmalloc_4096 cache");
-	kmalloc_caches[11] = create_cache("kmalloc_8k",   8192,  4) catch @panic("Failed to allocate kmalloc_8192 cache");
-	kmalloc_caches[12] = create_cache("kmalloc_16k",  16384, 5) catch @panic("Failed to allocate kmalloc_16384 cache");
-	kmalloc_caches[13] = create_cache("kmalloc_32k",  32768, 5) catch @panic("Failed to allocate kmalloc_32768 cache");
+ 	kmalloc_caches[0]  = Cache.create("kmalloc_4",    4,     0) catch @panic("Failed to allocate kmalloc_4 cache");
+	kmalloc_caches[1]  = Cache.create("kmalloc_8",    8,     0) catch @panic("Failed to allocate kmalloc_8 cache");
+	kmalloc_caches[2]  = Cache.create("kmalloc_16",   16,    0) catch @panic("Failed to allocate kmalloc_16 cache");
+	kmalloc_caches[3]  = Cache.create("kmalloc_32",   32,    0) catch @panic("Failed to allocate kmalloc_32 cache");
+	kmalloc_caches[4]  = Cache.create("kmalloc_64",   64,    0) catch @panic("Failed to allocate kmalloc_64 cache");
+	kmalloc_caches[5]  = Cache.create("kmalloc_128",  128,   0) catch @panic("Failed to allocate kmalloc_128 cache");
+	kmalloc_caches[6]  = Cache.create("kmalloc_256",  256,   1) catch @panic("Failed to allocate kmalloc_256 cache");
+	kmalloc_caches[7]  = Cache.create("kmalloc_512",  512,   2) catch @panic("Failed to allocate kmalloc_512 cache");
+	kmalloc_caches[8]  = Cache.create("kmalloc_1k",   1024,  3) catch @panic("Failed to allocate kmalloc_1024 cache");
+	kmalloc_caches[9]  = Cache.create("kmalloc_2k",   2048,  3) catch @panic("Failed to allocate kmalloc_2048 cache");
+	kmalloc_caches[10] = Cache.create("kmalloc_4k",   4096,  3) catch @panic("Failed to allocate kmalloc_4096 cache");
+	kmalloc_caches[11] = Cache.create("kmalloc_8k",   8192,  4) catch @panic("Failed to allocate kmalloc_8192 cache");
+	kmalloc_caches[12] = Cache.create("kmalloc_16k",  16384, 5) catch @panic("Failed to allocate kmalloc_16384 cache");
+	kmalloc_caches[13] = Cache.create("kmalloc_32k",  32768, 5) catch @panic("Failed to allocate kmalloc_32768 cache");
 }
 
 pub fn slabinfo() void {
-	tty.printk(" "**16, .{});
-	tty.printk(" \x1b[36msize\x1b[0m", .{});
-	tty.printk("   \x1b[36mo/s\x1b[0m", .{});
-	tty.printk("  \x1b[36mact.\x1b[0m", .{});
-	tty.printk("   \x1b[36mp/s\x1b[0m", .{});
-	tty.printk("  \x1b[36mslabs\x1b[0m", .{});
-	tty.printk("  \x1b[36mempty\x1b[0m", .{});
-	tty.printk("  \x1b[36mpart.\x1b[0m", .{});
-	tty.printk("  \x1b[36mfull\x1b[0m", .{});
-	tty.printk("\n", .{});
+	printk(" "**16, .{});
+	printk(" \x1b[36msize\x1b[0m", .{});
+	printk("   \x1b[36mo/s\x1b[0m", .{});
+	printk("  \x1b[36mact.\x1b[0m", .{});
+	printk("   \x1b[36mp/s\x1b[0m", .{});
+	printk("  \x1b[36mslabs\x1b[0m", .{});
+	printk("  \x1b[36mempty\x1b[0m", .{});
+	printk("  \x1b[36mpart.\x1b[0m", .{});
+	printk("  \x1b[36mfull\x1b[0m", .{});
+	printk("\n", .{});
 	var node: ?*Cache = global_cache.next;
 	while (node) |n| : (node = n.next) n.debug();
 	global_cache.debug();
@@ -350,6 +372,6 @@ pub fn kmalloc(size: usize) Cache.Error!* align(1) usize {
 }
 
 pub fn kfree(ptr: *usize) void {
-	tty.printk("kfree: 0x{x}\n", .{@intFromPtr(ptr)});
+	printk("kfree: 0x{x}\n", .{@intFromPtr(ptr)});
 	global_cache.free(ptr);
 }
