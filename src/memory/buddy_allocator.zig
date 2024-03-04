@@ -256,5 +256,11 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 				printk("\n", .{});
 			}
 		}
+
+		pub fn print(self : *Self) void {
+			for (self.free_lists,  0..) |l, i| {
+				printk("free list {d}: {*}\n", .{i, l});
+			}
+		}
 	};
 }
