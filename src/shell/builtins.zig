@@ -154,6 +154,17 @@ pub fn kfree(args: [][]u8) CmdError!void {
 	slab.kfree(@ptrFromInt(addr));
 }
 
+pub fn ksize(args: [][]u8) CmdError!void {
+	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+	const slab = @import("../memory/slab.zig");
+	const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+	if (!ft.mem.isAligned(addr, @sizeOf(usize))) return CmdError.OtherError;
+	const size = slab.ksize(@ptrFromInt(addr));
+	if (size) |s| printk("Size of 0x{x} is {d} bytes\n", .{addr, s})
+	else printk("0x{x} is not a valid address\n", .{addr});
+}
+
 pub fn slabinfo(_: [][]u8) CmdError!void {
 	const slab = @import("../memory/slab.zig");
 	slab.slabinfo();
