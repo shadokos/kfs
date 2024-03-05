@@ -3,6 +3,7 @@ const tty = @import("../tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("utils.zig");
 const CmdError = @import("../shell.zig").CmdError;
+const printk = tty.printk;
 
 pub fn stack(_: anytype) CmdError!void {
 	if (@import("build_options").optimize != .Debug) {
@@ -14,9 +15,9 @@ pub fn stack(_: anytype) CmdError!void {
 }
 
 fn _help_available_commands() void {
-	tty.printk(utils.blue ++ "Available commands:\n" ++ utils.reset, .{});
+	printk(utils.blue ++ "Available commands:\n" ++ utils.reset, .{});
 	inline for (@typeInfo(@This()).Struct.decls) |decl| {
-		tty.printk("  - {s}\n", .{decl.name});
+		printk("  - {s}\n", .{decl.name});
 	}
 }
 
@@ -37,7 +38,7 @@ pub fn help(data: [][]u8) CmdError!void {
 }
 
 pub fn clear(_: [][]u8) CmdError!void {
-	tty.printk("\x1b[2J\x1b[H", .{});
+	printk("\x1b[2J\x1b[H", .{});
 	return;
 }
 
@@ -63,11 +64,11 @@ pub fn keymap(args: [][]u8) CmdError!void {
 	switch(args.len) {
 		1 => {
 			const list = km.keymap_list;
-			tty.printk("Installed keymaps:\n\n", .{});
+			printk("Installed keymaps:\n\n", .{});
 			for (list) |e| {
-				tty.printk(" - {s}\n", .{e});
+				printk(" - {s}\n", .{e});
 			}
-			tty.printk("\n", .{});
+			printk("\n", .{});
 		},
 		2 => km.set_keymap(args[1]) catch return CmdError.InvalidParameter,
 		else => return CmdError.InvalidNumberOfArguments
@@ -79,17 +80,17 @@ pub fn theme(args: [][]u8) CmdError!void {
 	switch(args.len) {
 		1 => {
 			const list = t.theme_list;
-			tty.printk("Available themes:\n\n", .{});
+			printk("Available themes:\n\n", .{});
 			for (list) |e| {
-				tty.printk(" - {s}\n", .{e});
+				printk(" - {s}\n", .{e});
 			}
-			tty.printk("\n", .{});
-			tty.printk("Current palette:\n", .{});
+			printk("\n", .{});
+			printk("Current palette:\n", .{});
 			utils.show_palette();
 		},
 		2 => {
 			tty.get_tty().set_theme(t.get_theme(args[1]) orelse return CmdError.InvalidParameter);
-			tty.printk("\x1b[2J\x1b[H", .{});
+			printk("\x1b[2J\x1b[H", .{});
 			utils.show_palette();
 		},
 		else => return CmdError.InvalidNumberOfArguments
@@ -127,10 +128,10 @@ pub fn alloc_page(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
 	const pages  = vpa.alloc_pages(nb) catch {
-		tty.printk("Failed to allocate {d} pages\n", .{nb});
+		printk("Failed to allocate {d} pages\n", .{nb});
 		return CmdError.OtherError;
 	};
-	tty.printk("Allocated {d} pages at 0x{x:0>8}\n", .{nb, @intFromPtr(pages)});
+	printk("Allocated {d} pages at 0x{x:0>8}\n", .{nb, @intFromPtr(pages)});
 }
 
 pub fn kmalloc(args: [][]u8) CmdError!void {
@@ -138,10 +139,10 @@ pub fn kmalloc(args: [][]u8) CmdError!void {
 	const slab = @import("../memory/slab.zig");
 	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
 	const obj : *usize = @alignCast(slab.kmalloc(nb) catch {
-		tty.printk("Failed to allocate {d} bytes\n", .{nb});
+		printk("Failed to allocate {d} bytes\n", .{nb});
 		return CmdError.OtherError;
 	});
-	tty.printk("Allocated {d} bytes at 0x{x}\n", .{nb, @intFromPtr(obj)});
+	printk("Allocated {d} bytes at 0x{x}\n", .{nb, @intFromPtr(obj)});
 }
 
 pub fn kfree(args: [][]u8) CmdError!void {
@@ -159,7 +160,7 @@ pub fn slabinfo(_: [][]u8) CmdError!void {
 }
 
 pub fn multiboot_info(_: [][]u8) CmdError!void {
-	tty.printk("{*}\n", .{@import("../boot.zig").multiboot_info});
+	printk("{*}\n", .{@import("../boot.zig").multiboot_info});
 	@import("../multiboot.zig").list_tags();
 }
 
@@ -183,7 +184,7 @@ pub fn fuzz(args: [][]u8) CmdError!void {
 
 	if (fuzzer) |*f| {
 		f.fuzz(nb) catch |e| {
-			tty.printk("error: {s}\n", .{@errorName(e)});
+			printk("error: {s}\n", .{@errorName(e)});
 			f.status();
 		};
 	} else {
