@@ -164,6 +164,39 @@ pub fn multiboot_info(_: [][]u8) CmdError!void {
 	@import("../multiboot.zig").list_tags();
 }
 
+// TODO: Remove this builtin
+// ... For debugging purposes only
+pub fn cache_create(args: [][]u8) CmdError!void {
+	if (args.len != 4) return CmdError.InvalidNumberOfArguments;
+	const slab = @import("../memory/slab.zig");
+	const name = args[1];
+	const size = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+	const order = ft.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
+	const new_cache = slab.Cache.create(name, size, @truncate(order)) catch {
+		printk("Failed to create cache\n", .{});
+		return CmdError.OtherError;
+	};
+	printk("cache allocated: {*}\n", .{new_cache});
+}
+
+// TODO: Remove this builtin
+// ... For debugging purposes only
+pub fn cache_destroy(args: [][]u8) CmdError!void {
+	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+	const slab = @import("../memory/slab.zig");
+	const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+
+	slab.Cache.destroy(@ptrFromInt(addr));
+}
+
+// TODO: Remove this builtin
+// ... For debugging purposes only
+pub fn shrink(_: [][]u8) CmdError!void {
+	var node: ?*@import("../memory/slab.zig").Cache = &@import("../memory/slab.zig").global_cache;
+	while (node) |n| : (node = n.next) n.shrink();
+}
+
 const Allocator = struct {
 	const Self = @This();
 	pub fn alloc(_: *Self, comptime T: type, n: usize) ![]T {
