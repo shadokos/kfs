@@ -136,31 +136,32 @@ pub fn alloc_page(args: [][]u8) CmdError!void {
 
 pub fn kmalloc(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
-	const slab = @import("../memory/slab.zig");
+	var kmem = @import("../memory.zig").kernelMemoryAllocator;
 	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-	const obj : *usize = @alignCast(slab.kmalloc(nb) catch {
+	const obj : []u8 = kmem.alloc(u8, nb) catch {
 		printk("Failed to allocate {d} bytes\n", .{nb});
 		return CmdError.OtherError;
-	});
-	printk("Allocated {d} bytes at 0x{x}\n", .{nb, @intFromPtr(obj)});
+	};
+	printk("Allocated {d} bytes at 0x{x}\n", .{nb, @intFromPtr(&obj[0])});
 }
 
 pub fn kfree(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
-	const slab = @import("../memory/slab.zig");
+	var kmem = @import("../memory.zig").kernelMemoryAllocator;
 	const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
 	if (!ft.mem.isAligned(addr, @sizeOf(usize))) return CmdError.OtherError;
-	slab.kfree(@ptrFromInt(addr));
+	//kmem.free(@ptrFromInt(addr));
+	kmem.free(@as(*usize, @ptrFromInt(addr)));
 }
 
 pub fn ksize(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
-	const slab = @import("../memory/slab.zig");
+	var kmem = @import("../memory.zig").kernelMemoryAllocator;
 	const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
 	if (!ft.mem.isAligned(addr, @sizeOf(usize))) return CmdError.OtherError;
-	const size = slab.ksize(@ptrFromInt(addr));
+	const size = kmem.obj_size(@as(*usize, @ptrFromInt(addr)));
 	if (size) |s| printk("Size of 0x{x} is {d} bytes\n", .{addr, s})
 	else printk("0x{x} is not a valid address\n", .{addr});
 }
@@ -208,20 +209,10 @@ pub fn shrink(_: [][]u8) CmdError!void {
 	while (node) |n| : (node = n.next) n.shrink();
 }
 
-const Allocator = struct {
-	const Self = @This();
-	pub fn alloc(_: *Self, comptime T: type, n: usize) ![]T {
-		const _kmalloc = @import("../memory/slab.zig").kmalloc;
-		return @as([*]T, @ptrFromInt(@intFromPtr(try _kmalloc(@sizeOf(T) * n))))[0..n];
-	}
-	pub fn free(_: *Self, ptr: anytype) void {
-		const _kfree = @import("../memory/slab.zig").kfree;
-		_kfree(ptr);
-	}
-};
-const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(Allocator);
+const KernelMemoryAllocator = @import("../memory/kernel_memory_allocator.zig").KernelMemoryAllocator;
+const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(KernelMemoryAllocator);
 var fuzzer : ?Fuzzer = null;
-var allocator : Allocator = .{};
+var allocator : KernelMemoryAllocator = .{};
 pub fn fuzz(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
