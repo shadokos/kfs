@@ -128,7 +128,7 @@ pub const Slab = struct {
 
 pub const Cache = struct {
 	const Self = @This();
-	const Error = error{ InitializationFailed, AllocationFailed };
+	pub const Error = error{ InitializationFailed, AllocationFailed };
 
 	next: ?*Cache = null,
 	prev: ?*Cache = null,
@@ -233,7 +233,6 @@ pub const Cache = struct {
 	}
 
 	pub fn move_slab(self: *Self, slab: *Slab, state: SlabState) void {
-		if (state == slab.get_state()) return; // TODO error
 		//printk("\x1b[33mcache: 0x{x}: move slab: 0x{x} ({}) -> {}\x1b[0m\n", .{@intFromPtr(self), @intFromPtr(slab), slab.get_state(), state});
 		self.unlink(slab);
 		self.link(slab, state);
@@ -339,28 +338,9 @@ pub const Cache = struct {
 };
 
 pub var global_cache: Cache = .{};
-var kmalloc_caches: [14]*Cache = undefined;
 
-pub fn global_cache_init(allocator: *VirtualPageAllocatorType) void {
-	printk("global_cache_init\n", .{});
-	global_cache = Cache.init(
-		"cache", allocator, @sizeOf(Cache), 0
-	) catch @panic("Failed to initialize global_cache");
-
- 	kmalloc_caches[0]  = Cache.create("kmalloc_4",    4,     0) catch @panic("Failed to allocate kmalloc_4 cache");
-	kmalloc_caches[1]  = Cache.create("kmalloc_8",    8,     0) catch @panic("Failed to allocate kmalloc_8 cache");
-	kmalloc_caches[2]  = Cache.create("kmalloc_16",   16,    0) catch @panic("Failed to allocate kmalloc_16 cache");
-	kmalloc_caches[3]  = Cache.create("kmalloc_32",   32,    0) catch @panic("Failed to allocate kmalloc_32 cache");
-	kmalloc_caches[4]  = Cache.create("kmalloc_64",   64,    0) catch @panic("Failed to allocate kmalloc_64 cache");
-	kmalloc_caches[5]  = Cache.create("kmalloc_128",  128,   0) catch @panic("Failed to allocate kmalloc_128 cache");
-	kmalloc_caches[6]  = Cache.create("kmalloc_256",  256,   1) catch @panic("Failed to allocate kmalloc_256 cache");
-	kmalloc_caches[7]  = Cache.create("kmalloc_512",  512,   2) catch @panic("Failed to allocate kmalloc_512 cache");
-	kmalloc_caches[8]  = Cache.create("kmalloc_1k",   1024,  3) catch @panic("Failed to allocate kmalloc_1024 cache");
-	kmalloc_caches[9]  = Cache.create("kmalloc_2k",   2048,  3) catch @panic("Failed to allocate kmalloc_2048 cache");
-	kmalloc_caches[10] = Cache.create("kmalloc_4k",   4096,  3) catch @panic("Failed to allocate kmalloc_4096 cache");
-	kmalloc_caches[11] = Cache.create("kmalloc_8k",   8192,  4) catch @panic("Failed to allocate kmalloc_8192 cache");
-	kmalloc_caches[12] = Cache.create("kmalloc_16k",  16384, 5) catch @panic("Failed to allocate kmalloc_16384 cache");
-	kmalloc_caches[13] = Cache.create("kmalloc_32k",  32768, 5) catch @panic("Failed to allocate kmalloc_32768 cache");
+pub fn global_cache_init(allocator: *VirtualPageAllocatorType) !void {
+	global_cache = try Cache.init("cache", allocator, @sizeOf(Cache), 0);
 }
 
 pub fn slabinfo() void {
@@ -377,37 +357,4 @@ pub fn slabinfo() void {
 	var node: ?*Cache = global_cache.next;
 	while (node) |n| : (node = n.next) n.debug();
 	global_cache.debug();
-}
-
-pub fn kmalloc(size: usize) !* align(1) usize {
-	return switch(size) {
-		0...4 => kmalloc_caches[0].alloc_one(),
-		5...8 => kmalloc_caches[1].alloc_one(),
-		9...16 => kmalloc_caches[2].alloc_one(),
-		17...32 => kmalloc_caches[3].alloc_one(),
-		33...64 => kmalloc_caches[4].alloc_one(),
-		65...128 => kmalloc_caches[5].alloc_one(),
-		129...256 => kmalloc_caches[6].alloc_one(),
-		257...512 => kmalloc_caches[7].alloc_one(),
-		513...1024 => kmalloc_caches[8].alloc_one(),
-		1025...2048 => kmalloc_caches[9].alloc_one(),
-		2049...4096 => kmalloc_caches[10].alloc_one(),
-		4097...8192 => kmalloc_caches[11].alloc_one(),
-		8193...16384 => kmalloc_caches[12].alloc_one(),
-		16385...32768 => kmalloc_caches[13].alloc_one(),
-		else => Cache.Error.AllocationFailed,
-	};
-}
-
-pub fn kfree(ptr: *usize) void {
-	// printk("kfree: 0x{x}\n", .{@intFromPtr(ptr)});
-	global_cache.free(ptr);
-}
-
-pub fn ksize(ptr: *usize) ?usize {
-	var pfd = global_cache.get_page_frame_descriptor(ptr);
-	var slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
-
-	if (slab) |s| return if (s.is_obj_in_slab(ptr)) s.header.cache.size_obj else null
-	else return null;
 }
