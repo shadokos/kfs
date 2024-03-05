@@ -1,4 +1,5 @@
 const ft = @import("../ft/ft.zig");
+const page_frame_descriptor = @import("paging.zig").page_frame_descriptor;
 const printk = @import("../tty/tty.zig").printk;
 const VirtualPageAllocatorType = @import("../memory.zig").VirtualPageAllocatorType;
 const PAGE_SIZE: usize = 4096;
@@ -61,12 +62,21 @@ pub const Slab = struct {
 		return @ptrCast(@alignCast(&self.data[index]));
 	}
 
+	pub fn is_obj_in_slab(self: *Self, obj: *usize) bool {
+		const obj_addr = @intFromPtr(obj);
+
+		if (obj_addr < @intFromPtr(&self.data[0]) or obj_addr > @intFromPtr(&self.data[self.data.len - 1]))
+			return false;
+		if ((obj_addr - @intFromPtr(&self.data[0])) % self.header.cache.size_obj != 0)
+			return false;
+		return true;
+	}
+
 	pub fn free_object(self: *Self, obj: *usize) void {
 		const obj_addr = @intFromPtr(obj);
-		if (obj_addr < @intFromPtr(&self.data[0]) or obj_addr > @intFromPtr(&self.data[self.data.len - 1]))
-			@panic("SLAB: TODO Out of bounds Error"); // TODO: Error
-		if ((obj_addr - @intFromPtr(&self.data[0])) % self.header.cache.size_obj != 0)
-			@panic("SLAB: TODO Not aligned Error"); // TODO: Error
+
+		if (!self.is_obj_in_slab(obj))
+			return ; // TODO: Maybe throw an error? not really necessary but why not..
 
 		//printk("free object: 0x{x}\n", .{obj_addr});
 		const index: u16 = @truncate((obj_addr - @intFromPtr(&self.data[0])) / self.header.cache.size_obj);
@@ -176,9 +186,9 @@ pub const Cache = struct {
 			for (0..self.pages_per_slab) |i| {
 				const page_addr = @as(usize, @intFromPtr(obj)) + (i * PAGE_SIZE);
 				//printk("init page: 0x{x}\n", .{page_addr});
-				var page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(page_addr));
-				page_descriptor.prev = @ptrCast(@alignCast(self));
-				page_descriptor.next = @ptrCast(@alignCast(slab));
+				var pfd = self.get_page_frame_descriptor(@ptrFromInt(page_addr));
+				pfd.prev = @ptrCast(@alignCast(self));
+				pfd.next = @ptrCast(@alignCast(slab));
 			}
 			self.move_slab(slab, SlabState.Empty);
 			self.nb_slab += 1;
@@ -280,8 +290,9 @@ pub const Cache = struct {
 		global_cache.free(@ptrCast(cache));
 	}
 
-	fn get_page_descriptor(self: *Self) *Slab {
-		return self.allocator.get_page_frame_descriptor(ft.mem.alignBackward(*usize, self, PAGE_SIZE));
+	pub fn get_page_frame_descriptor(self: *Self, obj: *usize) *page_frame_descriptor {
+		const addr = ft.mem.alignBackward(usize, @intFromPtr(obj), PAGE_SIZE);
+		return self.allocator.get_page_frame_descriptor(@ptrFromInt(addr));
 	}
 
 	pub fn debug(self: *Self) void {
