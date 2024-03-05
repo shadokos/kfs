@@ -63,17 +63,19 @@ pub const Slab = struct {
 
 	pub fn free_object(self: *Self, obj: *usize) void {
 		const obj_addr = @intFromPtr(obj);
-		if (obj_addr < @intFromPtr(&self.data[0]) or obj_addr > @intFromPtr(&self.data[self.data.len - 1])) return; // TODO: Error
-		if ((obj_addr - @intFromPtr(&self.data[0])) % self.header.cache.size_obj != 0) return; // TODO: Error
+		if (obj_addr < @intFromPtr(&self.data[0]) or obj_addr > @intFromPtr(&self.data[self.data.len - 1]))
+			@panic("SLAB: TODO Out of bounds Error"); // TODO: Error
+		if ((obj_addr - @intFromPtr(&self.data[0])) % self.header.cache.size_obj != 0)
+			@panic("SLAB: TODO Not aligned Error"); // TODO: Error
 
-		printk("free object: 0x{x}\n", .{obj_addr});
-
+		//printk("free object: 0x{x}\n", .{obj_addr});
 		const index: u16 = @truncate((obj_addr - @intFromPtr(&self.data[0])) / self.header.cache.size_obj);
-		printk("index: {d}\n", .{index});
-		if (self.bitmap.get(index) catch .Free == .Free) return; // TODO: Error
-		printk("{}\n", .{self.bitmap.get(index) catch .Free});
-		self.bitmap.set(index, Bit.Free) catch return; // TODO: Error
-		printk("{}\n", .{self.bitmap.get(index) catch .Free});
+		//printk("index: {d}\n", .{index});
+		if (self.bitmap.get(index) catch .Free == .Free) @panic("SLAB: TODO Double free detected"); // TODO: Error
+		//printk("{}\n", .{self.bitmap.get(index) catch .Free});
+		self.bitmap.set(index, Bit.Free) catch @panic("SLAB: TODO bitmap error"); // TODO: Error
+		//printk("{}\n", .{self.bitmap.get(index) catch .Free});
+		//printk("state: {}\n", .{self.get_state()});
 		switch (self.get_state()) {
 			.Empty => unreachable,
 			.Partial => if (self.header.in_use == 1) self.header.cache.move_slab(self, .Empty),
@@ -102,6 +104,15 @@ pub const Slab = struct {
 
 		printk("Data:\n", .{});
 		printk("  data: 0x{x} ({d} bytes)\n", .{@intFromPtr(&self.data[0]), @sizeOf(@TypeOf(self.data))});
+
+		printk("Values:\n", .{});
+		if (self.header.next_free) |next_free| printk("  next_free: {d}\n", .{next_free}) else printk("  next_free: null\n", .{});
+		printk("  cache: 0x{x}\n", .{@intFromPtr(self.header.cache)});
+		if (self.header.next) |next| printk("  next: 0x{x}\n", .{@intFromPtr(next)}) else printk("  next: null\n", .{});
+		if (self.header.prev) |prev| printk("  prev: 0x{x}\n", .{@intFromPtr(prev)}) else printk("  prev: null\n", .{});
+		printk("  in_use: {d}\n", .{self.header.in_use});
+		printk("  state: {d}\n", .{self.get_state()});
+		printk("\n", .{});
 	}
 };
 
@@ -164,18 +175,12 @@ pub const Cache = struct {
 
 			for (0..self.pages_per_slab) |i| {
 				const page_addr = @as(usize, @intFromPtr(obj)) + (i * PAGE_SIZE);
-				printk("init page: 0x{x}\n", .{page_addr});
+				//printk("init page: 0x{x}\n", .{page_addr});
 				var page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(page_addr));
 				page_descriptor.prev = @ptrCast(@alignCast(self));
 				page_descriptor.next = @ptrCast(@alignCast(slab));
 			}
-			if (self.slab_empty) |*lst| {
-				slab.header.next = lst.*;
-				lst.*.header.prev = slab;
-				lst.* = slab;
-			} else {
-				self.slab_empty = slab;
-			}
+			self.move_slab(slab, SlabState.Empty);
 			self.nb_slab += 1;
 		}
 	}
@@ -217,6 +222,7 @@ pub const Cache = struct {
 
 	pub fn move_slab(self: *Self, slab: *Slab, state: SlabState) void {
 		if (state == slab.get_state()) return; // TODO error
+		//printk("\x1b[33mcache: 0x{x}: move slab: 0x{x} ({}) -> {}\x1b[0m\n", .{@intFromPtr(self), @intFromPtr(slab), slab.get_state(), state});
 		self.unlink(slab);
 		self.link(slab, state);
 	}
@@ -235,8 +241,8 @@ pub const Cache = struct {
 		const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), PAGE_SIZE);
 		const page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(addr));
 
-		printk("cache: 0x{x}\n", .{@intFromPtr(page_descriptor.prev)});
-		printk("slab: 0x{x}\n", .{@intFromPtr(page_descriptor.next)});
+		//printk("cache: 0x{x}\n", .{@intFromPtr(page_descriptor.prev)});
+		//printk("slab: 0x{x}\n", .{@intFromPtr(page_descriptor.next)});
 		const slab: *Slab = @ptrCast(@alignCast(page_descriptor.next));
 		slab.free_object(ptr);
 	}
@@ -307,6 +313,15 @@ pub const Cache = struct {
 		printk("{d: >5} ", .{nb_slab_partial});
 		printk("{d: >5} ", .{nb_slab_full});
 		printk("\n", .{});
+		// head = self.slab_empty;
+		// if (nb_slab_empty > 0) printk("  \x1b[33mempty: \x1b[0m\n", .{});
+		// while (head) |slab| : (head = slab.header.next) slab.debug();
+		// head = self.slab_partial;
+		// if (nb_slab_partial > 0) printk("  \x1b[33mpartial: \x1b[0m\n", .{});
+		// while (head) |slab| : (head = slab.header.next) slab.debug();
+		// head = self.slab_full;
+		// if (nb_slab_full > 0) printk("  \x1b[33mfull: \x1b[0m\n", .{});
+		// while (head) |slab| : (head = slab.header.next) slab.debug();
 	}
 };
 
@@ -351,27 +366,27 @@ pub fn slabinfo() void {
 	global_cache.debug();
 }
 
-pub fn kmalloc(size: usize) Cache.Error!* align(1) usize {
+pub fn kmalloc(size: usize) !* align(1) usize {
 	return switch(size) {
-		0...4 => kmalloc_caches[0].alloc_one() catch Cache.Error.AllocationFailed,
-		5...8 => kmalloc_caches[1].alloc_one() catch Cache.Error.AllocationFailed,
-		9...16 => kmalloc_caches[2].alloc_one() catch Cache.Error.AllocationFailed,
-		17...32 => kmalloc_caches[3].alloc_one() catch Cache.Error.AllocationFailed,
-		33...64 => kmalloc_caches[4].alloc_one() catch Cache.Error.AllocationFailed,
-		65...128 => kmalloc_caches[5].alloc_one() catch Cache.Error.AllocationFailed,
-		129...256 => kmalloc_caches[6].alloc_one() catch Cache.Error.AllocationFailed,
-		257...512 => kmalloc_caches[7].alloc_one() catch Cache.Error.AllocationFailed,
-		513...1024 => kmalloc_caches[8].alloc_one() catch Cache.Error.AllocationFailed,
-		1025...2048 => kmalloc_caches[9].alloc_one() catch Cache.Error.AllocationFailed,
-		2049...4096 => kmalloc_caches[10].alloc_one() catch Cache.Error.AllocationFailed,
-		4097...8192 => kmalloc_caches[11].alloc_one() catch Cache.Error.AllocationFailed,
-		8193...16384 => kmalloc_caches[12].alloc_one() catch Cache.Error.AllocationFailed,
-		16385...32768 => kmalloc_caches[13].alloc_one() catch Cache.Error.AllocationFailed,
+		0...4 => kmalloc_caches[0].alloc_one(),
+		5...8 => kmalloc_caches[1].alloc_one(),
+		9...16 => kmalloc_caches[2].alloc_one(),
+		17...32 => kmalloc_caches[3].alloc_one(),
+		33...64 => kmalloc_caches[4].alloc_one(),
+		65...128 => kmalloc_caches[5].alloc_one(),
+		129...256 => kmalloc_caches[6].alloc_one(),
+		257...512 => kmalloc_caches[7].alloc_one(),
+		513...1024 => kmalloc_caches[8].alloc_one(),
+		1025...2048 => kmalloc_caches[9].alloc_one(),
+		2049...4096 => kmalloc_caches[10].alloc_one(),
+		4097...8192 => kmalloc_caches[11].alloc_one(),
+		8193...16384 => kmalloc_caches[12].alloc_one(),
+		16385...32768 => kmalloc_caches[13].alloc_one(),
 		else => Cache.Error.AllocationFailed,
 	};
 }
 
 pub fn kfree(ptr: *usize) void {
-	printk("kfree: 0x{x}\n", .{@intFromPtr(ptr)});
+	// printk("kfree: 0x{x}\n", .{@intFromPtr(ptr)});
 	global_cache.free(ptr);
 }
