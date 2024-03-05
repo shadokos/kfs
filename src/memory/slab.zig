@@ -403,3 +403,11 @@ pub fn kfree(ptr: *usize) void {
 	// printk("kfree: 0x{x}\n", .{@intFromPtr(ptr)});
 	global_cache.free(ptr);
 }
+
+pub fn ksize(ptr: *usize) ?usize {
+	var pfd = global_cache.get_page_frame_descriptor(ptr);
+	var slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
+
+	if (slab) |s| return if (s.is_obj_in_slab(ptr)) s.header.cache.size_obj else null
+	else return null;
+}
