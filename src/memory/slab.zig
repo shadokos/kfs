@@ -218,6 +218,8 @@ pub const Cache = struct {
 				self.slab_full = slab;
 			},
 		}
+		if (slab.header.next) |next| next.header.prev = slab;
+		slab.header.prev = null;
 	}
 
 	pub fn move_slab(self: *Self, slab: *Slab, state: SlabState) void {
