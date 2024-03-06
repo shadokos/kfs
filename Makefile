@@ -26,7 +26,6 @@ SRC = linker.ld \
 	drivers/acpi/acpi.zig \
 	drivers/acpi/types/acpi.zig \
 	drivers/acpi/types/s5.zig \
-	drivers/acpi/types/s5.zig \
 	drivers/vga/text.zig \
 	memory.zig \
 	memory/bitmap.zig \
@@ -40,6 +39,7 @@ SRC = linker.ld \
 	memory/virtual_page_allocator.zig \
 	memory/mapping.zig \
 	memory/slab.zig \
+	memory/cache.zig \
 	memory/fuzzer.zig \
 	kernel.zig \
 	multiboot.zig \

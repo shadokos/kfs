@@ -1,6 +1,6 @@
 const Slab = @import("slab.zig").Slab;
-const Cache = @import("slab.zig").Cache;
-const global_cache = &@import("slab.zig").global_cache;
+const Cache = @import("cache.zig").Cache;
+const global_cache = &@import("../memory.zig").global_cache;
 
 pub const KernelMemoryAllocator = struct {
 	const Self = @This();
@@ -32,11 +32,12 @@ pub const KernelMemoryAllocator = struct {
 		};
 
 		inline for (0..cache_descriptions.len) |i| {
-			caches[i] = try Cache.create(
+			caches[i] = try global_cache.create(
 				cache_descriptions[i].name,
 				cache_descriptions[i].size,
 				cache_descriptions[i].order
 			);
+			@import("../tty/tty.zig").printk("cache[{d}] = 0x{x}, next = 0x{x}\n", .{ i, @intFromPtr(caches[i]), @intFromPtr(caches[i].next) });
 		}
 	}
 
@@ -65,11 +66,11 @@ pub const KernelMemoryAllocator = struct {
 	}
 
 	pub fn free(_: *Self, ptr: anytype) void {
-		global_cache.free(ptr);
+		global_cache.cache.free(ptr);
 	}
 
 	pub fn obj_size(_: *Self, ptr: anytype) ?usize {
-		var pfd = global_cache.get_page_frame_descriptor(ptr);
+		var pfd = global_cache.cache.get_page_frame_descriptor(ptr);
 		var slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
 
 		if (slab) |s| return if (s.is_obj_in_slab(ptr)) s.header.cache.size_obj else null
