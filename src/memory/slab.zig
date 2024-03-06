@@ -1,11 +1,12 @@
 const ft = @import("../ft/ft.zig");
-const page_frame_descriptor = @import("paging.zig").page_frame_descriptor;
+const paging = @import("paging.zig");
+const page_frame_descriptor = paging.page_frame_descriptor;
 const printk = @import("../tty/tty.zig").printk;
 const VirtualPageAllocatorType = @import("../memory.zig").VirtualPageAllocatorType;
-const PAGE_SIZE: usize = 4096;
-const CACHE_NAME_LEN = 15;
 const BitMap = @import("bitmap.zig").BitMap;
 const Bit = @import("bitmap.zig").Bit;
+
+const CACHE_NAME_LEN = 15;
 
 pub const SlabState = enum {
 	Empty,
@@ -157,7 +158,7 @@ pub const Cache = struct {
 		};
 
 		// Compute the available space for the slab ((page_size * 2^order) - sise of slab header)
-		const available = (PAGE_SIZE * new.pages_per_slab) - @sizeOf(Self);
+		const available = (paging.page_size * new.pages_per_slab) - @sizeOf(Self);
 
 		new.obj_per_slab = 0;
 		while (true) {
@@ -184,7 +185,7 @@ pub const Cache = struct {
 			slab.* = Slab.init(self, @ptrCast(obj));
 
 			for (0..self.pages_per_slab) |i| {
-				const page_addr = @as(usize, @intFromPtr(obj)) + (i * PAGE_SIZE);
+				const page_addr = @as(usize, @intFromPtr(obj)) + (i * paging.page_size);
 				//printk("init page: 0x{x}\n", .{page_addr});
 				var pfd = self.get_page_frame_descriptor(@ptrFromInt(page_addr));
 				pfd.prev = @ptrCast(@alignCast(self));
@@ -249,7 +250,7 @@ pub const Cache = struct {
 	}
 
 	pub fn free(self: *Self, ptr: *usize) void {
-		const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), PAGE_SIZE);
+		const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size);
 		const page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(addr));
 
 		//printk("cache: 0x{x}\n", .{@intFromPtr(page_descriptor.prev)});
@@ -290,7 +291,7 @@ pub const Cache = struct {
 	}
 
 	pub fn get_page_frame_descriptor(self: *Self, obj: *usize) *page_frame_descriptor {
-		const addr = ft.mem.alignBackward(usize, @intFromPtr(obj), PAGE_SIZE);
+		const addr = ft.mem.alignBackward(usize, @intFromPtr(obj), paging.page_size);
 		return self.allocator.get_page_frame_descriptor(@ptrFromInt(addr));
 	}
 
