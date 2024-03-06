@@ -84,6 +84,7 @@ pub fn MapperT(comptime PageFrameAllocatorType : type) type {
 				// todo return some error
 			}
 			table[virtualStruct.table_index] = entry;
+			self.activate();
 		}
 
 		pub fn unmap(self : *Self, virtual: paging.VirtualPagePtr, len : usize) void {
