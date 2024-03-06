@@ -71,6 +71,7 @@ pub const Cache = struct {
 				var pfd = self.get_page_frame_descriptor(@ptrFromInt(page_addr));
 				pfd.prev = @ptrCast(@alignCast(self));
 				pfd.next = @ptrCast(@alignCast(slab));
+				pfd.flags.slab = true;
 			}
 			self.move_slab(slab, SlabState.Empty);
 			self.nb_slab += 1;
@@ -132,6 +133,7 @@ pub const Cache = struct {
 		const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size);
 		const page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(addr));
 
+		if (page_descriptor.flags.slab == false) @panic("Slab Allocator: Attempt to free a non kernel allocated object");
 		const slab: *Slab = @ptrCast(@alignCast(page_descriptor.next));
 		slab.free_object(ptr);
 	}

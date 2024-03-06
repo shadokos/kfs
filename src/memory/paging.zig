@@ -7,13 +7,14 @@ pub const idx_t = usize;
 pub const order_t = ft.meta.Int(.unsigned, ft.math.log2(@typeInfo(idx_t).Int.bits));
 
 /// flags of a page frame
-pub const page_flag = packed struct {
+pub const page_flags = packed struct {
 	available : bool = false,
+	slab : bool = false,
 };
 
 /// page frame descriptor
 pub const page_frame_descriptor = struct {
-	flags : page_flag,
+	flags : page_flags,
 	next : ?*page_frame_descriptor = null,
 	prev : ?*page_frame_descriptor = null
 };

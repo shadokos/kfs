@@ -72,11 +72,11 @@ pub const Slab = struct {
 		const obj_addr = @intFromPtr(obj);
 
 		if (!self.is_obj_in_slab(obj))
-			return ; // TODO: Maybe throw an error? not really necessary but why not..
+			@panic("Slab Allocator: Attempt to free a non kernel allocated object");
 
 		const index: u16 = @truncate((obj_addr - @intFromPtr(&self.data[0])) / self.header.cache.size_obj);
-		if (self.bitmap.get(index) catch .Free == .Free) @panic("SLAB: TODO Double free detected"); // TODO: Error
-		self.bitmap.set(index, Bit.Free) catch @panic("SLAB: TODO bitmap error"); // TODO: Error
+		if (self.bitmap.get(index) catch .Free == .Free) @panic("Slab Allocator: Double free detected");
+		self.bitmap.set(index, Bit.Free) catch @panic("Slab Allocator: Bitmap corruption detected");
 		switch (self.get_state()) {
 			.Empty => unreachable,
 			.Partial => if (self.header.in_use == 1) self.header.cache.move_slab(self, .Empty),
