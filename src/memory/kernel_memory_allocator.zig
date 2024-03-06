@@ -37,7 +37,6 @@ pub const KernelMemoryAllocator = struct {
 				cache_descriptions[i].size,
 				cache_descriptions[i].order
 			);
-			@import("../tty/tty.zig").printk("cache[{d}] = 0x{x}, next = 0x{x}\n", .{ i, @intFromPtr(caches[i]), @intFromPtr(caches[i].next) });
 		}
 	}
 
