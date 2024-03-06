@@ -98,7 +98,7 @@ pub fn theme(args: [][]u8) CmdError!void {
 
 pub fn shutdown(_: [][]u8) CmdError!void {
 	@import("../drivers/acpi/acpi.zig").power_off();
-	utils.print_error("Failed to shutdown\n", .{});
+	utils.print_error("Failed to shutdown", .{});
 	return CmdError.OtherError;
 }
 

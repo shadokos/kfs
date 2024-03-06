@@ -66,7 +66,7 @@ fn _entry_type(comptime name: []const u8) type {
 				data: u8,
 			}, // DSDT
 		};
-		var ret = struct {
+		var ret = extern struct {
 			header: ACPISDT_Header,
 		};
 		var tmp = @typeInfo(ret);
@@ -120,17 +120,17 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry
 
 	const entry_addr: PTRI(usize) = @ptrFromInt(@intFromPtr(&rsdt.pointer_to_other_sdt));
 	for (entry_addr[0..entries]) |entry| {
-		const header: PTR(ACPISDT_Header) = @ptrFromInt(entry);
+		const header: PTR(ACPISDT_Header) = map(ACPISDT_Header, entry);
 
 		if (ft.mem.eql(u8, &header.signature, name)) {
 			tty.printk("ACPI: {s}: Search:\t\t{s}OK{s}\t({s}0x{x:0>8}{s})\n", .{
 				utils.magenta++name++utils.reset,
 				utils.green, utils.reset,
-				utils.blue, entry, utils.reset
+				utils.blue, @intFromPtr(header), utils.reset
 			});
-
-			return _validate(_entry_type(name), name, @as(PTR(_entry_type(name)), @ptrFromInt(entry)));
+			return _validate(_entry_type(name), name, @as(PTR(_entry_type(name)), @ptrCast(header)));
 		}
+		else unmap(header, header.length);
 	}
 	return ACPI_error.entry_not_found;
 }
@@ -159,11 +159,11 @@ fn _get_rsdp() ACPI_error!PTR(RSDP) {
 }
 
 fn _get_rsdt(rsdp: PTR(RSDP)) ACPI_error!PTR(RSDT) {
-	return _validate(RSDT, "RSDT", rsdp.rsdt_address);
+	return _validate(RSDT, "RSDT", map(RSDT, @intFromPtr(rsdp.rsdt_address)));
 }
 
 fn _get_dsdt(facp: PTR(_entry_type("FACP"))) ACPI_error!PTR(DSDT) {
-	return _validate(DSDT, "DSDT", @as(PTR(DSDT), @ptrFromInt(facp.fadt.dsdt)));
+	return _validate(DSDT, "DSDT", map(DSDT, facp.fadt.dsdt));
 }
 
 fn _get_s5(dsdt: PTR(DSDT)) ACPI_error!PTR(S5Object) {
@@ -233,4 +233,30 @@ pub fn init() void {
     tty.printk("ACPI: Initialization:\t"++utils.green++"OK"++utils.reset++"\n", .{});
 
     enable() catch |err| @panic(acpi_strerror("", err));
+}
+
+const paging = @import("../../memory/paging.zig");
+
+pub fn map(comptime T: type, ptr : paging.PhysicalPtr) PTR(T) {
+	const memory = @import("../../memory.zig");
+
+	const object: PTR(T) = @ptrCast(@alignCast(memory.virtualPageAllocator.map_anywhere(
+		ptr, @sizeOf(T), .KernelSpace
+	) catch @panic("can't map acpi object")));
+
+
+	const len = if (@hasField(T, "header")) object.header.length
+	else if (@hasField(T, "length")) object.length
+	else return object;
+
+	defer unmap(object, @sizeOf(T));
+
+	return @ptrCast(@alignCast(memory.virtualPageAllocator.map_anywhere(
+		ptr, len, .KernelSpace
+	) catch @panic("can't map acpi object")));
+}
+
+pub fn unmap(ptr: anytype, len: usize) void {
+	const memory = @import("../../memory.zig");
+	memory.virtualPageAllocator.unmap(@ptrCast(ptr), len);
 }
