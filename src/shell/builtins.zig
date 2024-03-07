@@ -32,7 +32,7 @@ pub fn help(data: [][]u8) CmdError!void {
 			return;
 		}
 	}
-	utils.print_error("There's no help page for \"{s}\"\n", .{data[1]});
+	utils.print_error("There's no help page for \"{s}\"", .{data[1]});
 	_help_available_commands();
 	return CmdError.OtherError;
 }
@@ -128,7 +128,7 @@ pub fn alloc_page(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
 	const pages  = vpa.alloc_pages(nb) catch {
-		printk("Failed to allocate {d} pages\n", .{nb});
+		utils.print_error("Failed to allocate {d} pages", .{nb});
 		return CmdError.OtherError;
 	};
 	printk("Allocated {d} pages at 0x{x:0>8}\n", .{nb, @intFromPtr(pages)});
@@ -136,10 +136,10 @@ pub fn alloc_page(args: [][]u8) CmdError!void {
 
 pub fn kmalloc(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
-	var kmem = @import("../memory.zig").kernelMemoryAllocator;
+	var kmem = &@import("../memory.zig").kernelMemoryAllocator;
 	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
 	const obj : []u8 = kmem.alloc(u8, nb) catch {
-		printk("Failed to allocate {d} bytes\n", .{nb});
+		utils.print_error("Failed to allocate {d} bytes", .{nb});
 		return CmdError.OtherError;
 	};
 	printk("Allocated {d} bytes at 0x{x}\n", .{nb, @intFromPtr(&obj[0])});
@@ -148,22 +148,46 @@ pub fn kmalloc(args: [][]u8) CmdError!void {
 pub fn kfree(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
-	var kmem = @import("../memory.zig").kernelMemoryAllocator;
+	var kmem = &@import("../memory.zig").kernelMemoryAllocator;
 	const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-	if (!ft.mem.isAligned(addr, @sizeOf(usize))) return CmdError.OtherError;
-	//kmem.free(@ptrFromInt(addr));
+	if (!ft.mem.isAligned(addr, @sizeOf(usize))) {
+		utils.print_error("0x{x} is not aligned", .{addr});
+		return CmdError.OtherError;
+	}
 	kmem.free(@as(*usize, @ptrFromInt(addr)));
 }
 
 pub fn ksize(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
-	var kmem = @import("../memory.zig").kernelMemoryAllocator;
+	var kmem = &@import("../memory.zig").kernelMemoryAllocator;
 	const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-	if (!ft.mem.isAligned(addr, @sizeOf(usize))) return CmdError.OtherError;
-	const size = kmem.obj_size(@as(*usize, @ptrFromInt(addr)));
-	if (size) |s| printk("Size of 0x{x} is {d} bytes\n", .{addr, s})
-	else printk("0x{x} is not a valid address\n", .{addr});
+	if (!ft.mem.isAligned(addr, @sizeOf(usize))) {
+		utils.print_error("0x{x} is not aligned", .{addr});
+		return CmdError.OtherError;
+	}
+	const size = kmem.obj_size(@as(*usize, @ptrFromInt(addr))) catch |e| {
+		utils.print_error("Failed to get size of 0x{x}: {s}", .{addr, @errorName(e)});
+		return CmdError.OtherError;
+	};
+	printk("Size of 0x{x} is {d} bytes\n", .{addr, size});
+}
+
+pub fn kresize(args: [][]u8) CmdError!void {
+	if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+
+	var kmem = &@import("../memory.zig").kernelMemoryAllocator;
+	const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+	const new_size = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+	if (!ft.mem.isAligned(addr, @sizeOf(usize))) {
+		utils.print_error("0x{x} is not aligned", .{addr});
+		return CmdError.OtherError;
+	}
+	const obj = kmem.resize(u8, @as([*]u8, @ptrFromInt(addr)), new_size) catch |e| {
+		utils.print_error("Failed to resize 0x{x}: {s}", .{addr, @errorName(e)});
+		return CmdError.OtherError;
+	};
+	tty.printk("Resized 0x{x} to 0x{x} (new_len: {d})\n", .{addr, @intFromPtr(&obj[0]), obj.len});
 }
 
 pub fn slabinfo(_: [][]u8) CmdError!void {

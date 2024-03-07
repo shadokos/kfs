@@ -65,14 +65,28 @@ pub const KernelMemoryAllocator = struct {
 	}
 
 	pub fn free(_: *Self, ptr: anytype) void {
-		global_cache.cache.free(ptr);
+		global_cache.cache.free(@ptrCast(@alignCast(ptr)));
 	}
 
-	pub fn obj_size(_: *Self, ptr: anytype) ?usize {
-		var pfd = global_cache.cache.get_page_frame_descriptor(ptr);
+	pub fn resize(self: *Self, comptime T: type, ptr: [*]T, new_size: usize) ![]T {
+		const actual_size = try self.obj_size(ptr);
+		if (new_size < actual_size) return ptr[0..new_size];
+		var obj = try self.alloc(T, new_size);
+		@memcpy(obj[0..actual_size], ptr);
+		self.free(ptr);
+		return obj;
+	}
+
+	pub fn obj_size(_: *Self, ptr: anytype) !usize {
+		var pfd = global_cache.cache.get_page_frame_descriptor(@ptrCast(@alignCast(ptr)));
 		var slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
 
-		if (slab) |s| return if (s.is_obj_in_slab(ptr)) s.header.cache.size_obj else null
-		else return null;
+		if (slab) |s| {
+			return if (s.is_obj_in_slab(@ptrCast(@alignCast(ptr))))
+				s.header.cache.size_obj
+			else
+				error.NotAKernelObject;
+		}
+		else return error.NotAKernelObject;
 	}
 };
