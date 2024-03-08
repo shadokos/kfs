@@ -1,6 +1,6 @@
 const Slab = @import("slab.zig").Slab;
 const Cache = @import("cache.zig").Cache;
-const global_cache = &@import("../memory.zig").global_cache;
+const globalCache = &@import("../memory.zig").globalCache;
 
 pub const KernelMemoryAllocator = struct {
 	const Self = @This();
@@ -32,7 +32,7 @@ pub const KernelMemoryAllocator = struct {
 		};
 
 		inline for (0..cache_descriptions.len) |i| {
-			caches[i] = try global_cache.create(
+			caches[i] = try globalCache.create(
 				cache_descriptions[i].name,
 				cache_descriptions[i].size,
 				cache_descriptions[i].order
@@ -65,7 +65,7 @@ pub const KernelMemoryAllocator = struct {
 	}
 
 	pub fn free(_: *Self, ptr: anytype) void {
-		global_cache.cache.free(@ptrCast(@alignCast(ptr)));
+		globalCache.cache.free(@ptrCast(@alignCast(ptr)));
 	}
 
 	pub fn resize(self: *Self, comptime T: type, ptr: [*]T, new_size: usize) ![]T {
@@ -78,7 +78,7 @@ pub const KernelMemoryAllocator = struct {
 	}
 
 	pub fn obj_size(_: *Self, ptr: anytype) !usize {
-		var pfd = global_cache.cache.get_page_frame_descriptor(@ptrCast(@alignCast(ptr)));
+		var pfd = globalCache.cache.get_page_frame_descriptor(@ptrCast(@alignCast(ptr)));
 		var slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
 
 		if (slab) |s| {
