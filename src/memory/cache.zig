@@ -78,9 +78,20 @@ pub const Cache = struct {
 		}
 	}
 
+	fn reset_page_frame_descriptor(self: *Self, slab: *Slab) void {
+		for (0..self.pages_per_slab) |i| {
+			const page_addr = @as(usize, @intFromPtr(slab)) + (i * paging.page_size);
+			var pfd = self.get_page_frame_descriptor(@ptrFromInt(page_addr));
+			pfd.flags.slab = false;
+			pfd.prev = null;
+			pfd.next = null;
+		}
+	}
+
 	pub fn shrink(self: *Self) void {
 		while (self.slab_empty) |slab| {
 			self.unlink(slab);
+			self.reset_page_frame_descriptor(slab);
 			self.allocator.free_pages(@ptrCast(@alignCast(slab)), self.pages_per_slab) catch unreachable;
 			self.nb_slab -= 1;
 		}
@@ -129,13 +140,13 @@ pub const Cache = struct {
 		}
 	}
 
-	pub fn free(self: *Self, ptr: *usize) void {
+	pub fn free(self: *Self, ptr: *usize) (Slab.Error || BitMap.Error)!void {
 		const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size);
 		const page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(addr));
 
-		if (page_descriptor.flags.slab == false) @panic("Slab Allocator: Attempt to free a non kernel allocated object");
+		if (page_descriptor.flags.slab == false) return Slab.Error.InvalidArgument;
 		const slab: *Slab = @ptrCast(@alignCast(page_descriptor.next));
-		slab.free_object(ptr);
+		try slab.free_object(ptr);
 	}
 
 	pub fn get_page_frame_descriptor(self: *Self, obj: *usize) *page_frame_descriptor {
@@ -189,9 +200,7 @@ pub const GlobalCache = struct {
 	pub fn create(self: *Self, name: []const u8, obj_size: usize, order: u5) !*Cache {
 		var cache: *Cache = @ptrCast(@alignCast(self.cache.alloc_one() catch |e| return e));
 
-		cache.* = Cache.init(
-			name, self.cache.allocator, obj_size, order
-		) catch @panic("Failed to initialize cache");
+		cache.* = try Cache.init(name, self.cache.allocator, obj_size, order);
 
 		cache.next = self.cache.next;
 		if (self.cache.next) |next| next.prev = cache;
@@ -206,16 +215,18 @@ pub const GlobalCache = struct {
 
 		while (lst) |slab| {
 			lst = slab.header.next;
+			self.cache.reset_page_frame_descriptor(slab);
 			cache.allocator.free_pages(@ptrCast(@alignCast(slab)), cache.pages_per_slab) catch unreachable;
 		}
 		lst = cache.slab_partial;
 		while (lst) |slab| {
 			lst = slab.header.next;
+			self.cache.reset_page_frame_descriptor(slab);
 			cache.allocator.free_pages(@ptrCast(@alignCast(slab)), cache.pages_per_slab) catch unreachable;
 		}
 		if (cache.prev) |prev| prev.next = cache.next else self.cache.next = cache.next;
 		if (cache.next) |next| next.prev = cache.prev;
-		self.cache.free(@ptrCast(cache));
+		self.cache.free(@ptrCast(cache)) catch unreachable;
 	}
 
 	pub fn print(self: *Self) void {

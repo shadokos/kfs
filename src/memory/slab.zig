@@ -20,7 +20,7 @@ pub const SlabHeader = struct {
 pub const Slab = struct {
 	const Self = @This();
 
-	pub const Error = error{ SlabFull, SlabCorrupted, OutOfBounds, InvalidOrder, InvalidSize };
+	pub const Error = error{ InvalidArgument, SlabFull, SlabCorrupted, DoubleFree };
 
 	header: SlabHeader = SlabHeader{},
 
@@ -68,15 +68,15 @@ pub const Slab = struct {
 		return true;
 	}
 
-	pub fn free_object(self: *Self, obj: *usize) void {
+	pub fn free_object(self: *Self, obj: *usize) (Error || BitMap.Error)!void {
 		const obj_addr = @intFromPtr(obj);
 
 		if (!self.is_obj_in_slab(obj))
-			@panic("Slab Allocator: Attempt to free a non kernel allocated object");
+			return Error.InvalidArgument;
 
 		const index: u16 = @truncate((obj_addr - @intFromPtr(&self.data[0])) / self.header.cache.size_obj);
-		if (self.bitmap.get(index) catch .Free == .Free) @panic("Slab Allocator: Double free detected");
-		self.bitmap.set(index, Bit.Free) catch @panic("Slab Allocator: Bitmap corruption detected");
+		if (self.bitmap.get(index) catch unreachable == .Free) return Error.DoubleFree;
+		self.bitmap.set(index, Bit.Free) catch unreachable;
 		switch (self.get_state()) {
 			.Empty => unreachable,
 			.Partial => if (self.header.in_use == 1) self.header.cache.move_slab(self, .Empty),
