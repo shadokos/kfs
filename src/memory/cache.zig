@@ -39,7 +39,7 @@ pub const Cache = struct {
 		.size_obj = ft.mem.alignForward(usize, obj_size, @sizeOf(usize)),
 		};
 
-		// Compute the available space for the slab ((page_size * 2^order) - sise of slab header)
+		// Compute the available space for the slab ((page_size * 2^order) - size of slab header)
 		const available = (paging.page_size * new.pages_per_slab) - @sizeOf(Self);
 
 		new.obj_per_slab = 0;
