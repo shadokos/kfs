@@ -65,7 +65,9 @@ pub const KernelMemoryAllocator = struct {
 	}
 
 	pub fn free(_: *Self, ptr: anytype) void {
-		globalCache.cache.free(@ptrCast(@alignCast(ptr)));
+		globalCache.cache.free(@ptrCast(@alignCast(ptr))) catch |e| {
+			@panic(@errorName(e));
+		};
 	}
 
 	pub fn resize(self: *Self, comptime T: type, ptr: [*]T, new_size: usize) ![]T {
@@ -79,14 +81,15 @@ pub const KernelMemoryAllocator = struct {
 
 	pub fn obj_size(_: *Self, ptr: anytype) !usize {
 		var pfd = globalCache.cache.get_page_frame_descriptor(@ptrCast(@alignCast(ptr)));
+		if (!pfd.flags.slab) return error.InvalidArgument;
 		var slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
 
 		if (slab) |s| {
 			return if (s.is_obj_in_slab(@ptrCast(@alignCast(ptr))))
 				s.header.cache.size_obj
 			else
-				error.NotAKernelObject;
+				error.InvalidArgument;
 		}
-		else return error.NotAKernelObject;
+		else return error.InvalidArgument;
 	}
 };
