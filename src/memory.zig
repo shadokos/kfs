@@ -16,7 +16,7 @@ pub var virtualPageAllocator : VirtualPageAllocatorType = .{};
 
 pub var pageFrameAllocator : PageFrameAllocator = .{};
 
-pub var global_cache: @import("memory/cache.zig").GlobalCache = undefined;
+pub var globalCache: @import("memory/cache.zig").GlobalCache = undefined;
 
 pub var kernelMemoryAllocator : KernelMemoryAllocator = .{};
 
@@ -88,7 +88,7 @@ pub fn init() void {
 	map_kernel();
 
 	const GlobalCache = @import("memory/cache.zig").GlobalCache;
-	global_cache = GlobalCache.init(&virtualPageAllocator) catch @panic("cannot init global_cache");
+	globalCache = GlobalCache.init(&virtualPageAllocator) catch @panic("cannot ini globalCache");
 	KernelMemoryAllocator.cache_init() catch @panic("cannot cache_init KernelMemoryAllocator");
 }
 
