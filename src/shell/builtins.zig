@@ -191,7 +191,7 @@ pub fn kresize(args: [][]u8) CmdError!void {
 }
 
 pub fn slabinfo(_: [][]u8) CmdError!void {
-	(&@import("../memory.zig").global_cache).print();
+	(&@import("../memory.zig").globalCache).print();
 }
 
 pub fn multiboot_info(_: [][]u8) CmdError!void {
@@ -203,11 +203,11 @@ pub fn multiboot_info(_: [][]u8) CmdError!void {
 // ... For debugging purposes only
 pub fn cache_create(args: [][]u8) CmdError!void {
 	if (args.len != 4) return CmdError.InvalidNumberOfArguments;
-	const global_cache = &@import("../memory.zig").global_cache;
+	const globalCache = &@import("../memory.zig").globalCache;
 	const name = args[1];
 	const size = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
 	const order = ft.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
-	const new_cache = global_cache.create(name, size, @truncate(order)) catch {
+	const new_cache = globalCache.create(name, size, @truncate(order)) catch {
 		printk("Failed to create cache\n", .{});
 		return CmdError.OtherError;
 	};
@@ -219,16 +219,16 @@ pub fn cache_create(args: [][]u8) CmdError!void {
 pub fn cache_destroy(args: [][]u8) CmdError!void {
 	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
-	const global_cache = &@import("../memory.zig").global_cache;
+	const globalCache = &@import("../memory.zig").globalCache;
 	const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
 
-	global_cache.destroy(@ptrFromInt(addr));
+	globalCache.destroy(@ptrFromInt(addr));
 }
 
 // TODO: Remove this builtin
 // ... For debugging purposes only
 pub fn shrink(_: [][]u8) CmdError!void {
-	var node: ?*@import("../memory/cache.zig").Cache = &@import("../memory.zig").global_cache.cache;
+	var node: ?*@import("../memory/cache.zig").Cache = &@import("../memory.zig").globalCache.cache;
 	while (node) |n| : (node = n.next) n.shrink();
 }
 
