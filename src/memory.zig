@@ -8,6 +8,7 @@ const multiboot = @import("multiboot.zig");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const mapping = @import("memory/mapping.zig");
 const VirtualPageAllocator = @import("memory/virtual_page_allocator.zig").VirtualPageAllocator;
+const VirtualMemoryAllocator = @import("memory/virtual_memory_allocator.zig").VirtualMemoryAllocator;
 const KernelMemoryAllocator = @import("memory/kernel_memory_allocator.zig").KernelMemoryAllocator;
 
 pub const VirtualPageAllocatorType = VirtualPageAllocator(PageFrameAllocator);
@@ -15,6 +16,10 @@ pub const VirtualPageAllocatorType = VirtualPageAllocator(PageFrameAllocator);
 pub var virtualPageAllocator : VirtualPageAllocatorType = .{};
 
 pub var pageFrameAllocator : PageFrameAllocator = .{};
+
+pub const VirtualMemoryAllocatorType = VirtualMemoryAllocator(VirtualPageAllocatorType);
+
+pub var virtualMemoryAllocator : VirtualMemoryAllocatorType = undefined;
 
 pub var globalCache: @import("memory/cache.zig").GlobalCache = undefined;
 
@@ -91,6 +96,8 @@ pub fn init() void {
 	const GlobalCache = @import("memory/cache.zig").GlobalCache;
 	globalCache = GlobalCache.init(&virtualPageAllocator) catch @panic("cannot ini globalCache");
 	KernelMemoryAllocator.cache_init() catch @panic("cannot cache_init KernelMemoryAllocator");
+
+	virtualMemoryAllocator = VirtualMemoryAllocatorType.init(&virtualPageAllocator);
 }
 
 fn check_mem_availability() void {
