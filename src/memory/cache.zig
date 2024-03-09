@@ -142,7 +142,7 @@ pub const Cache = struct {
 
 	pub fn free(self: *Self, ptr: *usize) (Slab.Error || BitMap.Error)!void {
 		const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size);
-		const page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(addr));
+		const page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(addr)) catch @panic("todo");
 
 		if (page_descriptor.flags.slab == false) return Slab.Error.InvalidArgument;
 		const slab: *Slab = @ptrCast(@alignCast(page_descriptor.next));
@@ -151,7 +151,7 @@ pub const Cache = struct {
 
 	pub fn get_page_frame_descriptor(self: *Self, obj: *usize) *page_frame_descriptor {
 		const addr = ft.mem.alignBackward(usize, @intFromPtr(obj), paging.page_size);
-		return self.allocator.get_page_frame_descriptor(@ptrFromInt(addr));
+		return self.allocator.get_page_frame_descriptor(@ptrFromInt(addr)) catch unreachable; // todo
 	}
 
 	pub fn debug(self: *Self) void {

@@ -40,6 +40,23 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 
 		const Self = @This();
 
+		/// init an instance (if the underlying allocator is set)self.bit_map
+		pub fn init(_total_pages : idx_t, _allocator : *AllocatorType) Self {
+			if (_total_pages == 0)
+				@panic("not enough space to boot");
+
+			var self = Self{.total_pages = _total_pages, .allocator = _allocator};
+
+			self.mem_map = _allocator.alloc(page_frame_descriptor, self.total_pages) catch @panic("not enough space to allocate mem_map");
+			@memset(self.mem_map, .{.flags = .{.available = false}});
+
+			const size = bitmap_size(self.total_pages);
+			self.bit_map = bitmap.BitMap.init(@ptrCast(_allocator.alloc(usize, bitmap.BitMap.compute_len(size)) catch @panic("not enough space to allocate bitmap")), size);
+			for (0..size) |i| self.bit_map.set(i, .Taken) catch unreachable;
+
+			return self;
+		}
+
 		/// return the pointer to the frame of the page frame identified by p
 		pub inline fn frame_from_idx(self : Self, p : idx_t) *page_frame_descriptor {
 			return &self.mem_map[p];
@@ -63,9 +80,6 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			const t : u64 = self.total_pages;
 			const o : order_t = order;
 			const m : order_t = max_order;
-			// self.bit_map.get(@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o)))) catch unreachable,
-			// @intFromEnum(self.bit_map.get(@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o)))) catch unreachable)
-			// });
 			return self.bit_map.get(@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o)))) catch unreachable;
 		}
 
@@ -155,6 +169,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			}
 		}
 
+		/// alloc n physical pages and return the idx of the first page
 		pub fn alloc_pages(self : *Self, n : usize) Error!idx_t {
 			var order : order_t = @intCast(ft.math.log2(n));
 			if (@as(usize, 1) << order < n) {
@@ -179,12 +194,16 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			} else unreachable;
 		}
 
+		/// alloc n physical pages and return the idx of the first page, try to allocate the pages at `hint`
 		pub fn alloc_pages_hint(self : *Self, hint : idx_t, n : usize) Error!idx_t {
 			_ = hint; // todo: hints
 			return self.alloc_pages(n);
 		}
 
-		pub fn free_pages(self : *Self, first : idx_t, n : usize) !void { // todo: check out of bound
+		/// free `n` pages starting at `first`
+		pub fn free_pages(self : *Self, first : idx_t, n : usize) !void {
+			if (first +| n >= self.total_pages)
+				return Error.OutOfBounds;
 			// todo: maybe optimize this
 			for (first..(first + n)) |p| {
 				try self.free_page(p);
@@ -196,7 +215,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			self.allocator = allocator;
 		}
 
-		/// return the size of the bitmap needed to describe pages page frames
+		/// return the size in bits of the bitmap needed to describe pages page frames
 		fn bitmap_size(pages : usize) usize {
 			// const average_page_cost : f32 = @as(f32, @floatFromInt((@as(usize, 1) << (max_order + 1)) - 1)) / @as(f32, @floatFromInt(@as(usize, 1) << (max_order)));
 			const average_page_cost : usize = 2;
@@ -222,6 +241,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			return @as(T, @intCast(ret)) * @sizeOf(page);
 		}
 
+		/// return the size needed for a page frame allocator on `pages` pages
 		pub fn size_for(pages : usize) usize {
 			return (ft.math.divCeil(usize, bitmap_size(pages), 8) catch unreachable) + pages * @sizeOf(page_frame_descriptor);
 		}
@@ -232,18 +252,24 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			while (line < to) : (line += tty.width)
 			{
 				for (0..max_order + 1) |o| {
+					var array : [tty.width]u8 = undefined;
 					for (0..tty.width) |c| {
 						if (c + line < to and (o == 0 or ((line + c) % (@as(usize, 1) << @intCast(o)) == 0))) {
-							printk("{b}", .{@intFromEnum(self.get_bit(line + c, @intCast(o)))});
+							array[c] = switch (self.get_bit(line + c, @intCast(o))) {
+								.Taken => '0',
+								.Free => '1',
+							};
 						} else {
-							printk(" ", .{});
+							array[c] = ' ';
 						}
 					}
+					printk("{s}", .{array[0..tty.width]});
 				}
 				printk("\n", .{});
 			}
 		}
 
+		/// print the free lists using printk
 		pub fn print(self : *Self) void {
 			for (self.free_lists,  0..) |l, i| {
 				printk("free list {d}: {*}\n", .{i, l});

@@ -1,64 +1,93 @@
 const ft = @import("../ft/ft.zig");
 const paging = @import("paging.zig");
 
+/// allocator for virtual address space
+/// this algorithm store free chunks of space using two AVLs (one for sizes and one for addresses)
+/// so the chunks can be found by their keys or by their addresses.
+/// this allows fast allocation and deallocation (O(log(n)) where n is the number of independent free chunks)
 pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 	return struct {
 
+		/// the page allocator used to allocate nodes
 		pageAllocator : *PageAllocator = undefined,
 
+		/// roots of the trees
 		tree : [2]?*Node = .{null, null},
 
+		/// list of free node to use
 		free_nodes : ?*Node = null,
 
+		/// list of allocated Pages
 		node_pages : ?* allowzero NodePage = null,
 
+		/// space currently used (this field is only used for stats)
 		used_space : usize = 0,
 
+		/// the two key of the AVLs
 		const AVL_type = enum(u1) {
 			Size,
 			Address
 		};
 
+		/// Node structure used in the AVLs
 		const Node = struct {
+			/// two hdr for the two avl keys/field
 			avl : [2]AVL_hdr = .{.{}, .{}},
+			/// field used to store the nodes in the free nodes list
 			next : ?*@This() = null,
 
 			const AVL_hdr = struct {
+				/// left node
 				l : ?*Node = null,
+				/// right node
 				r : ?*Node = null,
+				/// parent node
 				p : ?*Node = null,
+				/// balance factor used by the avl algorithm
 				balance_factor : i8 = 0,
+				/// value of this field
 				value : usize = undefined,
 			};
 		};
 
+		/// the structure used to allocate nodes
 		const NodePage = struct {
+			/// page header
 			hdr : Header = .{},
+			/// nodes
 			nodes : [nodes_per_pages]Node = undefined,
 
+			/// page header struct
 			const Header = struct {
+				/// pointer to the next node page in the list
 				next : ?* allowzero NodePage = null,
+				/// index of the first free node in the page
 				first_node : usize = 0,
+				/// number of remaining nodes
 				free_nodes_count : usize = (paging.page_size - @sizeOf(@This())) / @sizeOf(Node),
 			};
 
-			const nodes_per_pages = (paging.page_size - @sizeOf(Header)) / @sizeOf(Node);
+			/// number of nodes per pages
+			const nodes_per_pages = (paging.page_size - @sizeOf(Header)) / @sizeOf(Node); // todo
 		};
 
 		const Self = @This();
 
-		pub const Error = error{NoSpaceFound};
+		pub const Error = error{NoSpaceFound, DoubleFree};
 
-		pub fn init(self : *Self, _pageAllocator : *PageAllocator, address : usize, size : usize) !void {
-			self.pageAllocator = _pageAllocator;
+		/// init a struct
+		pub fn init(_pageAllocator : *PageAllocator, address : usize, size : usize) !Self {
+			var self = Self{.pageAllocator = _pageAllocator};
 
-				var node = try self.alloc_node();
+			var node = try self.alloc_node();
 			node.avl[@intFromEnum(AVL_type.Address)].value = address;
 			node.avl[@intFromEnum(AVL_type.Size)].value = size;
 			self.tree[@intFromEnum(AVL_type.Address)] = node;
 			self.tree[@intFromEnum(AVL_type.Size)] = node;
+			return self;
 		}
 
+		/// alloc space of size size
 		pub fn alloc_space(self : *Self, size : usize) Error!usize {
 			var current_node : ?*Node = self.tree[@intFromEnum(AVL_type.Size)];
 			var best_fit : ?*Node = null;
@@ -70,23 +99,17 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				} else if (n.avl[@intFromEnum(AVL_type.Size)].value < size) {
 					current_node = n.avl[@intFromEnum(AVL_type.Size)].r;
 				} else {
-					// @import("../tty/tty.zig").printk("bonjou\rn",.{});
 					best_fit = n;
 					break;
 				}
 			}
 			if (best_fit) |n| {
 				self.used_space += size;
-				// @import("../tty/tty.zig").printk("size: {d} {d}\n",.{n.avl[@intFromEnum(AVL_type.Size)].value, size});
 				if (n.avl[@intFromEnum(AVL_type.Size)].value == size) {
 					const ret = n.avl[@intFromEnum(AVL_type.Address)].value;
 					self.remove_from_tree(n, AVL_type.Size);
-					// self.print();
 					self.remove_from_tree(n, AVL_type.Address);
 					self.free_node(n);
-					// @import("../tty/tty.zig").printk("coucou\n",.{});
-
-					// self.print();
 					return ret;
 				} else {
 					const ret = n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value - size;
@@ -98,21 +121,18 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			} else return Error.NoSpaceFound;
 		}
 
-		pub fn set_used(self : *Self, address : usize, size : usize) (Error || PageAllocator.Error)!void {
+		/// set the chunk of size size at address as used space
+		pub fn set_used(self : *Self, address : usize, size : usize) !void {
 			var current_node : ?*Node = self.tree[@intFromEnum(AVL_type.Address)];
-			// @import("../tty/tty.zig").printk("whouhwho {d} {d}\n", .{address, size});
 
 			while (current_node) |n| {
 				if (n.avl[@intFromEnum(AVL_type.Address)].value > address) {
 					current_node = n.avl[@intFromEnum(AVL_type.Address)].l;
 				} else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value < address) {
-					// @import("../tty/tty.zig").printk("asdfqwerty \n", .{});
 					current_node = n.avl[@intFromEnum(AVL_type.Address)].r;
 				} else break;
 			}
 			if (current_node) |n| {
-				// @import("../tty/tty.zig").printk("whouhwho {d} {d}\n", .{address, size});
-				// @import("../tty/tty.zig").printk("coucou2 {d} {d}\n", .{n.avl[@intFromEnum(AVL_type.Address)].value, n.avl[@intFromEnum(AVL_type.Size)].value});
 				if (address + size > n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value)
 					return Error.NoSpaceFound;
 				if (n.avl[@intFromEnum(AVL_type.Address)].value == address and n.avl[@intFromEnum(AVL_type.Size)].value == size) {
@@ -139,7 +159,6 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 					return self.free_space(address + size, tmp - (address + size));
 				}
 			} else return Error.NoSpaceFound;
-
 		}
 
 		/// free the space of size size at address
@@ -158,7 +177,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 					current_node = n.avl[@intFromEnum(AVL_type.Address)].l;
 				} else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value <= address) {
 					if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value == address) {
-					// we found a node to merge on the left
+						// we found a node to merge on the left
 						left = n;
 					}
 					current_node = n.avl[@intFromEnum(AVL_type.Address)].r;
@@ -192,9 +211,9 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				}
 			}
 			self.used_space -= size;
-			// self.print();
 		}
 
+		/// AVL tree rotation, rotate the node `n` in the tree `field` in the direction `dir` ("l" or "r")
 		fn rotate(self : *Self, n : *Node, field : AVL_type, comptime dir : []const u8) void{
 			const other_dir = comptime if (ft.mem.eql(u8, dir, "l")) "r" else "l";
 			const ref = self.node_ref(n, field);
@@ -234,6 +253,8 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			l.avl[@intFromEnum(field)].p = op;
 		}
 
+		/// debug function, used to check that a tree respect the rules of the AVL algorithm,
+		/// this function panic if the tree is invalid
 		fn check_node(self : *Self, n : *Node, field : AVL_type) i32 {
 			var dl : i32 = if (n.avl[@intFromEnum(field)].l) |l| self.check_node(l, field) else 0;
 			var dr : i32 = if (n.avl[@intFromEnum(field)].r) |r| self.check_node(r, field) else 0;
@@ -244,6 +265,8 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			return @max(dl, dr) + 1;
 		}
 
+		/// fix the node `n` in the tree `field`, the parameter `change` indicate the weight modification of the node,
+		/// eg: 1 if the node is 1 node heavier than before or -1 if the node is 1 node lighter than before
 		fn fix(self : *Self, n : *Node, field : AVL_type, change : i8) void {
 			if (n.avl[@intFromEnum(field)].p) |p| {
 				if (p.avl[@intFromEnum(field)].l) |pl| if (pl == n) {
@@ -286,10 +309,8 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			}
 		}
 
+		/// add the node `n` to the tree `field`
 		fn add_to_tree(self : *Self, n : *Node, field : AVL_type) void {
-
-			// @import("../tty/tty.zig").printk("add 0x{x} to {}\n",.{@intFromPtr(n), field});
-
 			n.avl[@intFromEnum(field)].l = null;
 			n.avl[@intFromEnum(field)].r = null;
 			n.avl[@intFromEnum(field)].p = null;
@@ -327,10 +348,8 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			}
 		}
 
+		/// remove the node `n` from the tree `field`
 		fn remove_from_tree(self : *Self, n : *Node, field : AVL_type) void {
-
-			// @import("../tty/tty.zig").printk("remove 0x{x} from {}\n",.{@intFromPtr(n), field});
-
 			var ref : *?*Node = self.node_ref(n, field);
 
 			// @import("../tty/tty.zig").printk("n : {*} ref: {*}\n", .{n, ref});
@@ -356,11 +375,13 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				ref.* = null;
 			}
 
+			// n.avl[@intFromEnum(field)].p = null;
 			if (@import("build_options").optimize == .Debug) {
 				_ = if (self.tree[@intFromEnum(field)]) |r| self.check_node(r, field);
 			}
 		}
 
+		/// return the "reference" of a node (a pointer to the pointer to this node)
 		fn node_ref(self : *Self, n : *Node, field : AVL_type) *?*Node {
 			if (n.avl[@intFromEnum(field)].p) |p| {
 				if (p.avl[@intFromEnum(field)].l) |*pl| {
@@ -380,6 +401,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			}
 		}
 
+		/// swap the nodes `a` and `b` in the tree `field`
 		fn swap_nodes(self : *Self, a : *Node, b : *Node, field : AVL_type) void {
 			const a_ref = self.node_ref(a, field);
 			const b_ref = self.node_ref(b, field);
@@ -403,7 +425,8 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			}
 		}
 
-		fn next_node(n : *Node, field : AVL_type) ?*Node { // todo
+		/// return the next node in the tree
+		fn next_node(n : *Node, field : AVL_type) ?*Node {
 			if (n.avl[@intFromEnum(field)].r) |r| {
 				var ret = r;
 				while (ret.avl[@intFromEnum(field)].l) |l| {
@@ -427,14 +450,15 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			}
 		}
 
+		/// return the node page of a node
 		fn page_of_node(n : *Node) * allowzero NodePage {
 			return @ptrFromInt(ft.mem.alignBackward(usize, @intFromPtr(n), paging.page_size));
 		}
 
-		fn alloc_node(self : *Self) (PageAllocator.Error || Error)!*Node {
+		/// alloc one node
+		fn alloc_node(self : *Self) !*Node {
 			if (self.free_nodes) |n| {
 				self.free_nodes = n.next;
-				// @import("../tty/tty.zig").printk("new node {x}\n", .{@intFromPtr(n)});
 				return n;
 			}
 
@@ -443,7 +467,6 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 					const ret = &p.nodes[p.hdr.first_node];
 					p.hdr.first_node += 1;
 					p.hdr.free_nodes_count -= 1;
-					// @import("../tty/tty.zig").printk("new node {x}\n", .{@intFromPtr(ret)});
 					return ret;
 				}
 			}
@@ -456,6 +479,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			return self.alloc_node();
 		}
 
+		/// free one node
 		fn free_node(self : *Self, n : *Node) void {
 			const page = page_of_node(n);
 			page.hdr.free_nodes_count += 1;  // here we can free empty pages if we want
@@ -463,6 +487,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			self.free_nodes = n;
 		}
 
+		/// print recursively the content of a node in the tree `field`, `depth` is the depth of this node
 		fn print_node(self : *Self, n : *Node, field : AVL_type, depth : u32) void {
 			const printk = @import("../tty/tty.zig").printk;
 			if (n.avl[@intFromEnum(field)].l) |l| {
@@ -477,6 +502,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			}
 		}
 
+		/// print the two AVLs using printk
 		pub fn print(self : *Self) void {
 			const printk = @import("../tty/tty.zig").printk;
 			printk("\naddress tree:\n", .{});
