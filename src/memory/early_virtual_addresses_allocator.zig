@@ -12,8 +12,10 @@ pub const EarlyVirtualAddressesAllocator = struct {
 
 	// early virtual address space allocator
 	pub fn alloc_space(self : *Self, size : usize) Error!usize {
-		_ = size; // todo
-		const first_dir : paging.dir_idx = @intCast(self.address >> 10); // todo
+		if(size > 1) {
+			@panic("cannot allocate more than one page with early virtual address space allocator");
+		}
+		const first_dir : paging.dir_idx = @truncate(self.address >> 10); // todo
 		const last_dir : paging.dir_idx = first_dir + @as(paging.dir_idx, @intCast(ft.math.divCeil(usize, self.size, 1 << 10) catch unreachable));
 
 		for (paging.page_dir_ptr[first_dir..last_dir], first_dir..) |dir_entry, dir_index| {
@@ -33,7 +35,6 @@ pub const EarlyVirtualAddressesAllocator = struct {
 								.page_index = 0,
 							}
 						)) / paging.page_size;
-						// @import("../tty/tty.zig").printk("ret: 0x{x}\n", .{ret});
 						return ret;
 					}
 				}
@@ -45,13 +46,12 @@ pub const EarlyVirtualAddressesAllocator = struct {
 						.page_index = 0,
 					}
 				)) / paging.page_size;
-				@import("../tty/tty.zig").printk("ret: 0x{x}\n", .{ret});
 				return ret;
 			}
 		}
 		return Error.NoSpaceFound;
 	}
-	// early virtual address space allocator
+	// noop function, exist just for interface
 	pub fn free_space(self : *Self, address : usize, size : usize) Error!void {
 		_ = self;
 		_ = address;

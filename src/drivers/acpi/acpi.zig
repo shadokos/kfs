@@ -258,5 +258,5 @@ pub fn map(comptime T: type, ptr : paging.PhysicalPtr) PTR(T) {
 
 pub fn unmap(ptr: anytype, len: usize) void {
 	const memory = @import("../../memory.zig");
-	memory.virtualPageAllocator.unmap(@ptrCast(ptr), len);
+	memory.virtualPageAllocator.unmap(@ptrCast(ptr), len) catch @panic("todo");
 }
