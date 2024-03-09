@@ -33,9 +33,10 @@ SRC = linker.ld \
 	memory/buddy_allocator.zig \
 	memory/static_allocator.zig \
 	memory/page_frame_allocator.zig \
-	memory/kernel_memory_allocator.zig \
+	memory/kernel_memory.zig \
+	memory/virtual_memory.zig \
 	memory/linear_allocator.zig \
-	memory/virtual_addresses_allocator.zig \
+	memory/virtual_space_allocator.zig \
 	memory/early_virtual_addresses_allocator.zig \
 	memory/virtual_page_allocator.zig \
 	memory/mapping.zig \

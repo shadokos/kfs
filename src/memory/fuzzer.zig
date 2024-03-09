@@ -2,10 +2,10 @@ const ft = @import("../ft/ft.zig");
 const paging = @import("paging.zig");
 const printk = @import("../tty/tty.zig").printk;
 
-pub fn Fuzzer(comptime AllocatorType : type, comptime bag_size : comptime_int) type {
+pub fn Fuzzer(comptime bag_size : comptime_int) type {
 	return struct {
 		/// instance of the tested allocator
-		allocator : *AllocatorType,
+		allocator : ft.mem.Allocator,
 		/// bag of allocated chunks
 		chunks : [bag_size] Alloc = undefined,
 		/// current size of the bag
@@ -40,14 +40,14 @@ pub fn Fuzzer(comptime AllocatorType : type, comptime bag_size : comptime_int) t
 		const Self = @This();
 
 		/// init a fuzzer object
-		pub fn init(_allocator : *AllocatorType, _strategy : ?Strategy) Self {
+		pub fn init(_allocator : ft.mem.Allocator, _strategy : ?Strategy) Self {
 			return Self{.allocator = _allocator, .rand = xoro.random(), .strategy = _strategy orelse default_strategy};
 		}
 
 		/// deinit a fuzzer object
 		pub fn deinit(self : *Self) void {
 			for (self.chunks[0..self.size]) |c| {
-				self.allocator.free(@as(*usize, @alignCast(@ptrCast(c.ptr))));
+				self.allocator.free(c);
 			}
 		}
 
@@ -75,7 +75,8 @@ pub fn Fuzzer(comptime AllocatorType : type, comptime bag_size : comptime_int) t
 					},
 					.Free => if (self.size != 0) {
 						const chunk = self.rand.intRangeLessThan(usize, 0, self.size);
-						const ptr = self.chunks[chunk].ptr;
+						const slice = self.chunks[chunk];
+						const ptr = slice.ptr;
 						printk("\x1b[37mfree(\x1b[34m0x{x:0>8}\x1b[37m)\x1b[0m\n", .{@intFromPtr(ptr)});
 						const sum = checksum(@intFromPtr(ptr));
 						for (self.chunks[chunk], 0..) |c, i| {
@@ -86,7 +87,7 @@ pub fn Fuzzer(comptime AllocatorType : type, comptime bag_size : comptime_int) t
 						}
 						self.remove_chunk(chunk);
 						self.n_free +|= 1;
-						self.allocator.free(@as(*usize, @alignCast(@ptrCast(ptr))));
+						self.allocator.free(slice);
 					}
 				}
 			}
