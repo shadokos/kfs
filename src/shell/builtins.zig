@@ -232,21 +232,20 @@ pub fn shrink(_: [][]u8) CmdError!void {
 	while (node) |n| : (node = n.next) n.shrink();
 }
 
-const KernelMemoryAllocator = @import("../memory/kernel_memory_allocator.zig").KernelMemoryAllocator;
-const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(KernelMemoryAllocator);
-var fuzzer : ?Fuzzer = null;
-var allocator : KernelMemoryAllocator = .{};
-pub fn fuzz(args: [][]u8) CmdError!void {
-	if (args.len != 2) return CmdError.InvalidNumberOfArguments;
-	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+pub fn kfuzz(args: [][]u8) CmdError!void {
+	if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
-	if (fuzzer) |*f| {
-		f.fuzz(nb) catch |e| {
-			printk("error: {s}\n", .{@errorName(e)});
-			f.status();
-		};
-	} else {
-		fuzzer = Fuzzer.init(&allocator);
-		return fuzz(args);
-	}
+	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+	const max_size = if (args.len == 3) ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter else 10000;
+
+	return utils.fuzz(.Kernel, nb, max_size) catch CmdError.OtherError;
+}
+
+pub fn vfuzz(args: [][]u8) CmdError!void {
+	if (args.len < 2) return CmdError.InvalidNumberOfArguments;
+
+	const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+	const max_size = if (args.len == 3) ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter else 10000;
+
+	return utils.fuzz(.Virtual, nb, max_size) catch CmdError.OtherError;
 }
