@@ -16,24 +16,21 @@ pub const PageFrameAllocator = struct {
 
 	const Self = @This();
 
-	pub fn init(self : *Self, _total_space : u64) void {
-		self.total_space = _total_space;
+	pub fn init(_total_space : u64) Self {
+		var self = Self{.total_space = _total_space};
 		self.total_space = @min(self.total_space, paging.physical_memory_max);
 
-		self.addressable_space_allocator.set_allocator(&linearAllocator);
-		// @import("../tty/tty.zig").printk("truc: {d}\n", .{self.total_space});
-		// @import("../tty/tty.zig").printk("truc: {d}\n", .{self.addressable_space_allocator.max_possible_space(u64)});
-		// @import("../tty/tty.zig").printk("truc: {x}\n", .{UnderlyingAllocator.size_for(self.addressable_space_allocator.max_possible_space(usize))});
-		if (self.total_space > self.addressable_space_allocator.max_possible_space(u64))
+		if (self.total_space > UnderlyingAllocator.max_possible_space(u64, &linearAllocator))
 			@panic("thats a lot of ram!"); // todo
-		self.addressable_space_allocator.init(@intCast(@min(self.total_space, paging.physical_memory_max) / @sizeOf(paging.page)));
+
+		self.addressable_space_allocator = UnderlyingAllocator.init(@truncate(@min(self.total_space, paging.physical_memory_max) / @sizeOf(paging.page)), &linearAllocator);
 
 		if (self.total_space > paging.physical_memory_max)
 		{
 			const high_memory_space = self.total_space - paging.physical_memory_max;
-			self.non_addressable_space_allocator.set_allocator(&linearAllocator);
-			self.non_addressable_space_allocator.init(@intCast(high_memory_space / @sizeOf(paging.page)));
+			self.non_addressable_space_allocator = UnderlyingAllocator.init(@truncate(high_memory_space / @sizeOf(paging.page)), &linearAllocator);
 		}
+		return self;
 	}
 
 	pub fn alloc_pages(self : *Self, n : usize) Error!paging.PhysicalPtr {
@@ -54,16 +51,16 @@ pub const PageFrameAllocator = struct {
 
 	pub fn free_pages(self : *Self, ptr : paging.PhysicalPtr, n : usize) !void {
 		return if (ptr < paging.physical_memory_max)
-			self.addressable_space_allocator.free_pages(@intCast(ptr / @sizeOf(paging.page)), n) // todo: div can overflow
+			self.addressable_space_allocator.free_pages(@truncate(ptr / @sizeOf(paging.page)), n)
 		else
-			self.non_addressable_space_allocator.free_pages(@intCast(ptr / @sizeOf(paging.page)), n);
+			self.non_addressable_space_allocator.free_pages(@truncate(ptr / @sizeOf(paging.page)), n);
 	}
 
 	pub fn get_page_frame_descriptor(self : *Self, ptr : paging.PhysicalPtr) *paging.page_frame_descriptor {
 		return if (ptr < paging.physical_memory_max)
-			self.addressable_space_allocator.frame_from_idx(@intCast(ptr / @sizeOf(paging.page))) // todo: div can overflow
+			self.addressable_space_allocator.frame_from_idx(@truncate(ptr / @sizeOf(paging.page)))
 		else
-			self.non_addressable_space_allocator.frame_from_idx(@intCast(ptr / @sizeOf(paging.page)));
+			self.non_addressable_space_allocator.frame_from_idx(@truncate(ptr / @sizeOf(paging.page)));
 	}
 
 	pub fn print(self : *Self) void {

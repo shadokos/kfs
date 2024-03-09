@@ -27,16 +27,16 @@ pub fn map_kernel() void {
 	// create space for all the tables of the kernel space
 	const tables : * align(4096) [256][paging.page_table_size]paging.page_table_entry = @ptrCast((virtualPageAllocator.alloc_pages_opt(256, .{.type = .KernelSpace}) catch @panic("todo")));
 	// at the end of this functions the page tables are only unmapped but not freed
-	defer virtualPageAllocator.unmap(@ptrCast(tables), 256 * paging.page_size);
+	defer virtualPageAllocator.unmap(@ptrCast(tables), 256 * paging.page_size) catch unreachable;
 
 	// init all the page tables of the kernelspace
 	for (0..(paging.kernel_virtual_space_size >> 22)) |i| {
 		if (paging.page_table_table_ptr[768 + i].present) {
 			@memcpy(tables[i][0..], mapping.get_table_ptr(@intCast(768 + i))[0..]);
-			paging.page_dir_ptr[768 + i].address_fragment = @intCast(mapping.get_physical_ptr(@ptrCast(&tables[i])) >> 12);
+			paging.page_dir_ptr[768 + i].address_fragment = @truncate((mapping.get_physical_ptr(@ptrCast(&tables[i])) catch unreachable) >> 12);
 		} else {
 			@memset(tables[i][0..], paging.page_table_entry{});
-			paging.page_dir_ptr[768 + i].address_fragment = @intCast(mapping.get_physical_ptr(@ptrCast(&tables[i])) >> 12);
+			paging.page_dir_ptr[768 + i].address_fragment = @truncate((mapping.get_physical_ptr(@ptrCast(&tables[i])) catch unreachable) >> 12);
 			paging.page_table_table_ptr[768 + i].present = true;
 		}
 	}
@@ -52,7 +52,7 @@ pub fn map_kernel() void {
 		while (iter.next()) |e| {
 			if (e.sh_addr >= paging.low_half) {
 				if (!e.sh_flags.SHF_WRITE) {
-					virtualPageAllocator.mapper.set_rights(@ptrFromInt(e.sh_addr), ft.math.divCeil(u32, e.sh_size, paging.page_size) catch unreachable, false);
+					virtualPageAllocator.mapper.set_rights(@ptrFromInt(e.sh_addr), ft.math.divCeil(u32, e.sh_size, paging.page_size) catch unreachable, false) catch unreachable;
 				}
 			}
 		}
@@ -60,16 +60,16 @@ pub fn map_kernel() void {
 
 	// free the spaces taken by the early page tables
 	for (&@import("trampoline.zig").page_tables) |*table| {
-		pageFrameAllocator.free_pages(@intFromPtr(table), 1) catch @panic("todo");
+		pageFrameAllocator.free_pages(@intFromPtr(table), 1) catch unreachable;
 		const mapped = virtualPageAllocator.map_anywhere(@intFromPtr(table), paging.page_size, .KernelSpace) catch @panic("todo");
 		@memset(@as(paging.VirtualPagePtr, @ptrCast(@alignCast(mapped))), 0);
-		virtualPageAllocator.unmap(mapped, paging.page_size);
+		virtualPageAllocator.unmap(mapped, paging.page_size) catch unreachable;
 	}
 
 	// shrink the kernel executable space to its actual size
 	const kernel_aligned_begin = ft.mem.alignForward(usize, @intFromPtr(boot.kernel_end) + paging.low_half, paging.page_size);
 	const kernel_aligned_end = ft.mem.alignForward(usize, @import("trampoline.zig").kernel_size + paging.low_half, paging.page_size);
-	virtualPageAllocator.unmap(@ptrFromInt(kernel_aligned_begin), kernel_aligned_end - kernel_aligned_begin);
+	virtualPageAllocator.unmap(@ptrFromInt(kernel_aligned_begin), kernel_aligned_end - kernel_aligned_begin) catch @panic("can't shrink kernel");
 }
 
 pub fn init() void {
@@ -77,13 +77,14 @@ pub fn init() void {
 
 	printk("total space: {x}\n", .{total_space});
 
-	pageFrameAllocator.init(total_space);
+	pageFrameAllocator = PageFrameAllocator.init(total_space);
 
 	check_mem_availability();
 
-	virtualPageAllocator.init(&pageFrameAllocator) catch @panic("cannot init virtualPageAllocator");
-
-	VirtualPageAllocatorType.global_init(&virtualPageAllocator) catch @panic("cannot global_init virtualPageAllocator");
+	virtualPageAllocator.init(&pageFrameAllocator) catch |e| {
+		printk("error: {s}", .{@errorName(e)});
+		@panic("cannot init virtualPageAllocator");
+	};
 
 	map_kernel();
 
