@@ -8,24 +8,20 @@ const multiboot = @import("multiboot.zig");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const mapping = @import("memory/mapping.zig");
 const VirtualPageAllocator = @import("memory/virtual_page_allocator.zig").VirtualPageAllocator;
-const VirtualMemoryAllocator = @import("memory/virtual_memory_allocator.zig").VirtualMemoryAllocator;
-const KernelMemoryAllocator = @import("memory/kernel_memory_allocator.zig").KernelMemoryAllocator;
+const VirtualMemory = @import("memory/virtual_memory.zig").VirtualMemory;
+const KernelMemory = @import("memory/kernel_memory.zig").KernelMemory;
 
 pub const VirtualPageAllocatorType = VirtualPageAllocator(PageFrameAllocator);
-
 pub var virtualPageAllocator : VirtualPageAllocatorType = .{};
 
 pub var pageFrameAllocator : PageFrameAllocator = .{};
 
-pub const VirtualMemoryAllocatorType = VirtualMemoryAllocator(VirtualPageAllocatorType);
-
-pub var virtualMemoryAllocator : VirtualMemoryAllocatorType = undefined;
+pub const VirtualMemoryType = VirtualMemory(VirtualPageAllocatorType);
+pub var virtualMemory : VirtualMemoryType = undefined;
 
 pub var globalCache: @import("memory/cache.zig").GlobalCache = undefined;
 
-pub var kernelMemoryAllocator : KernelMemoryAllocator = .{};
-
-var total_space : u64 = undefined;
+pub var kernelMemory : KernelMemory = .{};
 
 pub fn map_kernel() void {
 
@@ -78,7 +74,7 @@ pub fn map_kernel() void {
 }
 
 pub fn init() void {
-	total_space = get_max_mem();
+	var total_space : u64 = get_max_mem();
 
 	printk("total space: {x}\n", .{total_space});
 
@@ -95,9 +91,9 @@ pub fn init() void {
 
 	const GlobalCache = @import("memory/cache.zig").GlobalCache;
 	globalCache = GlobalCache.init(&virtualPageAllocator) catch @panic("cannot ini globalCache");
-	KernelMemoryAllocator.cache_init() catch @panic("cannot cache_init KernelMemoryAllocator");
+	KernelMemory.cache_init() catch @panic("cannot cache_init KernelMemory");
 
-	virtualMemoryAllocator = VirtualMemoryAllocatorType.init(&virtualPageAllocator);
+	virtualMemory = VirtualMemoryType.init(&virtualPageAllocator);
 }
 
 fn check_mem_availability() void {

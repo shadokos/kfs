@@ -5,7 +5,7 @@ const paging = @import("paging.zig");
 /// this algorithm store free chunks of space using two AVLs (one for sizes and one for addresses)
 /// so the chunks can be found by their keys or by their addresses.
 /// this allows fast allocation and deallocation (O(log(n)) where n is the number of independent free chunks)
-pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
+pub fn VirtualSpaceAllocator(comptime PageAllocator : type) type {
 	return struct {
 
 		/// the page allocator used to allocate nodes

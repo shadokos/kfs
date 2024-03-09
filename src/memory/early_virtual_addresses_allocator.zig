@@ -2,7 +2,7 @@ const ft = @import("../ft/ft.zig");
 const paging = @import("paging.zig");
 const Mapping = @import("mapping.zig");
 
-pub const EarlyVirtualAddressesAllocator = struct {
+pub const EarlyVirtualSpaceAllocator = struct {
 	address : usize,
 	size : usize,
 
