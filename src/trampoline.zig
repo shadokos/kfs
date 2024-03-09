@@ -1,5 +1,6 @@
 const paging = @import("memory/paging.zig");
 const ft = @import("ft/ft.zig");
+const cpu = @import("cpu.zig");
 
 pub const kernel_size = 0x10_000_000;
 
@@ -35,14 +36,9 @@ export fn trampoline_jump() linksection(".bootstrap_code") callconv(.C) void {
 	@as(*[1024]u32, @ptrCast(&page_directory))[paging.page_dir >> 22] = @intFromPtr(&page_directory) | 3;
 
 	// load the page directory and enable paging
-	asm volatile(
-	 \\ mov %eax, %cr3
-	 \\ mov %cr0, %eax
-	 \\ or $0x80000001, %eax
-	 \\ mov %eax, %cr0
-	 :
-	 : [_] "{eax}" (&page_directory),
-	);
+	cpu.set_cr3(@intFromPtr(&page_directory));
+	cpu.set_flag(.ProtectedMode);
+	cpu.set_flag(.Paging);
 }
 
 /// remove identity paging of the kernel
