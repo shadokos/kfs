@@ -64,6 +64,7 @@ SRC = linker.ld \
 	ft/io.zig \
 	ft/math.zig \
 	ft/mem.zig \
+	ft/mem/Allocator.zig \
 	ft/Random.zig \
 	ft/Random/Xoroshiro128.zig \
 	ft/meta.zig \
