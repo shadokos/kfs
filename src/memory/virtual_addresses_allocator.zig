@@ -142,8 +142,9 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 
 		}
 
-		pub fn free_space(self : *Self, address : usize, size : usize) (Error || PageAllocator.Error)!void {
-			var current_node : ?*Node = self.tree[@intFromEnum(AVL_type.Size)];
+		/// free the space of size size at address
+		pub fn free_space(self : *Self, address : usize, size : usize) !void {
+			var current_node : ?*Node = self.tree[@intFromEnum(AVL_type.Address)];
 			var left : ?*Node = null;
 			var right : ?*Node = null;
 
@@ -161,7 +162,7 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 						left = n;
 					}
 					current_node = n.avl[@intFromEnum(AVL_type.Address)].r;
-				} else @panic("free_space"); // todo (return a double free error)
+				} else return Error.DoubleFree;
 			}
 
 			if (left) |l| {
@@ -200,18 +201,26 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 
 			var l : *Node = @field(n.avl[@intFromEnum(field)], dir) orelse return;
 			var op : ?*Node = n.avl[@intFromEnum(field)].p;
+
+			const bn = n.avl[@intFromEnum(field)].balance_factor;
+			const bl = l.avl[@intFromEnum(field)].balance_factor;
 			if (comptime ft.mem.eql(u8, dir, "l")) {
-				n.avl[@intFromEnum(field)].balance_factor -= 1;
-				n.avl[@intFromEnum(field)].balance_factor -= l.avl[@intFromEnum(field)].balance_factor;
-
-				l.avl[@intFromEnum(field)].balance_factor -= 1;
+				if (bl > 0) {
+					n.avl[@intFromEnum(field)].balance_factor -= 1 + bl;
+					l.avl[@intFromEnum(field)].balance_factor = -1 + @min(bl, bn - 1);
+				} else {
+					n.avl[@intFromEnum(field)].balance_factor -= 1;
+					l.avl[@intFromEnum(field)].balance_factor = bl - 1 + @min(0, bn - 1);
+				}
 			} else {
-				n.avl[@intFromEnum(field)].balance_factor += 1;
-				n.avl[@intFromEnum(field)].balance_factor -= l.avl[@intFromEnum(field)].balance_factor;
-
-				l.avl[@intFromEnum(field)].balance_factor += 1;
+				if (bl < 0) {
+					n.avl[@intFromEnum(field)].balance_factor += 1 - bl;
+					l.avl[@intFromEnum(field)].balance_factor = 1 + @max(bn + 1, bl);
+				} else {
+					n.avl[@intFromEnum(field)].balance_factor += 1;
+					l.avl[@intFromEnum(field)].balance_factor = bl + 1 + @max(bn + 1, 0);
+				}
 			}
-
 
 			@field(n.avl[@intFromEnum(field)], dir) = @field(l.avl[@intFromEnum(field)], other_dir);
 			if (@field(n.avl[@intFromEnum(field)], dir)) |nl|
@@ -245,9 +254,15 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				};
 
 				if (p.avl[@intFromEnum(field)].balance_factor == 0) {
+					if (change == -1) {
+						return self.fix(p, field, change);
+					}
 					return;
 				} else if (p.avl[@intFromEnum(field)].balance_factor == 1 or p.avl[@intFromEnum(field)].balance_factor == -1) {
-					return self.fix(p, field, change);
+					if (change == 1) {
+						return self.fix(p, field, change);
+					}
+					return;
 				} else if (p.avl[@intFromEnum(field)].balance_factor == 2) {
 					if (p.avl[@intFromEnum(field)].l) |l| if (l.avl[@intFromEnum(field)].balance_factor < 0) {
 						self.rotate(l, field, "r");
@@ -259,6 +274,15 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 					};
 					self.rotate(p, field, "r");
 				} else unreachable;
+
+				if (p.avl[@intFromEnum(field)].p) |new_p| {
+					if (new_p.avl[@intFromEnum(field)].balance_factor == 0) {
+						if (change == -1) {
+							return self.fix(new_p, field, change);
+						}
+						return;
+					}
+				}
 			}
 		}
 
@@ -308,9 +332,8 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 			// @import("../tty/tty.zig").printk("remove 0x{x} from {}\n",.{@intFromPtr(n), field});
 
 			var ref : *?*Node = self.node_ref(n, field);
-			self.fix(n, field, -1);
 
-			n.avl[@intFromEnum(field)].p = null;
+			// @import("../tty/tty.zig").printk("n : {*} ref: {*}\n", .{n, ref});
 
 			if (n.avl[@intFromEnum(field)].l) |l| {
 				if (n.avl[@intFromEnum(field)].r) |_| {
@@ -320,13 +343,18 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 					} else unreachable;
 				}
 				else {
+					self.fix(n, field, -1);
 					ref.* = l;
 					l.avl[@intFromEnum(field)].p = n.avl[@intFromEnum(field)].p;
 				}
 			} else if (n.avl[@intFromEnum(field)].r) |r| {
+				self.fix(n, field, -1);
 				ref.* = r;
 				r.avl[@intFromEnum(field)].p = n.avl[@intFromEnum(field)].p;
-			} else ref.* = null;
+			} else {
+				self.fix(n, field, -1);
+				ref.* = null;
+			}
 
 			if (@import("build_options").optimize == .Debug) {
 				_ = if (self.tree[@intFromEnum(field)]) |r| self.check_node(r, field);
@@ -383,8 +411,20 @@ pub fn VirtualAddressesAllocator(comptime PageAllocator : type) type {
 				} else {
 					return ret;
 				}
+			} else {
+				var current : ?*Node = n;
+				while (current) |c| {
+					if (c.avl[@intFromEnum(field)].p) |p| {
+						if (c == p.avl[@intFromEnum(field)].r) {
+							current = p;
+						} else break;
+					} else break;
+				}
+				if (current) |c| {
+					return c.avl[@intFromEnum(field)].p;
+				}
+				return null;
 			}
-			else return null;
 		}
 
 		fn page_of_node(n : *Node) * allowzero NodePage {
