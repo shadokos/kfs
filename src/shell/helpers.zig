@@ -91,3 +91,19 @@ pub fn shutdown() void {
 		.usage = null
 	});
 }
+
+pub fn kfuzz() void {
+	print_helper(Help{
+		.name = "kfuzz",
+		.description = "fuzz the kernel memory allocator, do n iterations and allocate chunks of at most `max_size`",
+		.usage = "kfuzz <n> [<max_size>]",
+	});
+}
+
+pub fn vfuzz() void {
+	print_helper(Help{
+		.name = "vfuzz",
+		.description = "fuzz the virtual memory allocator, do n iterations and allocate chunks of at most `max_size`",
+		.usage = "vfuzz <n> [<max_size>]",
+	});
+}
