@@ -20,6 +20,7 @@ SRC = linker.ld \
 	../Makefile \
 	../build.zig \
 	boot.zig \
+	cpu.zig \
 	trampoline.zig \
 	drivers/ps2/ps2.zig \
 	gdt.zig \
