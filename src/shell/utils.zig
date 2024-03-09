@@ -214,3 +214,21 @@ pub fn show_palette() void {
 		tty.printk("\x1b[2m\x1b[{d}m" ++ "\xdb" ** 10 ++ "\x1b[0m", .{30 + i});
 	}
 }
+
+pub fn fuzz(comptime AllocType : enum {Kernel, Virtual}, nb : usize, max_size : usize) !void {
+	const memory = @import("../memory.zig");
+	const Allocator = switch (AllocType) {
+		.Kernel => @TypeOf(memory.kernelMemoryAllocator),
+		.Virtual => @TypeOf(memory.virtualMemoryAllocator),
+	};
+	const allocator = switch (AllocType) {
+		.Kernel => &memory.kernelMemoryAllocator,
+		.Virtual => &memory.virtualMemoryAllocator,
+	};
+	const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(Allocator, 1000);
+
+	var fuzzer : Fuzzer = Fuzzer.init(allocator, &Fuzzer.converging);
+	defer fuzzer.deinit();
+
+	return fuzzer.fuzz(nb, max_size);
+}
