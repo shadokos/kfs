@@ -1,7 +1,7 @@
 const paging = @import("paging.zig");
 const ft = @import("../ft/ft.zig");
 const printk = @import("../tty/tty.zig").printk;
-const VirtualAddressesAllocator = @import("virtual_addresses_allocator.zig").VirtualAddressesAllocator;
+const VirtualSpaceAllocator = @import("virtual_space_allocator.zig").VirtualSpaceAllocator;
 
 /// return the physical address of a virtual ptr // todo: type to VirtualPtr
 pub fn get_physical_ptr(virtual : paging.VirtualPagePtr) error{NotMapped}!paging.PhysicalPtr { // todo error

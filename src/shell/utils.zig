@@ -215,17 +215,8 @@ pub fn show_palette() void {
 	}
 }
 
-pub fn fuzz(comptime AllocType : enum {Kernel, Virtual}, nb : usize, max_size : usize) !void {
-	const memory = @import("../memory.zig");
-	const Allocator = switch (AllocType) {
-		.Kernel => @TypeOf(memory.kernelMemoryAllocator),
-		.Virtual => @TypeOf(memory.virtualMemoryAllocator),
-	};
-	const allocator = switch (AllocType) {
-		.Kernel => &memory.kernelMemoryAllocator,
-		.Virtual => &memory.virtualMemoryAllocator,
-	};
-	const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(Allocator, 1000);
+pub fn fuzz(allocator : ft.mem.Allocator, nb : usize, max_size : usize) !void {
+	const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(1000);
 
 	var fuzzer : Fuzzer = Fuzzer.init(allocator, &Fuzzer.converging);
 	defer fuzzer.deinit();

@@ -1,8 +1,9 @@
+const ft = @import("../ft/ft.zig");
 const Slab = @import("slab.zig").Slab;
 const Cache = @import("cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;
 
-pub const KernelMemoryAllocator = struct {
+pub const KernelMemory = struct {
 	const Self = @This();
 
 	var caches: [14]*Cache = undefined;
@@ -91,5 +92,43 @@ pub const KernelMemoryAllocator = struct {
 				error.InvalidArgument;
 		}
 		else return error.InvalidArgument;
+	}
+
+	fn vtable_free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
+		_ = ctx;
+		_ = buf_align;
+		_ = ret_addr;
+		globalCache.cache.free(@ptrCast(@alignCast(buf.ptr))) catch |e| {
+			@panic(@errorName(e));
+		};
+	}
+
+	fn vtable_alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
+		_ = ctx;
+		_ = ptr_align;
+		_ = ret_addr;
+		return @as([*]u8, @ptrFromInt(@intFromPtr(_kmalloc(len) catch return null)));
+	}
+
+	fn vtable_resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
+		const self: *Self = @ptrCast(@alignCast(ctx));
+		_ = ret_addr;
+		_ = buf_align;
+		const actual_size = self.obj_size(buf.ptr) catch return false;
+		if (new_len < actual_size) return true;
+		return true;
+	}
+
+	const vTable = ft.mem.Allocator.VTable{
+		.alloc = &vtable_alloc,
+		.resize = &vtable_resize,
+		.free = &vtable_free,
+	};
+
+	pub fn allocator(self: *Self) ft.mem.Allocator {
+		return .{
+			.ptr = self,
+			.vtable = &vTable
+		};
 	}
 };
