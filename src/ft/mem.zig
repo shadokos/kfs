@@ -1,5 +1,7 @@
 const ft = @import("ft");
 
+pub const Allocator = @import("mem/Allocator.zig");
+
 pub fn len(value: anytype) usize {
     switch (@typeInfo(@TypeOf(value)))
     {
