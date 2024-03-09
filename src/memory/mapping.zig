@@ -1,5 +1,6 @@
 const paging = @import("paging.zig");
 const ft = @import("../ft/ft.zig");
+const cpu = @import("../cpu.zig");
 const printk = @import("../tty/tty.zig").printk;
 const VirtualSpaceAllocator = @import("virtual_space_allocator.zig").VirtualSpaceAllocator;
 
@@ -94,7 +95,7 @@ pub fn MapperT(comptime PageFrameAllocatorType : type) type {
 				return Error.AlreadyMapped;
 			}
 			table[virtualStruct.table_index] = entry;
-			self.activate();
+			cpu.reload_cr3();
 		}
 
 		/// unmap npages pages
@@ -107,7 +108,7 @@ pub fn MapperT(comptime PageFrameAllocatorType : type) type {
 				const table = get_table_ptr(virtualStruct.dir_index);
 				table[virtualStruct.table_index] = .{};
 			}
-			self.activate();
+			cpu.reload_cr3();
 		}
 
 		/// map `npages` pages (pointers must be aligned)
@@ -134,18 +135,7 @@ pub fn MapperT(comptime PageFrameAllocatorType : type) type {
 
 		/// load the page directory in cr3
 		fn activate(self : *Self) void {
-			asm volatile (
-             \\ mov %eax, %cr3
-             :
-             : [_] "{eax}" (get_physical_ptr(@ptrCast(&self.page_directory)) catch unreachable),
-			);
-		}
-
-		fn reload_cr3() void {
-			asm volatile (
-			\\ mov %cr3, %eax
-			\\ mov %eax, %cr3
-			);
+			cpu.set_cr3(get_physical_ptr(@ptrCast(&self.page_directory)) catch unreachable);
 		}
 
 		/// copy the active page directory and page tables to this page_directory
