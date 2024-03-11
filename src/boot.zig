@@ -60,7 +60,7 @@ export fn init(eax : u32, ebx : u32) callconv(.C) void {
 
 	@import("memory.zig").init();
 
-	// @import("gdt.zig").setup();
+	@import("gdt.zig").setup();
 
 	multiboot_info = multiboot.map(ebx);
 
