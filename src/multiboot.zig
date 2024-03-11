@@ -277,7 +277,7 @@ pub fn list_tags() void {
 
 pub fn map(ptr : paging.PhysicalPtr) *info_header {
 	const memory = @import("memory.zig");
-	const header : *info_header = @ptrCast(@alignCast(memory.virtualPageAllocator.map_anywhere(ptr, @sizeOf(info_header), .KernelSpace) catch @panic("can't map multiboot_info")));
-	defer memory.virtualPageAllocator.unmap(@ptrCast(header), @sizeOf(info_header)) catch unreachable;
-	return @ptrCast(@alignCast(memory.virtualPageAllocator.map_anywhere(ptr, header.total_size, .KernelSpace) catch @panic("can't map multiboot_info")));
+	const header : *info_header = @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(ptr, @sizeOf(info_header), .KernelSpace) catch @panic("can't map multiboot_info")));
+	defer memory.virtualPageAllocator.unmap_object(@ptrCast(header), @sizeOf(info_header)) catch unreachable;
+	return @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(ptr, header.total_size, .KernelSpace) catch @panic("can't map multiboot_info")));
 }
