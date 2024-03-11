@@ -259,7 +259,7 @@ const paging = @import("../../memory/paging.zig");
 pub fn map(comptime T: type, ptr : paging.PhysicalPtr) PTR(T) {
 	const memory = @import("../../memory.zig");
 
-	const object: PTR(T) = @ptrCast(@alignCast(memory.virtualPageAllocator.map_anywhere(
+	const object: PTR(T) = @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(
 		ptr, @sizeOf(T), .KernelSpace
 	) catch @panic("can't map acpi object")));
 
@@ -270,12 +270,12 @@ pub fn map(comptime T: type, ptr : paging.PhysicalPtr) PTR(T) {
 
 	defer unmap(object, @sizeOf(T));
 
-	return @ptrCast(@alignCast(memory.virtualPageAllocator.map_anywhere(
+	return @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(
 		ptr, len, .KernelSpace
 	) catch @panic("can't map acpi object")));
 }
 
 pub fn unmap(ptr: anytype, len: usize) void {
 	const memory = @import("../../memory.zig");
-	memory.virtualPageAllocator.unmap(@ptrCast(ptr), len) catch @panic("todo");
+	memory.virtualPageAllocator.unmap_object(@ptrCast(ptr), len) catch @panic("todo");
 }

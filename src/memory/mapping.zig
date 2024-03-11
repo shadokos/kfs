@@ -5,7 +5,7 @@ const printk = @import("../tty/tty.zig").printk;
 const VirtualSpaceAllocator = @import("virtual_space_allocator.zig").VirtualSpaceAllocator;
 
 /// return the physical address of a virtual ptr // todo: type to VirtualPtr
-pub fn get_physical_ptr(virtual : paging.VirtualPagePtr) error{NotMapped}!paging.PhysicalPtr { // todo error
+pub fn get_physical_ptr(virtual : paging.VirtualPtr) error{NotMapped}!paging.PhysicalPtr { // todo error
 	const virtualStruct : paging.VirtualPtrStruct = @bitCast(@as(u32, @intFromPtr(virtual)));
 	if (!paging.page_dir_ptr[virtualStruct.dir_index].present) {
 		return error.NotMapped;
