@@ -16,6 +16,11 @@ pub const kernel_end = @extern([*]u8, .{.name = "kernel_end"});
 
 pub var multiboot_info : *multiboot.info_header = undefined;
 
+pub const ft_options : @import("ft/ft.zig").Options = .{
+	.log_level = .debug,
+	.logFn = @import("ft/ft.zig").log.defaultLog,
+};
+
 export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
 	_ = @import("trampoline.zig");
 	asm volatile(
