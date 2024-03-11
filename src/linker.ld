@@ -14,10 +14,6 @@ VERSION {
    kernel image. */
 SECTIONS
 {
-	.gdt 0x800 : {
-		KEEP(*(.GDT))
-	}
-
 	. = 1M;
 
 	.multiboot ALIGN(4K) : {
