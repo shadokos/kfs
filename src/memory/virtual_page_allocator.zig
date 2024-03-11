@@ -191,17 +191,12 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 		pub fn free_pages(self : *Self, address : paging.VirtualPagePtr, npages : usize) !void {
 			for (0..npages) |p| {
 				const virtual : paging.VirtualPagePtr = @ptrFromInt(@intFromPtr(address) + p * paging.page_size);
-				// printk("A\n", .{});
 
 				const physical = try mapping.get_physical_ptr(virtual);
-				// printk("B\n", .{});
 
 				try self.mapper.unmap(virtual, 1);
-				// printk("C\n", .{});
 
 				try self.pageFrameAllocator.free_pages(physical, 1);
-				// printk("D\n", .{});
-
 			}
 			self.free_virtual_space(address, npages) catch return Error.DoubleFree;
 		}
