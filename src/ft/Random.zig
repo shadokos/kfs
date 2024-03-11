@@ -1,3 +1,5 @@
+const ft = @import("ft.zig");
+
 ptr: *anyopaque,
 
 fillFn: *const fn (*anyopaque, []u8) void,
@@ -39,13 +41,14 @@ pub fn bytes(r: Random, buf: []u8) void {
 
 
 pub fn intRangeAtMost(r: Random, comptime T: type, at_least: T, at_most: T) T {
-	return r.intRangeLessThan(T, at_least, at_most + 1); // todo un peu chelou ca
+	const T2 = ft.meta.Int(.signed, @typeInfo(T).Int.bits + 2);
+	return @truncate(@as(ft.meta.Int(.unsigned, @typeInfo(T).Int.bits + 2), @intCast(@mod(@as(T2, @intCast(r.int(T))), (@as(T2, @intCast(at_most)) - @as(T2, @intCast(at_least)) + 1) + @as(T2, @intCast(at_least))))));
 }
 
 // fn intRangeAtMostBiased(r: Random, comptime T: type, at_least: T, at_most: T) T
 
 pub fn intRangeLessThan(r: Random, comptime T: type, at_least: T, less_than: T) T {
-	return r.int(T) % (less_than - at_least) + at_least; // todo ca aussi la
+	return r.intRangeAtMost(T, at_least, less_than -| 1);
 }
 
 // fn intRangeLessThanBiased(r: Random, comptime T: type, at_least: T, less_than: T) T
