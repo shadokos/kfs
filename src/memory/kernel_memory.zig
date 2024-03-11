@@ -116,7 +116,7 @@ pub const KernelMemory = struct {
 		_ = buf_align;
 		const actual_size = self.obj_size(buf.ptr) catch return false;
 		if (new_len < actual_size) return true;
-		return true;
+		return false;
 	}
 
 	const vTable = ft.mem.Allocator.VTable{
