@@ -72,7 +72,6 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 			};
 			kernelSpaceAllocator = try VirtualSpaceAllocatorType.init(_pageAllocator, paging.low_half / paging.page_size, paging.kernel_virtual_space_size / paging.page_size);
 			try kernelSpaceAllocator.set_used(ft.math.divCeil(usize, paging.low_half, paging.page_size) catch unreachable, ft.math.divCeil(usize, @import("../trampoline.zig").kernel_size, paging.page_size) catch unreachable);
-			kernelSpaceAllocator.print();
 			for (paging.page_dir_ptr[768..], 768..) |dir_entry, dir_index| {
 				if (dir_entry.present) {
 					const table = mapping.get_table_ptr(@truncate(dir_index));
@@ -109,33 +108,44 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 		}
 
 		/// free virtual space
-		fn free_virtual_space(self : *Self, address : paging.VirtualPagePtr, npages : usize) (VirtualSpaceAllocatorType.Error)!void {
-			if (paging.is_user_space(address)) {
-				if (self.initialized) {
-					self.userSpaceAllocator.free_space(@intFromPtr(address) / paging.page_size, npages) catch @panic("double unmap1"); // todo
+		fn free_virtual_space(self : *Self, address : paging.VirtualPagePtr, npages : usize) error{DoubleFree,NoSpaceFound}!void {
+			return (b: {
+				if (paging.is_user_space(address)) {
+					if (self.initialized) {
+						break :b self.userSpaceAllocator.free_space(@intFromPtr(address) / paging.page_size, npages);
+					} else {
+						@setCold(true);
+						break :b self.earlyUserSpaceAllocator.free_space(@intFromPtr(address) / paging.page_size, npages);
+					}
 				} else {
-					@setCold(true);
-					self.earlyUserSpaceAllocator.free_space(@intFromPtr(address) / paging.page_size, npages) catch @panic("double unmap2"); // todo
+					if (global_initialized) {
+						break :b kernelSpaceAllocator.free_space(@intFromPtr(address) / paging.page_size, npages);
+					} else {
+						@setCold(true);
+						break :b earlyKernelSpaceAllocator.free_space(@intFromPtr(address) / paging.page_size, npages);
+					}
 				}
-			} else {
-				if (global_initialized) {
-					kernelSpaceAllocator.free_space(@intFromPtr(address) / paging.page_size, npages) catch @panic("double unmap3"); // todo
-				} else {
-					@setCold(true);
-					earlyKernelSpaceAllocator.free_space(@intFromPtr(address) / paging.page_size, npages) catch @panic("double unmap4"); // todo
-				}
-			}
+			}) catch |e| switch (e) {
+				error.DoubleFree, error.NoSpaceFound => |e2| e2,
+				else => @panic("can't free virtual space")
+			};
 		}
 
 		/// allocate virtual space and map the area pointed by physical to this space
-		pub fn map_anywhere(self : *Self, physical : paging.PhysicalPtr, len : usize, allocType : AllocType) (PageFrameAllocatorType.Error || VirtualSpaceAllocatorType.Error || Mapper.Error)!paging.VirtualPtr {
-			const physical_pages = ft.mem.alignBackward(paging.PhysicalPtr, physical, paging.page_size);
-			const npages = (ft.mem.alignForward(paging.PhysicalPtr, physical + len, paging.page_size) - physical_pages) / paging.page_size;
-			const virtual = try self.alloc_virtual_space(npages, allocType); // todo
+		pub fn map_anywhere(self : *Self, physical_pages : paging.PhysicalPtr, npages : usize, allocType : AllocType) (PageFrameAllocatorType.Error || VirtualSpaceAllocatorType.Error || Mapper.Error)!paging.VirtualPagePtr {
+			const virtual = try self.alloc_virtual_space(npages, allocType);
 
 			errdefer self.free_virtual_space(virtual, npages) catch unreachable;
 
 			try self.mapper.map(virtual, physical_pages, npages);
+			return virtual;
+		}
+
+		/// allocate virtual space and map the area pointed by physical to this space
+		pub fn map_object_anywhere(self : *Self, physical : paging.PhysicalPtr, size : usize, allocType : AllocType) (PageFrameAllocatorType.Error || VirtualSpaceAllocatorType.Error || Mapper.Error)!paging.VirtualPtr {
+			const physical_pages = ft.mem.alignBackward(paging.PhysicalPtr, physical, paging.page_size);
+			const npages = (ft.mem.alignForward(paging.PhysicalPtr, physical + size, paging.page_size) - physical_pages) / paging.page_size;
+			const virtual = try self.map_anywhere(physical_pages, npages, allocType);
 			return @ptrFromInt(@intFromPtr(virtual) + physical % paging.page_size);
 		}
 
@@ -145,12 +155,16 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 		}
 
 		/// unmap a zone previously mapped
-		// todo
-		pub fn unmap(self : *Self, virtual: paging.VirtualPtr, n : usize) !void {
+		pub fn unmap(self : *Self, virtual_pages: paging.VirtualPagePtr, npages : usize) !void {
+			try self.mapper.unmap(virtual_pages, npages);
+			return self.free_virtual_space(virtual_pages, npages);
+		}
+
+		/// unmap an object previously mapped
+		pub fn unmap_object(self : *Self, virtual: paging.VirtualPtr, n : usize) !void {
 			const virtual_pages : paging.VirtualPagePtr = @ptrFromInt(ft.mem.alignBackward(usize, @as(usize, @intFromPtr(virtual)), paging.page_size)); // todo
 			const npages = (ft.mem.alignForward(usize, @as(usize, @intFromPtr(virtual)) + n, paging.page_size) - @intFromPtr(virtual_pages)) / paging.page_size;
-			try self.mapper.unmap(virtual_pages, npages);
-			self.free_virtual_space(virtual_pages, npages) catch @panic("double unmap5");
+			return self.unmap(virtual_pages, npages);
 		}
 
 		/// unmap an area without freeing the virtual address space
@@ -192,7 +206,7 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 			for (0..npages) |p| {
 				const virtual : paging.VirtualPagePtr = @ptrFromInt(@intFromPtr(address) + p * paging.page_size);
 
-				const physical = try mapping.get_physical_ptr(virtual);
+				const physical = try mapping.get_physical_ptr(@ptrCast(virtual));
 
 				try self.mapper.unmap(virtual, 1);
 
@@ -203,7 +217,7 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 
 		/// return the page frame descriptor of the page pointed by `address`
 		pub fn get_page_frame_descriptor(self : *Self, address : paging.VirtualPagePtr) !*paging.page_frame_descriptor {
-			return self.pageFrameAllocator.get_page_frame_descriptor(try mapping.get_physical_ptr(address));
+			return self.pageFrameAllocator.get_page_frame_descriptor(try mapping.get_physical_ptr(@ptrCast(address)));
 		}
 
 		/// print debug infos
