@@ -14,3 +14,6 @@ pub const math = @import("math.zig");
 pub const debug = @import("debug.zig");
 
 pub const Random = @import("Random.zig");
+
+const root = @import("root");
+pub const options: type = if (@hasDecl(root, "std_options")) root.std_options else .{};
