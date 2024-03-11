@@ -15,5 +15,12 @@ pub const debug = @import("debug.zig");
 
 pub const Random = @import("Random.zig");
 
+pub const log = @import("log.zig");
+
 const root = @import("root");
-pub const options: type = if (@hasDecl(root, "std_options")) root.std_options else .{};
+pub const options: Options = if (@hasDecl(root, "ft_options")) root.ft_options else .{};
+
+pub const Options = struct {
+	log_level: log.Level = log.default_level,
+	logFn: @TypeOf(log.defaultLog) = log.defaultLog,
+};

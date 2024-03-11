@@ -64,6 +64,7 @@ SRC = linker.ld \
 	ft/io/reader.zig \
 	ft/io/writer.zig \
 	ft/io.zig \
+	ft/log.zig \
 	ft/math.zig \
 	ft/mem.zig \
 	ft/mem/Allocator.zig \
