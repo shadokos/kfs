@@ -37,7 +37,7 @@ fn encode_gdt(entry: gdt_entry) u64 {
 
 const GDT_SIZE = 7;
 
-export const GDT : [GDT_SIZE]u64 linksection(".GDT") = .{
+export const GDT : [GDT_SIZE]u64 = .{
 	0,
 	encode_gdt(.{ // kernel code
 		.base = 0,
@@ -138,12 +138,13 @@ const GDTR_type = packed struct(u48) {
 	base: u32,
 };
 
-export const GDTR : [3]u16 = @bitCast(GDTR_type{
-	.size = GDT_SIZE * @sizeOf(@typeInfo(@TypeOf(GDT)).Array.child),
-	.base = 0x800,
-});
+export var GDTR : [3]u16 = undefined;
 
 pub fn setup() void {
+	GDTR = @bitCast(GDTR_type{
+		.size = GDT_SIZE * @sizeOf(@typeInfo(@TypeOf(GDT)).Array.child),
+		.base = @intFromPtr(&GDT),
+	});
 	asm volatile (
 		// disable interrupts
 		\\ cli
