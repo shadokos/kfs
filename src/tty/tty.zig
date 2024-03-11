@@ -480,8 +480,8 @@ pub fn TtyN(comptime history_size: u32) type {
             } else {
                 self.scroll_offset -|= @intCast(-off);
             }
-            if (self.scroll_offset >= history_size)
-            	self.scroll_offset = history_size - 1;
+            if (self.scroll_offset >= history_size - height)
+            	self.scroll_offset = history_size - height;
             self.view();
         }
 
