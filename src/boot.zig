@@ -18,7 +18,7 @@ pub var multiboot_info : *multiboot.info_header = undefined;
 
 pub const ft_options : @import("ft/ft.zig").Options = .{
 	.log_level = .debug,
-	.logFn = @import("ft/ft.zig").log.defaultLog,
+	.logFn = @import("logger.zig").kernel_log,
 };
 
 export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
@@ -77,11 +77,6 @@ export fn init(eax : u32, ebx : u32) callconv(.C) void {
 }
 
 pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
-	const tty = @import("tty/tty.zig");
-	const utils = @import("shell/utils.zig");
-
-	tty.printk("{s}@ Kernel Panic\n{s}\n", .{
-		utils.red, msg
-	});
+	@import("ft/ft.zig").log.err("{s}", .{msg});
 	while (true) {}
 }
