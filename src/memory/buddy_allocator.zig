@@ -24,7 +24,7 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 		mem_map : []page_frame_descriptor = ([0]page_frame_descriptor{})[0..],
 
 		/// see https://wiki.osdev.org/Page_Frame_Allocation
-		bit_map : bitmap.BitMap = undefined,
+		bit_maps : [max_order + 1]bitmap.BitMap = undefined,
 
 		/// see https://wiki.osdev.org/Page_Frame_Allocation
 		free_lists : [max_order + 1] ?*page_frame_descriptor = .{null} ** (max_order + 1),
@@ -50,9 +50,11 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 			self.mem_map = _allocator.alloc(page_frame_descriptor, self.total_pages) catch @panic("not enough space to allocate mem_map");
 			@memset(self.mem_map, .{.flags = .{.available = false}});
 
-			const size = bitmap_size(self.total_pages);
-			self.bit_map = bitmap.BitMap.init(@ptrCast(_allocator.alloc(usize, bitmap.BitMap.compute_len(size)) catch @panic("not enough space to allocate bitmap")), size);
-			for (0..size) |i| self.bit_map.set(i, .Taken) catch unreachable;
+			for (0..max_order + 1) |o| {
+				const bit_map_size = ft.math.divCeil(usize, self.total_pages, @as(usize, 1) << @truncate(o)) catch unreachable;
+				self.bit_maps[o] = bitmap.BitMap.init(@ptrCast(_allocator.alloc(usize, (ft.math.divCeil(usize, bit_map_size, 8) catch unreachable)) catch @panic("not enough space to allocate bitmap")), bit_map_size);
+				for (0..bit_map_size) |i| self.bit_maps[o].set(i, .Taken) catch unreachable;
+			}
 
 			return self;
 		}
@@ -69,18 +71,12 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 
 		/// set the bit corresponding to the order order of the page frame identified by page_index
 		fn set_bit(self : *Self, page_index : idx_t, order : order_t, bit : Bit) void {
-			const t : u64 = self.total_pages;
-			const o : order_t = order;
-			const m : order_t = max_order;
-			self.bit_map.set(@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o))), bit) catch unreachable;
+			self.bit_maps[order].set(page_index >> order, bit) catch unreachable;
 		}
 
 		/// return a the bit corresponding to the order order of the page frame identified by page_index
 		fn get_bit(self : *Self, page_index : idx_t, order : order_t) Bit {
-			const t : u64 = self.total_pages;
-			const o : order_t = order;
-			const m : order_t = max_order;
-			return self.bit_map.get(@intCast((page_index >> o) + (t / (@as(usize, 1) << (max_order + 1))) * (((@as(usize, 1) << (o + 1)) - 1) << (m - o)))) catch unreachable;
+			return self.bit_maps[order].get(page_index >> order) catch .Taken;
 		}
 
 		/// return a pointer to the bit corresponding to the order order of the buddy of the page frame identified by page_index
@@ -202,10 +198,10 @@ pub fn BuddyAllocator(comptime AllocatorType : type, comptime max_order : order_
 
 		/// free `n` pages starting at `first`
 		pub fn free_pages(self : *Self, first : idx_t, n : usize) !void {
-			if (first +| n >= self.total_pages)
+			if (first +| n > self.total_pages)
 				return Error.OutOfBounds;
 			// todo: maybe optimize this
-			for (first..(first + n)) |p| {
+			for (first..(first +| n)) |p| {
 				try self.free_page(p);
 			}
 		}
