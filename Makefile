@@ -36,7 +36,7 @@ SRC = linker.ld \
 	memory/buddy_allocator.zig \
 	memory/static_allocator.zig \
 	memory/page_frame_allocator.zig \
-	memory/kernel_memory.zig \
+	memory/physical_memory.zig \
 	memory/virtual_memory.zig \
 	memory/linear_allocator.zig \
 	memory/virtual_space_allocator.zig \

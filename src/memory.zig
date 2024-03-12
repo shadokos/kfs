@@ -9,7 +9,7 @@ const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const mapping = @import("memory/mapping.zig");
 const VirtualPageAllocator = @import("memory/virtual_page_allocator.zig").VirtualPageAllocator;
 const VirtualMemory = @import("memory/virtual_memory.zig").VirtualMemory;
-const PhysicalMemory = @import("memory/kernel_memory.zig").PhysicalMemory;
+const PhysicalMemory = @import("memory/physical_memory.zig").PhysicalMemory;
 const logger = @import("ft/ft.zig").log.scoped(.memory);
 
 
