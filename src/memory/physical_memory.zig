@@ -2,6 +2,7 @@ const ft = @import("../ft/ft.zig");
 const Slab = @import("slab.zig").Slab;
 const Cache = @import("cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;
+const logger = ft.log.scoped(.physical_memory);
 
 pub const PhysicalMemory = struct {
 	const Self = @This();
@@ -66,12 +67,13 @@ pub const PhysicalMemory = struct {
 	}
 
 	pub fn free(_: *Self, ptr: anytype) void {
-		globalCache.cache.free(@ptrCast(@alignCast(ptr))) catch |e| {
-			@panic(@errorName(e));
+		globalCache.cache.free(@ptrCast(@alignCast(ptr))) catch |e| switch (e) {
+			error.InvalidArgument => logger.warn("freeing invalid pointer {*}", .{ptr}),
+			else => @panic(@errorName(e)),
 		};
 	}
 
-	pub fn resize(self: *Self, comptime T: type, ptr: [*]T, new_size: usize) ![]T {
+	pub fn realloc(self: *Self, comptime T: type, ptr: [*]T, new_size: usize) ![]T {
 		const actual_size = try self.obj_size(ptr);
 		if (new_size < actual_size) return ptr[0..new_size];
 		var obj = try self.alloc(T, new_size);
@@ -98,8 +100,9 @@ pub const PhysicalMemory = struct {
 		_ = ctx;
 		_ = buf_align;
 		_ = ret_addr;
-		globalCache.cache.free(@ptrCast(@alignCast(buf.ptr))) catch |e| {
-			@panic(@errorName(e));
+		globalCache.cache.free(@ptrCast(@alignCast(buf.ptr))) catch |e| switch (e) {
+			error.InvalidArgument => logger.warn("freeing invalid pointer {*}", .{buf.ptr}),
+			else => @panic(@errorName(e)),
 		};
 	}
 

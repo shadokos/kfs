@@ -173,7 +173,7 @@ pub fn ksize(args: [][]u8) CmdError!void {
 	printk("Size of 0x{x} is {d} bytes\n", .{addr, size});
 }
 
-pub fn kresize(args: [][]u8) CmdError!void {
+pub fn krealloc(args: [][]u8) CmdError!void {
 	if (args.len != 3) return CmdError.InvalidNumberOfArguments;
 
 	var kmem = &@import("../memory.zig").physicalMemory;
@@ -183,11 +183,11 @@ pub fn kresize(args: [][]u8) CmdError!void {
 		utils.print_error("0x{x} is not aligned", .{addr});
 		return CmdError.OtherError;
 	}
-	const obj = kmem.resize(u8, @as([*]u8, @ptrFromInt(addr)), new_size) catch |e| {
-		utils.print_error("Failed to resize 0x{x}: {s}", .{addr, @errorName(e)});
+	const obj = kmem.realloc(u8, @as([*]u8, @ptrFromInt(addr)), new_size) catch |e| {
+		utils.print_error("Failed to realloc 0x{x}: {s}", .{addr, @errorName(e)});
 		return CmdError.OtherError;
 	};
-	tty.printk("Resized 0x{x} to 0x{x} (new_len: {d})\n", .{addr, @intFromPtr(&obj[0]), obj.len});
+	tty.printk("Realloc 0x{x} to 0x{x} (new_len: {d})\n", .{addr, @intFromPtr(&obj[0]), obj.len});
 }
 
 pub fn slabinfo(_: [][]u8) CmdError!void {
