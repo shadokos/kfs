@@ -17,12 +17,7 @@ pub const kernel_end = @extern([*]u8, .{.name = "kernel_end"});
 pub var multiboot_info : *multiboot.info_header = undefined;
 
 pub const ft_options : @import("ft/ft.zig").Options = .{
-	.log_level = .warn,
 	.logFn = @import("logger.zig").kernel_log,
-	.log_scope_levels = &.{
-		.{.scope = .driver_ps2, .level = .info},
-		.{.scope = .driver_acpi, .level = .info},
-	},
 };
 
 export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
