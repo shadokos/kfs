@@ -102,5 +102,4 @@ pub fn screen_of_death(comptime format: []const u8, args: anytype) void {
 	});
 	tty.printk("\x1b[11;3H" ++ utils.reset ++ fg_white ++ bg_red, .{});
 	tty.printk(format, args);
-	while (true) {}
 }
