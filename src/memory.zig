@@ -10,6 +10,8 @@ const mapping = @import("memory/mapping.zig");
 const VirtualPageAllocator = @import("memory/virtual_page_allocator.zig").VirtualPageAllocator;
 const VirtualMemory = @import("memory/virtual_memory.zig").VirtualMemory;
 const KernelMemory = @import("memory/kernel_memory.zig").KernelMemory;
+const logger = @import("ft/ft.zig").log.scoped(.memory);
+
 
 pub const VirtualPageAllocatorType = VirtualPageAllocator(PageFrameAllocator);
 pub var virtualPageAllocator : VirtualPageAllocatorType = .{};
@@ -74,26 +76,45 @@ pub fn map_kernel() void {
 }
 
 pub fn init() void {
+
+	logger.debug("Initializing memory", .{});
+
 	var total_space : u64 = get_max_mem();
 
-	printk("total space: {x}\n", .{total_space});
+	logger.debug("\ttotal_space: {x}", .{total_space});
 
+	logger.debug("\tInitializing page frame allocator...", .{});
 	pageFrameAllocator = PageFrameAllocator.init(total_space);
+	logger.debug("\tPage frame allocator initialized", .{});
 
+	logger.debug("\tCheck ram availability", .{});
 	check_mem_availability();
 
+	logger.debug("\tInitializing virtual page allocator...", .{});
 	virtualPageAllocator.init(&pageFrameAllocator) catch |e| {
-		printk("error: {s}\n", .{@errorName(e)});
+		logger.err("error: {s}\n", .{@errorName(e)});
 		@panic("cannot init virtualPageAllocator");
 	};
+	logger.debug("\tVirtual page allocator initialized", .{});
 
+	logger.debug("\tRemapping kernel...", .{});
 	map_kernel();
+	logger.debug("\tKernel remapped", .{});
 
+	logger.debug("\tInitializing slab allocator's global cache...", .{});
 	const GlobalCache = @import("memory/cache.zig").GlobalCache;
-	globalCache = GlobalCache.init(&virtualPageAllocator) catch @panic("cannot ini globalCache");
-	KernelMemory.cache_init() catch @panic("cannot cache_init KernelMemory");
+	globalCache = GlobalCache.init(&virtualPageAllocator) catch @panic("cannot init globalCache");
+	logger.debug("\tGlobal cache initialized", .{});
 
+	logger.debug("\tInitializing physical memory allocator...", .{});
+	KernelMemory.cache_init() catch @panic("cannot cache_init KernelMemory");
+	logger.debug("\tPhysical memory allocator initialized", .{});
+
+	logger.debug("\tInitializing virtual memory allocator...", .{});
 	virtualMemory = VirtualMemoryType.init(&virtualPageAllocator);
+	logger.debug("\tVirtual memory allocator initialized", .{});
+
+	logger.info("Memory initialized", .{});
 }
 
 fn check_mem_availability() void {
