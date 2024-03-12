@@ -138,7 +138,7 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry
 			});
 			return _validate(_entry_type(name), name, @as(PTR(_entry_type(name)), @ptrCast(header)));
 		}
-		else unmap(header, header.length);
+		else unmap(header, header.length) catch acpi_logger.warn("Failed to unmap {s} object", .{header.signature});
 	}
 	acpi_logger.err("{s}: Search:\t{s}KO{s}", .{utils.magenta++name++utils.reset, utils.red, utils.reset});
 	return ACPI_error.entry_not_found;
@@ -256,7 +256,7 @@ pub fn init() void {
 
 const paging = @import("../../memory/paging.zig");
 
-pub fn map(comptime T: type, ptr : paging.PhysicalPtr) PTR(T) {
+fn map(comptime T: type, ptr : paging.PhysicalPtr) PTR(T) {
 	const memory = @import("../../memory.zig");
 
 	const object: PTR(T) = @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(
@@ -268,14 +268,16 @@ pub fn map(comptime T: type, ptr : paging.PhysicalPtr) PTR(T) {
 	else if (@hasField(T, "length")) object.length
 	else return object;
 
-	defer unmap(object, @sizeOf(T));
+	defer unmap(object, @sizeOf(T)) catch |e| acpi_logger.warn("Failed to unmap {s}: {s}", .{
+		@typeName(T), @errorName(e)}
+	);
 
 	return @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(
 		ptr, len, .KernelSpace
 	) catch @panic("can't map acpi object")));
 }
 
-pub fn unmap(ptr: anytype, len: usize) void {
+fn unmap(ptr: anytype, len: usize) !void {
 	const memory = @import("../../memory.zig");
-	memory.virtualPageAllocator.unmap_object(@ptrCast(ptr), len) catch @panic("todo");
+	try memory.virtualPageAllocator.unmap_object(@ptrCast(ptr), len);
 }
