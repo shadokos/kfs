@@ -32,32 +32,32 @@ const logo =
 
 
 const letter_o =
-" \x01\x01\x01 \n" ++
-"\x01   \x01\n" ++
-"\x01   \x01\n" ++
-"\x01   \x01\n" ++
-" \x01\x01\x01 \n";
+"\x20\xb3\xb3\xb3\x20\n" ++
+"\xb3\x20\x20\x20\xb3\n" ++
+"\xb3\x20\x20\x20\xb3\n" ++
+"\xb3\x20\x20\x20\xb3\n" ++
+"\x20\xb3\xb3\xb3\x20\n";
 
 const letter_h =
-"\x01   \x01\n" ++
-"\x01   \x01\n" ++
-"\x01\x01\x01\x01\x01\n" ++
-"\x01   \x01\n" ++
-"\x01   \x01\n";
+"\xb3\x20\x20\x20\xb3\n" ++
+"\xb3\x20\x20\x20\xb3\n" ++
+"\xb3\xb3\xb3\xb3\xb3\n" ++
+"\xb3\x20\x20\x20\xb3\n" ++
+"\xb3\x20\x20\x20\xb3\n";
 
 const letter_n =
-"\x01   \x01\n" ++
-"\x01\x01  \x01\n" ++
-"\x01 \x01 \x01\n" ++
-"\x01  \x01\x01\n" ++
-"\x01   \x01\n";
+"\xb3\x20\x20\x20\xb3\n" ++
+"\xb3\xb3\x20\x20\xb3\n" ++
+"\xb3\x20\xb3\x20\xb3\n" ++
+"\xb3\x20\x20\xb3\xb3\n" ++
+"\xb3\x20\x20\x20\xb3\n";
 
 const letter_exclamation =
-"  \x01  \n" ++
-"  \x01  \n" ++
-"  \x01  \n" ++
-"     \n" ++
-"  \x01  \n";
+"\x20\x20\xb3\x20\x20\n" ++
+"\x20\x20\xb3\x20\x20\n" ++
+"\x20\x20\xb3\x20\x20\n" ++
+"\x20\x20\x20\x20\x20\n" ++
+"\x20\x20\xb3\x20\x20\n";
 
 pub fn print_ascii_art(
 	image: []const u8,
@@ -75,7 +75,7 @@ pub fn print_ascii_art(
 		else => {
 			tty.printk(
 				"\x1b[{d};{d}H{s}",
-				.{_coord.y, _coord.x, [1]u8{if (c != '\x01') c else ' '}},
+				.{_coord.y, _coord.x, [1]u8{c}},
 			);
 			_coord.x += 1;
 		},
@@ -92,11 +92,11 @@ pub fn screen_of_death(comptime format: []const u8, args: anytype) void {
 	tty.printk(bg_red ++ "{s}", .{(" " ** (tty.width*tty.height))});
 	tty.get_tty().scroll(1);
 	print_ascii_art(logo, .{.x = 37, .y = 0}, .{.bg = bg_red, .fg = fg_white});
-	print_ascii_art(letter_o, .{.x = 3, .y = 2}, .{.bg = bg_black, .fg = fg_white});
-	print_ascii_art(letter_h, .{.x = 10, .y = 2}, .{.bg = bg_black, .fg = fg_white});
-	print_ascii_art(letter_n, .{.x = 21, .y = 2}, .{.bg = bg_black, .fg = fg_white});
-	print_ascii_art(letter_o, .{.x = 28, .y = 2}, .{.bg = bg_black, .fg = fg_white});
-	print_ascii_art(letter_exclamation, .{.x = 33, .y = 2}, .{.bg = bg_black, .fg = fg_white});
+	print_ascii_art(letter_o, .{.x = 3, .y = 2}, .{.bg = bg_black, .fg = fg_black});
+	print_ascii_art(letter_h, .{.x = 10, .y = 2}, .{.bg = bg_black, .fg = fg_black});
+	print_ascii_art(letter_n, .{.x = 21, .y = 2}, .{.bg = bg_black, .fg = fg_black});
+	print_ascii_art(letter_o, .{.x = 28, .y = 2}, .{.bg = bg_black, .fg = fg_black});
+	print_ascii_art(letter_exclamation, .{.x = 33, .y = 2}, .{.bg = bg_black, .fg = fg_black});
 	tty.printk("\x1b[9;3H" ++ fg_black ++ bg_red ++ "{s}", .{
 		"######## KERNEL PANIC! #########"
 	});
