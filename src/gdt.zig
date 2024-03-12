@@ -1,4 +1,4 @@
-
+const logger = @import("ft/ft.zig").log.scoped(.gdt);
 
 const flag_type = packed struct(u4) {
 	_reserved : bool = false,
@@ -140,7 +140,8 @@ const GDTR_type = packed struct(u48) {
 
 export var GDTR : [3]u16 = undefined;
 
-pub fn setup() void {
+pub fn init() void {
+	logger.debug("Initializing gdt...", .{});
 	GDTR = @bitCast(GDTR_type{
 		.size = GDT_SIZE * @sizeOf(@typeInfo(@TypeOf(GDT)).Array.child),
 		.base = @intFromPtr(&GDT),
@@ -161,4 +162,5 @@ pub fn setup() void {
 		\\ movw $0b00011000, %ax
 		\\ movw %ax, %ss
 	);
+	logger.info("Gdt initialized", .{});
 }

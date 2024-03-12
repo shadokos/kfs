@@ -3,6 +3,7 @@ const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const multiboot = @import("multiboot.zig");
 const builtin = @import("std").builtin;
 const paging = @import("memory/paging.zig");
+const logger = @import("ft/ft.zig").log;
 
 const STACK_SIZE: u32 = 16 * 16 * 1024;
 
@@ -61,10 +62,11 @@ export fn init(eax : u32, ebx : u32) callconv(.C) void {
 	@import("trampoline.zig").clean();
 
 	@import("tty/tty.zig").init();
+	logger.info("Terminal initialized", .{});
 
 	@import("memory.zig").init();
 
-	@import("gdt.zig").setup();
+	@import("gdt.zig").init();
 
 	multiboot_info = multiboot.map(ebx);
 
