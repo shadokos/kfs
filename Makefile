@@ -131,6 +131,7 @@ $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 	$(ZIG) build \
 		--prefix $(BOOTDIR) \
 		-Dname=$(notdir $(BIN)) \
+		-Doptimize=ReleaseSafe \
 		--cache-dir $(ZIGCACHE) \
 		--summary all \
 		--verbose

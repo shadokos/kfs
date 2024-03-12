@@ -9,8 +9,6 @@ pub fn kernel_log(
 	comptime format: []const u8,
 	args: anytype
 ) void {
-	if (message_level == .err and scope == .default)
-		return screen_of_death(format, args);
 	const level_str = comptime message_level.asText();
 	const scope_str = if (scope != .default) (@tagName(scope) ++ ": ") else "";
 	const color = switch (message_level) {
@@ -26,4 +24,13 @@ pub fn kernel_log(
 		(" " ** padding) ++ scope_str ++ format ++ "\n",
 		args,
 	);
+	if (message_level == .err and scope == .default) {
+		if (@import("build_options").optimize != .Debug) {
+			screen_of_death(format, args);
+			while (true) {}
+		} else {
+			tty.get_tty().config.c_lflag.ECHO = false;
+			while (true) @import("tty/keyboard.zig").kb_read();
+		}
+	}
 }
