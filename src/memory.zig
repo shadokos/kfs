@@ -9,7 +9,7 @@ const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const mapping = @import("memory/mapping.zig");
 const VirtualPageAllocator = @import("memory/virtual_page_allocator.zig").VirtualPageAllocator;
 const VirtualMemory = @import("memory/virtual_memory.zig").VirtualMemory;
-const KernelMemory = @import("memory/kernel_memory.zig").KernelMemory;
+const PhysicalMemory = @import("memory/kernel_memory.zig").PhysicalMemory;
 const logger = @import("ft/ft.zig").log.scoped(.memory);
 
 
@@ -23,7 +23,7 @@ pub var virtualMemory : VirtualMemoryType = undefined;
 
 pub var globalCache: @import("memory/cache.zig").GlobalCache = undefined;
 
-pub var kernelMemory : KernelMemory = .{};
+pub var physicalMemory : PhysicalMemory = .{};
 
 pub fn map_kernel() void {
 
@@ -107,7 +107,7 @@ pub fn init() void {
 	logger.debug("\tGlobal cache initialized", .{});
 
 	logger.debug("\tInitializing physical memory allocator...", .{});
-	KernelMemory.cache_init() catch @panic("cannot cache_init KernelMemory");
+	PhysicalMemory.cache_init() catch @panic("cannot cache_init PhysicalMemory");
 	logger.debug("\tPhysical memory allocator initialized", .{});
 
 	logger.debug("\tInitializing virtual memory allocator...", .{});

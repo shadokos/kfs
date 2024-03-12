@@ -3,7 +3,7 @@ const Slab = @import("slab.zig").Slab;
 const Cache = @import("cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;
 
-pub const KernelMemory = struct {
+pub const PhysicalMemory = struct {
 	const Self = @This();
 
 	var caches: [14]*Cache = undefined;
