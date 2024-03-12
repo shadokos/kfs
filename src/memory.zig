@@ -26,7 +26,7 @@ pub var kernelMemory : KernelMemory = .{};
 pub fn map_kernel() void {
 
 	// create space for all the tables of the kernel space
-	const tables : * align(4096) [256][paging.page_table_size]paging.page_table_entry = @ptrCast((virtualPageAllocator.alloc_pages_opt(256, .{.type = .KernelSpace}) catch @panic("todo")));
+	const tables : * align(4096) [256][paging.page_table_size]paging.page_table_entry = @ptrCast((virtualPageAllocator.alloc_pages_opt(256, .{.type = .KernelSpace}) catch @panic("not enought space to map kernel")));
 	// at the end of this functions the page tables are only unmapped but not freed
 	defer virtualPageAllocator.unmap_object(@ptrCast(tables), 256 * paging.page_size) catch unreachable;
 
@@ -62,7 +62,7 @@ pub fn map_kernel() void {
 	// free the spaces taken by the early page tables
 	for (&@import("trampoline.zig").page_tables) |*table| {
 		pageFrameAllocator.free_pages(@intFromPtr(table), 1) catch unreachable;
-		const mapped = virtualPageAllocator.map_object_anywhere(@intFromPtr(table), paging.page_size, .KernelSpace) catch @panic("todo");
+		const mapped = virtualPageAllocator.map_object_anywhere(@intFromPtr(table), paging.page_size, .KernelSpace) catch @panic("cannot init memory");
 		@memset(@as(paging.VirtualPagePtr, @ptrCast(@alignCast(mapped))), 0);
 		virtualPageAllocator.unmap_object(mapped, paging.page_size) catch unreachable;
 	}
@@ -83,7 +83,7 @@ pub fn init() void {
 	check_mem_availability();
 
 	virtualPageAllocator.init(&pageFrameAllocator) catch |e| {
-		printk("error: {s}", .{@errorName(e)});
+		printk("error: {s}\n", .{@errorName(e)});
 		@panic("cannot init virtualPageAllocator");
 	};
 
@@ -103,27 +103,23 @@ fn check_mem_availability() void {
 		while (iter.next()) |e| {
 			if (e.type != multiboot2_h.MULTIBOOT_MEMORY_AVAILABLE)
 				continue;
-			var area_begin : paging.PhysicalPtr = @intCast(ft.mem.alignForward(@TypeOf(e.base), e.base, page_size)); // todo: secure cast
-			const area_end : paging.PhysicalPtr = @intCast(ft.mem.alignBackward(@TypeOf(e.base), e.base + e.length, page_size)); // todo: secure cast
+			var area_begin : u64 = @intCast(ft.mem.alignForward(u64, e.base, page_size));
+			var area_end : u64 = @intCast(ft.mem.alignBackward(u64, e.base + e.length, page_size));
+			if (area_end > pageFrameAllocator.total_space)
+				area_end = @intCast(ft.mem.alignBackward(u64, pageFrameAllocator.total_space, page_size));
 			if (area_begin >= area_end) // smaller than a page
 				continue;
 			while (area_begin < area_end) : (area_begin += page_size) {
 				if (area_begin < @intFromPtr(boot.kernel_end)) // area is before kernel end
 					continue;
-				pageFrameAllocator.free_pages(area_begin, 1) catch @panic("todo"); // todo
+				pageFrameAllocator.free_pages(@truncate(area_begin), 1) catch @panic("cannot init page frame allocator");
 			}
 		}
 	}
 }
 
 fn get_max_mem() u64 {
-	var max : u64 = 0;
-	if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP)) |t| {
-		var iter = multiboot.mmap_it{.base = t};
-		while (iter.next()) |e| {
-			if (e.base + e.length > max)
-				max = @intCast(e.base + e.length);
-		}
-	} else @panic("no mmap");
-	return max;
+	if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_BASIC_MEMINFO)) |meminfo| {
+		return meminfo.mem_upper * 1000;
+	} else @panic("no meminfo tag in multiboot");
 }
