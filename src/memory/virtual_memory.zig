@@ -1,5 +1,6 @@
 const ft = @import("../ft/ft.zig");
 const paging = @import("paging.zig");
+const logger = @import("../ft/ft.zig").log.scoped(.virtualSpaceAllocator);
 
 /// allocator for virtually contiguous memory (equivalent to linux's vmalloc)
 pub fn VirtualMemory(comptime PageAllocator : type) type {
@@ -36,7 +37,7 @@ pub fn VirtualMemory(comptime PageAllocator : type) type {
 			const chunk : *ChunkHeader = @ptrFromInt(@as(usize, @intFromPtr(arg)) - @sizeOf(ChunkHeader));
 
 			self.pageAllocator.free_pages(@ptrCast(@alignCast(chunk)), chunk.npages) catch |e| {
-				@import("../tty/tty.zig").printk("error: {s}\n", .{@errorName(e)});
+				logger.err("free: {s}\n", .{@errorName(e)});
 				@panic("invalid free");
 			};
 		}
@@ -54,7 +55,7 @@ pub fn VirtualMemory(comptime PageAllocator : type) type {
 			const chunk : *ChunkHeader = @ptrFromInt(@as(usize, @intFromPtr(buf.ptr)) - @sizeOf(ChunkHeader));
 
 			self.pageAllocator.free_pages(@ptrCast(@alignCast(chunk)), chunk.npages) catch |e| {
-				@import("../tty/tty.zig").printk("error: {s}\n", .{@errorName(e)});
+				logger.err("free: {s}\n", .{@errorName(e)});
 				@panic("invalid free");
 			};
 		}

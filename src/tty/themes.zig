@@ -60,4 +60,4 @@ fn get_theme_list() [@typeInfo(themes).Struct.decls.len][]const u8 {
 pub const theme_list = get_theme_list();
 
 /// default theme
-pub const default : ?Theme = get_theme("Gogh") orelse (if (theme_list.len > 0) get_theme(theme_list[0]) else null);
+pub const default : ?Theme = if (theme_list.len > 0) get_theme(theme_list[0]) else null;

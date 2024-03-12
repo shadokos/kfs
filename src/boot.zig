@@ -5,7 +5,7 @@ const builtin = @import("std").builtin;
 const paging = @import("memory/paging.zig");
 const logger = @import("ft/ft.zig").log;
 
-const STACK_SIZE: u32 = 16 * 16 * 1024;
+const STACK_SIZE: u32 = 16 * 1024;
 
 var stack: [STACK_SIZE]u8 align(4096) linksection(".bss") = undefined;
 
@@ -48,10 +48,6 @@ export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
 		\\ call init
 	);
 	while (true) {}
-}
-
-comptime {
-	_ = @import("trampoline.zig");
 }
 
 export fn init(eax : u32, ebx : u32) callconv(.C) void {
