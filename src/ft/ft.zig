@@ -23,4 +23,5 @@ pub const options: Options = if (@hasDecl(root, "ft_options")) root.ft_options e
 pub const Options = struct {
 	log_level: log.Level = log.default_level,
 	logFn: @TypeOf(log.defaultLog) = log.defaultLog,
+	log_scope_levels: []const log.ScopeLevel = &.{},
 };
