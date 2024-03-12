@@ -92,7 +92,7 @@ pub fn init() void {
 
 	logger.debug("\tInitializing virtual page allocator...", .{});
 	virtualPageAllocator.init(&pageFrameAllocator) catch |e| {
-		logger.err("error: {s}\n", .{@errorName(e)});
+		logger.err("error: {s}", .{@errorName(e)});
 		@panic("cannot init virtualPageAllocator");
 	};
 	logger.debug("\tVirtual page allocator initialized", .{});
