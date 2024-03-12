@@ -189,7 +189,6 @@ pub fn VirtualPageAllocator(comptime PageFrameAllocatorType : type) type {
 				for (0..npages) |p| {
 					errdefer self.free_pages(virtual, p) catch {};
 					const physical = try self.pageFrameAllocator.alloc_pages(1);
-					// errdefer self.pageFrameAllocator.free_pages(physical, 1) catch {};
 					self.mapper.map(@ptrFromInt(@intFromPtr(virtual) + p * paging.page_size), physical, 1) catch unreachable;
 				}
 			}

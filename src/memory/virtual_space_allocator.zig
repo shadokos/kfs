@@ -352,7 +352,6 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator : type) type {
 		fn remove_from_tree(self : *Self, n : *Node, field : AVL_type) void {
 			var ref : *?*Node = self.node_ref(n, field);
 
-			// @import("../tty/tty.zig").printk("n : {*} ref: {*}\n", .{n, ref});
 
 			if (n.avl[@intFromEnum(field)].l) |l| {
 				if (n.avl[@intFromEnum(field)].r) |_| {
@@ -375,7 +374,6 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator : type) type {
 				ref.* = null;
 			}
 
-			// n.avl[@intFromEnum(field)].p = null;
 			if (@import("build_options").optimize == .Debug) {
 				_ = if (self.tree[@intFromEnum(field)]) |r| self.check_node(r, field);
 			}

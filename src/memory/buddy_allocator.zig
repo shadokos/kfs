@@ -1,4 +1,3 @@
-// const boot = @import("boot.zig");
 const ft = @import("../ft/ft.zig");
 const tty = @import("../tty/tty.zig");
 const paging = @import("paging.zig");

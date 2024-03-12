@@ -1,7 +1,6 @@
 const paging = @import("paging.zig");
 const ft = @import("../ft/ft.zig");
 const cpu = @import("../cpu.zig");
-const printk = @import("../tty/tty.zig").printk;
 const VirtualSpaceAllocator = @import("virtual_space_allocator.zig").VirtualSpaceAllocator;
 
 /// return the physical address of a virtual ptr // todo: type to VirtualPtr
