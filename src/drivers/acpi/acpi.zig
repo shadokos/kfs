@@ -5,6 +5,8 @@ const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
 const ports = @import("../../io/ports.zig");
 
+const acpi_logger = @import("../../ft/ft.zig").log.scoped(.driver_acpi);
+
 const ACPI = @import("types/acpi.zig").ACPI;
 const S5Object = @import("types/s5.zig").S5Object;
 
@@ -106,13 +108,19 @@ fn _validate(comptime T: type, comptime name: []const u8, entry: anytype) ACPI_e
 				else @sizeOf(@TypeOf(entry.*));
 
 	return if (_checksum(entry, len)) b: {
-		tty.printk("ACPI: {s}: checksum:\t{s}OK{s}\t({s}0x{x:0>8}{s})\t{s}{d}{s} bytes\n", .{
+		acpi_logger.debug("{s}: checksum:\t{s}OK{s}\t({s}0x{x:0>8}{s})\t{s}{d}{s} bytes", .{
         	utils.magenta++name++utils.reset, utils.green, utils.reset,
         	utils.blue, @intFromPtr(entry), utils.reset,
         	utils.yellow, len, utils.reset
         });
 		break :b @as(PTR(T), @ptrFromInt(@intFromPtr(entry)));
-	} else ACPI_error.entry_invalid;
+	} else b: {
+		acpi_logger.err("{s} checksum:\t{s}KO{s}\t({s}0x{x:0>8}{s})", .{
+			utils.magenta++name++utils.reset, utils.red, utils.reset,
+			utils.blue, @intFromPtr(entry), utils.reset
+		});
+		break :b ACPI_error.entry_invalid;
+	};
 }
 
 fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry_type(name)) {
@@ -123,7 +131,7 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry
 		const header: PTR(ACPISDT_Header) = map(ACPISDT_Header, entry);
 
 		if (ft.mem.eql(u8, &header.signature, name)) {
-			tty.printk("ACPI: {s}: Search:\t\t{s}OK{s}\t({s}0x{x:0>8}{s})\n", .{
+			acpi_logger.debug("{s}: Search:\t{s}OK{s}\t({s}0x{x:0>8}{s})", .{
 				utils.magenta++name++utils.reset,
 				utils.green, utils.reset,
 				utils.blue, @intFromPtr(header), utils.reset
@@ -132,27 +140,28 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry
 		}
 		else unmap(header, header.length);
 	}
+	acpi_logger.err("{s}: Search:\t{s}KO{s}", .{utils.magenta++name++utils.reset, utils.red, utils.reset});
 	return ACPI_error.entry_not_found;
 }
 
 fn _get_rsdp() ACPI_error!PTR(RSDP) {
 	var rsdp: PTR(RSDP) = undefined;
 
-	tty.printk("ACPI: {s}RSDP{s}: Retrieving from mutliboot2 header\n", .{
+	acpi_logger.debug("{s}RSDP{s}: Retrieving from mutliboot2 header", .{
 		utils.magenta, utils.reset
 	});
 	if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD)) |tag| {
-		tty.printk("\t\t- Found ACPI_OLD tag\n", .{});
+		acpi_logger.debug("\t- Found ACPI_OLD tag", .{});
 		rsdp = &tag.rsdp;
 	} else if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW)) |tag| {
-		tty.printk("\t\t- Found ACPI_NEW tag\n", .{});
+		acpi_logger.debug("\t- Found ACPI_NEW tag", .{});
 		rsdp = &tag.rsdp;
 	} else
 		return ACPI_error.entry_not_found;
 
 	rsdp = _validate(RSDP, "RSDP", rsdp) catch |err| return err;
 
-	tty.printk("\t\t- oem: {s}\n\t\t- revision: {d}\n\t\t- rsdt: 0x{x}\n", .{
+	acpi_logger.debug("\t- oem: {s}\n\t\t\t\t\t\t- revision: {d}\n\t\t\t\t\t\t- rsdt: 0x{x}", .{
 		rsdp.oemid, rsdp.revision, @intFromPtr(rsdp.rsdt_address)
 	});
 	return rsdp;
@@ -173,18 +182,19 @@ fn _get_s5(dsdt: PTR(DSDT)) ACPI_error!PTR(S5Object) {
 		if (ft.mem.eql(u8, data[i..i+5], "_S5_\x12")) {
 			if (!(data[i-1] == 0x08 or (data[i-1] == 0x5C and data[i-2] == 0x08))) continue;
 
-			tty.printk("ACPI: {s}:\tSearch\t\t{s}OK{s}\t({s}0x{x:0>8}{s})\n", .{
+			acpi_logger.debug("{s}:\tSearch\t\t{s}OK{s}\t({s}0x{x:0>8}{s})", .{
 				utils.magenta++"_S5"++utils.reset,
 				utils.green, utils.reset,
 				utils.blue, @intFromPtr(data) + i, utils.reset
 			});
 			const s5: PTR(S5Object) = @ptrFromInt(@as(usize, @intFromPtr(&dsdt.data)) + i + 4);
-			tty.printk("ACPI: {s}:\t0x{x:0>14}\n", .{
+			acpi_logger.debug("{s}:\t0x{x:0>14}", .{
 				utils.magenta++"_S5"++utils.reset, @as(u56, @bitCast(s5.*))
 			});
 			return s5;
 		}
 	}
+	acpi_logger.err("{s}:\tSearch\t\t{s}KO{s}", .{utils.magenta++"_S5"++utils.reset, utils.red, utils.reset});
 	return ACPI_error.entry_not_found;
 }
 
@@ -193,24 +203,32 @@ pub fn power_off() void {
 }
 
 pub fn enable() ACPI_error!void {
-	tty.printk("ACPI: Enabling\n", .{});
-	if (_is_enabled(.pm1a)) { tty.printk("ACPI: Already enabled\n", .{}); return ; }
-	if (acpi.fadt.smi_command_port == 0) return ACPI_error.no_smi_command_port;
-	if (acpi.fadt.acpi_enable == 0) return ACPI_error.no_known_enable_method;
+	acpi_logger.debug("Enabling...", .{});
+	if (_is_enabled(.pm1a)) { acpi_logger.debug("Already enabled", .{}); return ; }
+	if (acpi.fadt.smi_command_port == 0) {
+		acpi_logger.err("No SMI command port found", .{});
+		return ACPI_error.no_smi_command_port;
+	}
+	if (acpi.fadt.acpi_enable == 0) {
+		acpi_logger.err("No known enable method", .{});
+		return ACPI_error.no_known_enable_method;
+	}
 
-	tty.printk("\t\t- send acpi enable command to SMI command port\n", .{});
+	acpi_logger.debug("\t- send acpi enable command to SMI command port", .{});
 	ports.outb(acpi.fadt.smi_command_port, acpi.fadt.acpi_enable);
 
-	tty.printk("\t\t- waiting for enable\n", .{});
+	acpi_logger.debug("\t- waiting for enable", .{});
 	// TODO: use a sleep instead of a busy loop
 	var i : usize = 0;
 	while (i < acpi.TIMEOUT) : (i += 1) if (_is_enabled(.pm1a)) break;
 	if (acpi.fadt.pm1b_control_block != 0)
 		while (i < acpi.TIMEOUT) : (i += 1) if (_is_enabled(.pm1b)) break;
 
-	if (i == acpi.TIMEOUT) return ACPI_error.enable_failed;
-	tty.printk("\t\t- Done\n", .{});
-	tty.printk("ACPI: Enabled\n", .{});
+	if (i == acpi.TIMEOUT) {
+		acpi_logger.err("Failed to enable", .{});
+		return ACPI_error.enable_failed;
+	}
+	acpi_logger.debug("\t- Done", .{});
 }
 
 pub fn init() void {
@@ -228,11 +246,12 @@ pub fn init() void {
     acpi.SLP_EN = 1 << 13;
     acpi.SCI_EN = 1;
 
-	tty.printk("\t\t- (SLP_TYPa | SLP_EN): 0x{x}\n", .{ acpi.SLP_TYPa | acpi.SLP_EN });
-	tty.printk("\t\t- (PM1a_CNT): 0x{x}\n", .{ acpi.fadt.pm1a_control_block });
-    tty.printk("ACPI: Initialization:\t"++utils.green++"OK"++utils.reset++"\n", .{});
+	acpi_logger.debug("\t- (SLP_TYPa | SLP_EN): 0x{x}", .{ acpi.SLP_TYPa | acpi.SLP_EN });
+	acpi_logger.debug("\t- (PM1a_CNT): 0x{x}", .{ acpi.fadt.pm1a_control_block });
+    acpi_logger.debug("Initialization:\t"++utils.green++"OK"++utils.reset, .{});
 
     enable() catch |err| @panic(acpi_strerror("", err));
+	acpi_logger.info("Enabled", .{});
 }
 
 const paging = @import("../../memory/paging.zig");
