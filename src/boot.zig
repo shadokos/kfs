@@ -77,5 +77,5 @@ export fn init(eax : u32, ebx : u32) callconv(.C) void {
 
 pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
 	@import("ft/ft.zig").log.err("{s}", .{msg});
-	while (true) {}
+	unreachable;
 }
