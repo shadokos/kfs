@@ -23,6 +23,8 @@ pub const default_log_scope = .default;
 // the default scope
 pub const default = scoped(default_log_scope);
 
+// fn defaultLogEnabled(comptime message_level: Level) bool
+
 pub fn defaultLog(
 	comptime message_level: Level,
 	comptime scope: anytype,
@@ -30,17 +32,24 @@ pub fn defaultLog(
 	args: anytype
 ) void {
 	// TODO: Maybe implement a default log function using tty.printk??
-	_ = scope; _ = level; _ = message_level; _ = format; _ = args;
+	_ = scope; _ = message_level; _ = format; _ = args;
 }
+
+pub const ScopeLevel = struct {
+	scope: @Type(.EnumLiteral),
+	level: Level,
+};
 
 // the global log level is set in the ft_options struct defined in the root module
 // if the log level is not set in the options, the default_level is used (see src/ft/ft.zig)
 pub const level = @import("ft.zig").options.log_level;
 
-// fn defaultLogEnabled(comptime message_level: Level) bool
+pub const scope_levels = @import("ft.zig").options.log_scope_levels;
 
 pub fn logEnabled(comptime message_level: Level, comptime scope: anytype) bool {
-	_ = scope; // TODO: Implement scope based log level, for now we just use the global level
+	inline for (scope_levels) |scope_level| if (scope_level.scope == scope) {
+		return (@intFromEnum(message_level) <= @intFromEnum(scope_level.level));
+	};
 	return (@intFromEnum(message_level) <= @intFromEnum(level));
 }
 
