@@ -21,6 +21,8 @@ SRC = linker.ld \
 	../build.zig \
 	boot.zig \
 	cpu.zig \
+	logger.zig \
+	screen_of_death.zig \
 	trampoline.zig \
 	drivers/ps2/ps2.zig \
 	gdt.zig \
