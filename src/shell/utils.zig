@@ -181,6 +181,12 @@ pub inline fn dump_stack() void {
 pub fn print_mmap() void {
 	const multiboot = @import("../multiboot.zig");
 	const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
+
+	if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_BASIC_MEMINFO)) |basic_meminfo| {
+		tty.printk("mem lower: 0x{x:0>8} Kb\n", .{basic_meminfo.mem_lower});
+		tty.printk("mem upper: 0x{x:0>8} Kb\n", .{basic_meminfo.mem_upper});
+	}
+
 	if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP)) |t| {
 		tty.printk("\xC9{s:\xCD<18}\xD1{s:\xCD^18}\xD1{s:\xCD<18}\xBB\n", .{"", " MMAP ", ""}); // 14
 		tty.printk("\xBA {s: <16} \xB3 {s: <16} \xB3 {s: <16} \xBA\n", .{"base", "length", "type"}); // 14
