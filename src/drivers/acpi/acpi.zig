@@ -3,7 +3,7 @@ const tty = @import("../../tty/tty.zig");
 const utils = @import("../../shell/utils.zig");
 const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
-const ports = @import("../../io/ports.zig");
+const cpu = @import("../../cpu.zig");
 
 const acpi_logger = @import("../../ft/ft.zig").log.scoped(.driver_acpi);
 
@@ -45,8 +45,8 @@ var acpi: ACPI = .{};
 
 fn _is_enabled(control_block: enum { pm1a, pm1b }) bool {
     return switch (control_block) {
-        .pm1a => (ports.inw(acpi.fadt.pm1a_control_block) & acpi.SCI_EN) != 0,
-        .pm1b => (ports.inw(acpi.fadt.pm1b_control_block) & acpi.SCI_EN) != 0,
+        .pm1a => (cpu.inw(acpi.fadt.pm1a_control_block) & acpi.SCI_EN) != 0,
+        .pm1b => (cpu.inw(acpi.fadt.pm1b_control_block) & acpi.SCI_EN) != 0,
     };
 }
 
@@ -177,7 +177,7 @@ fn _get_s5(dsdt: PTR(DSDT)) ACPI_error!PTR(S5Object) {
 }
 
 pub fn power_off() void {
-    ports.outw(acpi.fadt.pm1a_control_block, acpi.SLP_TYPa | acpi.SLP_EN);
+    cpu.outw(acpi.fadt.pm1a_control_block, acpi.SLP_TYPa | acpi.SLP_EN);
 }
 
 pub fn enable() ACPI_error!void {
@@ -196,7 +196,7 @@ pub fn enable() ACPI_error!void {
     }
 
     acpi_logger.debug("\t- send acpi enable command to SMI command port", .{});
-    ports.outb(acpi.fadt.smi_command_port, acpi.fadt.acpi_enable);
+    cpu.outb(acpi.fadt.smi_command_port, acpi.fadt.acpi_enable);
 
     acpi_logger.debug("\t- waiting for enable", .{});
     // TODO: use a sleep instead of a busy loop

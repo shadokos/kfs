@@ -1,5 +1,5 @@
 const tty = @import("../../tty/tty.zig");
-const ports = @import("../../io/ports.zig");
+const cpu = @import("../../cpu.zig");
 
 const ps2_logger = @import("../../ft/ft.zig").log.scoped(.driver_ps2);
 
@@ -80,15 +80,15 @@ pub const ControllerError = error{
 };
 
 pub fn get_data() u8 {
-    return ports.inb(data_port);
+    return cpu.inb(data_port);
 }
 
 pub fn write_data(data: u8) void {
-    ports.outb(data_port, data);
+    cpu.outb(data_port, data);
 }
 
 pub fn get_status() Status {
-    return @bitCast(ports.inb(status_register));
+    return @bitCast(cpu.inb(status_register));
 }
 
 pub fn get_configuration() ControllerConf {
@@ -102,7 +102,7 @@ pub fn set_configuration(conf: ControllerConf) void {
 }
 
 pub fn send_command(command: u8) void {
-    ports.outb(command_register, command);
+    cpu.outb(command_register, command);
 }
 
 pub fn enable_translation() void {
