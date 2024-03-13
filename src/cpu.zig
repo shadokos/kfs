@@ -70,3 +70,58 @@ pub inline fn unset_flag(flag: Cr0Flag) void {
         : [_] "{ebx}" (~(@as(u32, 1) << @intFromEnum(flag))),
     );
 }
+
+pub const Ports = enum(u16) { vga_idx_reg = 0x03d4, vga_io_reg = 0x03d5 };
+
+fn _get_port(port: anytype) u16 {
+    return switch (@typeInfo(@TypeOf(port))) {
+        .EnumLiteral => @intFromEnum(@as(Ports, port)),
+        .Int, .ComptimeInt => @truncate(port),
+        else => @compileError("Invalid port type"),
+    };
+}
+
+pub fn inb(port: anytype) u8 {
+    return asm volatile ("inb %[port], %[result]"
+        : [result] "={al}" (-> u8),
+        : [port] "N{dx}" (_get_port(port)),
+    );
+}
+
+pub fn outb(port: anytype, data: u8) void {
+    asm volatile ("outb %[data], %[port]"
+        :
+        : [data] "{al}" (data),
+          [port] "{dx}" (_get_port(port)),
+    );
+}
+
+pub fn inw(port: anytype) u16 {
+    return asm volatile ("inw %[port], %[result]"
+        : [result] "={ax}" (-> u16),
+        : [port] "N{dx}" (_get_port(port)),
+    );
+}
+
+pub fn outw(port: usize, data: u16) void {
+    asm volatile ("outw %[data], %[port]"
+        :
+        : [data] "{ax}" (data),
+          [port] "{dx}" (_get_port(port)),
+    );
+}
+
+pub fn inl(port: anytype) u32 {
+    return asm volatile ("inl %[port], %[result]"
+        : [result] "={eax}" (-> u32),
+        : [port] "N{dx}" (_get_port(port)),
+    );
+}
+
+pub fn outl(port: anytype, data: u32) void {
+    asm volatile ("outl %[data], %[port]"
+        :
+        : [data] "{eax}" (data),
+          [port] "{dx}" (_get_port(port)),
+    );
+}

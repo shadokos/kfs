@@ -57,7 +57,6 @@ SRC = linker.ld \
 	tty/keyboard/keymaps/us-std.zig \
 	tty/keyboard/keymaps/french.zig \
 	tty/keyboard.zig \
-	io/ports.zig \
 	ft/ascii.zig \
 	ft/debug.zig \
 	ft/fmt.zig \

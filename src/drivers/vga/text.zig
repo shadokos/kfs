@@ -1,4 +1,4 @@
-const ports = @import("../../io/ports.zig");
+const cpu = @import("../../cpu.zig");
 const ft = @import("../../ft/ft.zig");
 
 /// screen width
@@ -42,10 +42,10 @@ pub fn enable_cursor() void {
         return;
     const cursor_start: u8 = 0;
     const cursor_end: u8 = 15;
-    ports.outb(.vga_idx_reg, 0x0A);
-    ports.outb(.vga_io_reg, (ports.inb(.vga_io_reg) & 0xC0) | cursor_start);
-    ports.outb(.vga_idx_reg, 0x0B);
-    ports.outb(.vga_io_reg, (ports.inb(.vga_io_reg) & 0xE0) | cursor_end);
+    cpu.outb(.vga_idx_reg, 0x0A);
+    cpu.outb(.vga_io_reg, (cpu.inb(.vga_io_reg) & 0xC0) | cursor_start);
+    cpu.outb(.vga_idx_reg, 0x0B);
+    cpu.outb(.vga_io_reg, (cpu.inb(.vga_io_reg) & 0xE0) | cursor_end);
     cursor_enabled = true;
 }
 
@@ -53,30 +53,30 @@ pub fn enable_cursor() void {
 pub fn disable_cursor() void {
     if (!cursor_enabled)
         return;
-    ports.outb(.vga_idx_reg, 0x0A);
-    ports.outb(.vga_io_reg, 0x20);
+    cpu.outb(.vga_idx_reg, 0x0A);
+    cpu.outb(.vga_io_reg, 0x20);
     cursor_enabled = false;
 }
 
 /// set cursor pos
 pub fn set_cursor_pos(x: u8, y: u8) void {
     const index: u32 = @as(u32, @intCast(y)) * width + @as(u32, @intCast(x));
-    ports.outb(.vga_idx_reg, 0x0F);
-    ports.outb(.vga_io_reg, @intCast(index & 0xff));
-    ports.outb(.vga_idx_reg, 0x0E);
-    ports.outb(.vga_io_reg, @intCast((index >> 8) & 0xff));
+    cpu.outb(.vga_idx_reg, 0x0F);
+    cpu.outb(.vga_io_reg, @intCast(index & 0xff));
+    cpu.outb(.vga_idx_reg, 0x0E);
+    cpu.outb(.vga_io_reg, @intCast((index >> 8) & 0xff));
 }
 
 /// set the color palette
 pub fn set_palette(palette: Palette) void {
     for (palette, 0..) |c, i| {
-        _ = ports.inb(0x3da);
-        ports.outb(0x3c0, @intCast(i));
-        ports.outb(0x3c8, ports.inb(0x3c1));
-        ports.outb(0x3c9, c.r);
-        ports.outb(0x3c9, c.g);
-        ports.outb(0x3c9, c.b);
-        _ = ports.inb(0x3da);
-        ports.outb(0x3c0, 0x20);
+        _ = cpu.inb(0x3da);
+        cpu.outb(0x3c0, @intCast(i));
+        cpu.outb(0x3c8, cpu.inb(0x3c1));
+        cpu.outb(0x3c9, c.r);
+        cpu.outb(0x3c9, c.g);
+        cpu.outb(0x3c9, c.b);
+        _ = cpu.inb(0x3da);
+        cpu.outb(0x3c0, 0x20);
     }
 }
