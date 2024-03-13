@@ -21,6 +21,7 @@ SRC = linker.ld \
 	../build.zig \
 	boot.zig \
 	cpu.zig \
+	interrupts.zig \
 	logger.zig \
 	screen_of_death.zig \
 	trampoline.zig \
@@ -130,7 +131,7 @@ $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 	$(ZIG) build \
 		--prefix $(BOOTDIR) \
 		-Dname=$(notdir $(BIN)) \
-		-Doptimize=ReleaseSafe \
+		-Doptimize=ReleaseFast \
 		--cache-dir $(ZIGCACHE) \
 		--summary all \
 		--verbose
