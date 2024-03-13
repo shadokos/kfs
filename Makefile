@@ -21,6 +21,7 @@ SRC = linker.ld \
 	../build.zig \
 	boot.zig \
 	cpu.zig \
+	interrupts.zig \
 	logger.zig \
 	screen_of_death.zig \
 	trampoline.zig \
