@@ -76,13 +76,13 @@ pub const control_code = struct {
 };
 
 pub fn isDigit(c: u8) bool {
-	return c >= '0' and c <= '9';
+    return c >= '0' and c <= '9';
 }
 
 pub fn isWhitespace(c: u8) bool {
-	return for (whitespace) |w| {
-		if (c == w) break true;
-	} else false;
+    return for (whitespace) |w| {
+        if (c == w) break true;
+    } else false;
 }
 
 pub fn isASCII(c: u8) bool {
@@ -90,9 +90,9 @@ pub fn isASCII(c: u8) bool {
 }
 
 pub fn isControl(c: u8) bool {
-	return c <= control_code.us or c == control_code.del;
+    return c <= control_code.us or c == control_code.del;
 }
 
 pub fn isPrint(c: u8) bool {
-	return isASCII(c) and !isControl(c);
+    return isASCII(c) and !isControl(c);
 }

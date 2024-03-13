@@ -16,22 +16,22 @@
 // (Pkglength bit 6-7 encode additional PkgLength bytes [shouldn't be the case here])
 //
 // 20.2.4 Package Length Encoding
-   // PkgLength :=
-   // 	PkgLeadByte |
-   // 	<pkgleadbyte bytedata> |
-   // 	<pkgleadbyte bytedata bytedata> |
-   // 	<pkgleadbyte bytedata bytedata bytedata>
-   // PkgLeadByte :=
-   // 	<bit 7-6: bytedata count that follows (0-3)>
-   // 	<bit 5-4: only used if pkglength < 63>
-   // 	<bit 3-0: least significant package length nybble>
+// PkgLength :=
+// 	PkgLeadByte |
+// 	<pkgleadbyte bytedata> |
+// 	<pkgleadbyte bytedata bytedata> |
+// 	<pkgleadbyte bytedata bytedata bytedata>
+// PkgLeadByte :=
+// 	<bit 7-6: bytedata count that follows (0-3)>
+// 	<bit 5-4: only used if pkglength < 63>
+// 	<bit 3-0: least significant package length nybble>
 
 pub const S5Object = extern struct {
-	package_op: u8,
-	pkg_length: u8,
-	num_elements: u8,
-	slp_typ_a_byteprefix: u8,
-	slp_typ_a_num: u8,
-	slp_typ_b_byteprefix: u8,
-	slp_typ_b_num: u8,
+    package_op: u8,
+    pkg_length: u8,
+    num_elements: u8,
+    slp_typ_a_byteprefix: u8,
+    slp_typ_a_num: u8,
+    slp_typ_b_byteprefix: u8,
+    slp_typ_b_num: u8,
 };

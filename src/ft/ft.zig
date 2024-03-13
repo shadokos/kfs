@@ -1,4 +1,3 @@
-
 pub const mem = @import("mem.zig");
 
 pub const fmt = @import("fmt.zig");
@@ -21,7 +20,7 @@ const root = @import("root");
 pub const options: Options = if (@hasDecl(root, "ft_options")) root.ft_options else .{};
 
 pub const Options = struct {
-	log_level: log.Level = log.default_level,
-	logFn: @TypeOf(log.defaultLog) = log.defaultLog,
-	log_scope_levels: []const log.ScopeLevel = &.{},
+    log_level: log.Level = log.default_level,
+    logFn: @TypeOf(log.defaultLog) = log.defaultLog,
+    log_scope_levels: []const log.ScopeLevel = &.{},
 };

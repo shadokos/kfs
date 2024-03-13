@@ -9,28 +9,28 @@ pub const Xoroshiro128 = @import("Random/Xoroshiro128.zig");
 pub const Random = @This();
 
 pub fn init(pointer: anytype, comptime fillFn: fn (@TypeOf(pointer), []u8) void) Random {
-	const gen = struct {
-		fn fill(ptr: *anyopaque, buf: []u8) void {
-			const self : @TypeOf(pointer) = @ptrCast(@alignCast(ptr));
-			fillFn(self, buf);
-		}
-	};
-	return Random{.ptr = pointer, .fillFn = gen.fill};
+    const gen = struct {
+        fn fill(ptr: *anyopaque, buf: []u8) void {
+            const self: @TypeOf(pointer) = @ptrCast(@alignCast(ptr));
+            fillFn(self, buf);
+        }
+    };
+    return Random{ .ptr = pointer, .fillFn = gen.fill };
 }
 
 pub fn int(r: Random, comptime T: type) T {
-	var buf : [@sizeOf(T)]u8 = undefined;
-	r.fillFn(r.ptr, &buf);
-	return @bitCast(buf);
+    var buf: [@sizeOf(T)]u8 = undefined;
+    r.fillFn(r.ptr, &buf);
+    return @bitCast(buf);
 }
 
 pub fn boolean(r: Random) bool {
-	var ret = int(r, u8);
-	return (@popCount(ret) % 2) == 1;
+    var ret = int(r, u8);
+    return (@popCount(ret) % 2) == 1;
 }
 
 pub fn bytes(r: Random, buf: []u8) void {
-	r.fillFn(r.ptr, buf);
+    r.fillFn(r.ptr, buf);
 }
 
 // pub inline fn enumValue(r: Random, comptime EnumType: type) EnumType
@@ -39,16 +39,15 @@ pub fn bytes(r: Random, buf: []u8) void {
 // fn floatExp(r: Random, comptime T: type) T
 // fn floatNorm(r: Random, comptime T: type) T
 
-
 pub fn intRangeAtMost(r: Random, comptime T: type, at_least: T, at_most: T) T {
-	const T2 = ft.meta.Int(.signed, @typeInfo(T).Int.bits + 2);
-	return @truncate(@as(ft.meta.Int(.unsigned, @typeInfo(T).Int.bits + 2), @intCast(@mod(@as(T2, @intCast(r.int(T))), (@as(T2, @intCast(at_most)) - @as(T2, @intCast(at_least)) + 1) + @as(T2, @intCast(at_least))))));
+    const T2 = ft.meta.Int(.signed, @typeInfo(T).Int.bits + 2);
+    return @truncate(@as(ft.meta.Int(.unsigned, @typeInfo(T).Int.bits + 2), @intCast(@mod(@as(T2, @intCast(r.int(T))), (@as(T2, @intCast(at_most)) - @as(T2, @intCast(at_least)) + 1) + @as(T2, @intCast(at_least))))));
 }
 
 // fn intRangeAtMostBiased(r: Random, comptime T: type, at_least: T, at_most: T) T
 
 pub fn intRangeLessThan(r: Random, comptime T: type, at_least: T, less_than: T) T {
-	return r.intRangeAtMost(T, at_least, less_than -| 1);
+    return r.intRangeAtMost(T, at_least, less_than -| 1);
 }
 
 // fn intRangeLessThanBiased(r: Random, comptime T: type, at_least: T, less_than: T) T
@@ -68,4 +67,3 @@ pub fn intRangeLessThan(r: Random, comptime T: type, at_least: T, less_than: T) 
 // fn uintLessThanBiased(r: Random, comptime T: type, less_than: T) T
 
 // fn weightedIndex(r: Random, comptime T: type, proportions: []const T) usize
-
