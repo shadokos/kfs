@@ -3,7 +3,6 @@ const vt100 = @import("vt100.zig").vt100;
 const termios = @import("termios.zig");
 const cc_t = termios.cc_t;
 const keyboard = @import("keyboard.zig");
-const ports = @import("../io/ports.zig");
 const vga = @import("../drivers/vga/text.zig");
 const themes = @import("themes.zig");
 const BufferWriter = @import("buffer_writer.zig").BufferWriter;
