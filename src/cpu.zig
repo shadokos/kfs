@@ -71,24 +71,31 @@ pub inline fn unset_flag(flag: Cr0Flag) void {
     );
 }
 
-pub const Ports = enum(u16) { vga_idx_reg = 0x03d4, vga_io_reg = 0x03d5 };
+pub const Ports = enum(u16) {
+    vga_idx_reg = 0x03d4,
+    vga_io_reg = 0x03d5,
+    pic_master_command = 0x0020,
+    pic_master_data = 0x0021,
+    pic_slave_command = 0x00a0,
+    pic_slave_data = 0x00a1,
+};
 
-fn _get_port(port: anytype) u16 {
+inline fn _get_port(port: anytype) u16 {
     return switch (@typeInfo(@TypeOf(port))) {
-        .EnumLiteral => @intFromEnum(@as(Ports, port)),
+        .Enum, .EnumLiteral => @intFromEnum(@as(Ports, port)),
         .Int, .ComptimeInt => @truncate(port),
         else => @compileError("Invalid port type"),
     };
 }
 
-pub fn inb(port: anytype) u8 {
+pub inline fn inb(port: anytype) u8 {
     return asm volatile ("inb %[port], %[result]"
         : [result] "={al}" (-> u8),
         : [port] "N{dx}" (_get_port(port)),
     );
 }
 
-pub fn outb(port: anytype, data: u8) void {
+pub inline fn outb(port: anytype, data: u8) void {
     asm volatile ("outb %[data], %[port]"
         :
         : [data] "{al}" (data),
@@ -96,14 +103,14 @@ pub fn outb(port: anytype, data: u8) void {
     );
 }
 
-pub fn inw(port: anytype) u16 {
+pub inline fn inw(port: anytype) u16 {
     return asm volatile ("inw %[port], %[result]"
         : [result] "={ax}" (-> u16),
         : [port] "N{dx}" (_get_port(port)),
     );
 }
 
-pub fn outw(port: usize, data: u16) void {
+pub inline fn outw(port: usize, data: u16) void {
     asm volatile ("outw %[data], %[port]"
         :
         : [data] "{ax}" (data),
@@ -111,17 +118,40 @@ pub fn outw(port: usize, data: u16) void {
     );
 }
 
-pub fn inl(port: anytype) u32 {
+pub inline fn inl(port: anytype) u32 {
     return asm volatile ("inl %[port], %[result]"
         : [result] "={eax}" (-> u32),
         : [port] "N{dx}" (_get_port(port)),
     );
 }
 
-pub fn outl(port: anytype, data: u32) void {
+pub inline fn outl(port: anytype, data: u32) void {
     asm volatile ("outl %[data], %[port]"
         :
         : [data] "{eax}" (data),
           [port] "{dx}" (_get_port(port)),
     );
+}
+
+pub inline fn io_wait() void {
+    outb(0x80, 0);
+}
+
+pub inline fn enable_interrupts() void {
+    asm volatile ("sti");
+}
+
+pub inline fn disable_interrupts() void {
+    asm volatile ("cli");
+}
+
+pub inline fn load_idt(idtr: *const @import("interrupts.zig").IDTR) void {
+    asm volatile ("lidt (%%eax)"
+        :
+        : [idtr] "{eax}" (idtr),
+    );
+}
+
+pub inline fn halt() void {
+    asm volatile ("hlt");
 }
