@@ -1,14 +1,14 @@
-NAME=kfs
+NAME?=kfs
 
-ISO=$(NAME).iso
+ISO?=$(NAME).iso
 
-ISODIR=iso
+ISODIR?=iso
 
-BOOTDIR=$(ISODIR)/boot
+BOOTDIR?=$(ISODIR)/boot
 
-BIN=$(BOOTDIR)/bin/$(NAME).elf
+BIN?=$(BOOTDIR)/bin/$(NAME).elf
 
-ZIGCACHE=.cache
+ZIG_CACHE?=.cache
 
 GRUB_CONF=$(BOOTDIR)/grub/grub.cfg
 
@@ -87,7 +87,7 @@ THEME_FILES = $(addprefix ${SRCDIR}/${THEME_DIR}/, $(addsuffix .zig, $(shell cat
 
 THEME_INDEX = $(THEME_DIR)/index.zig
 
-SYMBOL_DIR = $(ZIGCACHE)/symbols
+SYMBOL_DIR = $(ZIG_CACHE)/symbols
 SYMBOL_FILE = $(SYMBOL_DIR)/$(NAME).symbols
 
 DOCKER_CMD ?= docker
@@ -98,7 +98,7 @@ all: $(ISO)
 
 ifndef DOCKER
 
-ZIG = zig
+ZIG ?= zig
 GRUB_MKRESCUE = grub-mkrescue
 
 else
@@ -131,7 +131,7 @@ $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 		--prefix $(BOOTDIR) \
 		-Dname=$(notdir $(BIN)) \
 		-Doptimize=ReleaseSafe \
-		--cache-dir $(ZIGCACHE) \
+		--cache-dir $(ZIG_CACHE) \
 		--summary all \
 		--verbose
 
@@ -166,7 +166,7 @@ ${SRCDIR}/$(THEME_INDEX): $(THEME_FILES) | ${SRCDIR}/$(THEME_DIR)
 	cat ${THEME_LIST} | tr ' ' '_' | paste -d\| ${THEME_LIST} - | grep -vE '^[[:space:]]*\|[[:space:]]*$$' | sed -E "s/(.*)\|(.*)/pub const @\"\1\" = @import(\"\2.zig\");/g" > ${SRCDIR}/$(THEME_INDEX)
 
 clean:
-	rm -rf $(BIN) $(ZIGCACHE) "${SRCDIR}/$(THEME_DIR)" "${SRCDIR}/$(THEME_INDEX)"
+	rm -rf $(BIN) $(ZIG_CACHE) "${SRCDIR}/$(THEME_DIR)" "${SRCDIR}/$(THEME_INDEX)"
 	[ -f $(DOCKER_STAMP) ] && { $(DOCKER_CMD) image rm zig && rm $(DOCKER_STAMP) && $(DOCKER_CMD) volume rm $(NAME); } || true
 
 fclean: clean
