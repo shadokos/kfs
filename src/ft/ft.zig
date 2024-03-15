@@ -16,6 +16,10 @@ pub const Random = @import("Random.zig");
 
 pub const log = @import("log.zig");
 
+pub const ArrayList = @import("array_list.zig").ArrayList;
+
+pub const ArrayListAligned = @import("array_list.zig").ArrayListAligned;
+
 const root = @import("root");
 pub const options: Options = if (@hasDecl(root, "ft_options")) root.ft_options else .{};
 

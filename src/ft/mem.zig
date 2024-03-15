@@ -61,6 +61,12 @@ pub fn eql(comptime T: type, a: []const T, b: []const T) bool {
     return i == a.len;
 }
 
+pub fn copyBackwards(comptime T: type, dest: []T, source: []const T) void {
+    for (0..source.len) |i| {
+        dest[source.len - i - 1] = source[source.len - i - 1];
+    }
+}
+
 pub fn copyForwards(comptime T: type, dest: []T, src: []const T) void {
     for (dest[0..src.len], src) |*d, s| d.* = s;
 }
