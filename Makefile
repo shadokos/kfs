@@ -59,10 +59,11 @@ SRC = linker.ld \
 	tty/keyboard.zig \
 	ft/ascii.zig \
 	ft/debug.zig \
+	ft/array_list.zig \
 	ft/fmt.zig \
 	ft/ft.zig \
 	ft/io/fixed_buffer_stream.zig \
-	ft/io/reader.zig \
+	ft/io/Reader.zig \
 	ft/io/writer.zig \
 	ft/io.zig \
 	ft/log.zig \
