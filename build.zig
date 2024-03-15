@@ -24,7 +24,12 @@ pub fn build(b: *Builder) void {
         .cpu_features_sub = cpu_features_sub,
     };
 
-    const kernel = b.addExecutable(.{ .name = name, .root_source_file = .{ .path = "src/boot.zig" }, .target = target, .optimize = b.standardOptimizeOption(.{}) });
+    const kernel = b.addExecutable(.{
+        .name = name,
+        .root_source_file = .{ .path = "src/boot.zig" },
+        .target = target,
+        .optimize = b.standardOptimizeOption(.{}),
+    });
 
     const build_options = b.addOptions();
     build_options.addOption(bool, "posix", posix);

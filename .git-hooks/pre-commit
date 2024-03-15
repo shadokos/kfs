@@ -1,3 +1,0 @@
-#!/usr/bin/sh
-
-zig fmt --check src build.zig
