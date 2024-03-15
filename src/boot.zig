@@ -50,6 +50,8 @@ export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
 }
 
 export fn init(eax: u32, ebx: u32) callconv(.C) void {
+    @import("cpu.zig").disable_interrupts();
+
     if (eax == multiboot2_h.MULTIBOOT2_BOOTLOADER_MAGIC) {
         multiboot_info = @ptrFromInt(paging.low_half + ebx); // TODO!
     } else @panic("No multiboot2 magic number");
