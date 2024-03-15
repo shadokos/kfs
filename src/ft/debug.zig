@@ -45,3 +45,8 @@ pub const StackIterator = struct {
         return new_pc;
     }
 };
+
+// https://ziglang.org/documentation/master/std/#std.debug.assert
+pub fn assert(ok: bool) void {
+    if (!ok) unreachable; // assertion failure
+}
