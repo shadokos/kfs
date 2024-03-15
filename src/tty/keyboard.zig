@@ -122,10 +122,7 @@ fn make_break(scancode: u16) ?u16 {
 }
 
 pub fn kb_read() void {
-    simulate_keyboard_interrupt(); // remove when we have interrupts
     while (incount != 0) {
-        simulate_keyboard_interrupt(); // remove when we have interrupts
-        simulate_keyboard_interrupt(); // remove when we have interrupts
         const scancode: u16 = inbuf[intail];
 
         intail = (intail + 1) % KEYBOARD_INPUT_SIZE;
@@ -141,7 +138,7 @@ pub fn kb_read() void {
     }
 }
 
-fn handler() void {
+pub fn handler() callconv(.Interrupt) void {
     const scan_code: u8 = ps2.get_data();
     const index: u8 = scan_code & SCANCODE_MASK_INDEX;
     const released: u16 = scan_code & SCANCODE_MASK_RELEASED;
@@ -163,15 +160,9 @@ fn handler() void {
             },
         },
     };
+    @import("../drivers/pic/pic.zig").ack();
 }
 
 fn is_key_available() bool {
     return ps2.get_status().output_buffer == 1;
-}
-
-/// Is designed to crudely simulate the keyboard interrupt handler
-pub fn simulate_keyboard_interrupt() void {
-    if (is_key_available()) {
-        handler();
-    }
 }
