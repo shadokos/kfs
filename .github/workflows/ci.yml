@@ -65,11 +65,4 @@ jobs:
           tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
 
       - name: Check format
-        run: |
-          ${ZIG} fmt --check ./src
-          result=$(grep -REn '.{120,}' src | sed -E 's/^(.{80}).*/\1(...)/g')
-          if [ -n "$result" ]; then
-            echo "Error: Found lines longer than 120 characters." 1>&2
-            echo "$result" 1>&2
-            exit 1
-          fi
+        run: bash .github/pre-commit
