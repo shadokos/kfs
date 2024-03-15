@@ -13,24 +13,27 @@ const Allocator = @This();
 
 pub const Error = error{OutOfMemory};
 
-// fn alignedAlloc(
-//     self: Allocator,
-//     comptime T: type,
-//     comptime alignment: ?u29,
-//     n: usize,
-// ) Error![]align(alignment orelse @alignOf(T)) T
-
-pub fn alloc(self: Allocator, comptime T: type, n: usize) Error![]T {
+pub fn alignedAlloc(
+    self: Allocator,
+    comptime T: type,
+    comptime alignment: ?u29,
+    n: usize,
+) Error![]align(alignment orelse @alignOf(T)) T {
+    const _alignment = alignment orelse @alignOf(T);
     return @as(
-        [*]T,
+        [*]align(_alignment) T,
         @ptrCast(
             self.rawAlloc(
                 n * @sizeOf(T),
-                ft.math.log2(@alignOf(T)),
+                @truncate(ft.math.log2(_alignment)),
                 @returnAddress(),
             ) orelse return Error.OutOfMemory,
         ),
     )[0..n];
+}
+
+pub fn alloc(self: Allocator, comptime T: type, n: usize) Error![]T {
+    return self.alignedAlloc(T, null, n);
 }
 
 //inline fn allocAdvancedWithRetAddr(
