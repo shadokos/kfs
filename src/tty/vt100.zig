@@ -147,14 +147,21 @@ pub fn vt100(comptime history_size: u32) type {
                 v = ft.fmt.parseInt(u32, buffer[1..semicolon_pos], 10) catch 0;
                 h = ft.fmt.parseInt(u32, buffer[semicolon_pos + 1 .. len - 1], 10) catch 0;
             }
-            var off_v: i32 = -@as(i32, @intCast(terminal.pos.line)) + @mod(@as(i32, @intCast(terminal.head_line)) - @as(i32, @intCast(terminal.scroll_offset)) - @as(i32, @intCast(tty.height - 1)) + @as(i32, @intCast(v)), history_size);
+            var off_v: i32 = -@as(i32, @intCast(terminal.pos.line)) +
+                @mod(@as(i32, @intCast(terminal.head_line)) -
+                @as(i32, @intCast(terminal.scroll_offset)) -
+                @as(i32, @intCast(tty.height - 1)) +
+                @as(i32, @intCast(v)), history_size);
             var off_h: i32 = -@as(i32, @intCast(terminal.pos.col)) + @as(i32, @intCast(h));
             terminal.move_cursor(off_v, off_h);
         }
 
         fn handle_get_pos(terminal: *tty.TtyN(history_size), _: [:0]const u8) void {
             var buffer: [100]u8 = [1]u8{0} ** 100;
-            var slice = ft.fmt.bufPrint(&buffer, "\x1b{d};{d}R", .{ terminal.get_state().pos.line, terminal.get_state().pos.col }) catch return;
+            var slice = ft.fmt.bufPrint(&buffer, "\x1b{d};{d}R", .{
+                terminal.get_state().pos.line,
+                terminal.get_state().pos.col,
+            }) catch return;
 
             terminal.input(slice);
         }
@@ -186,7 +193,10 @@ pub fn vt100(comptime history_size: u32) type {
         /// check if the escape buffer contains a full escape code and execute it
         /// see https://espterm.github.io/docs/VT100%20escape%20codes.html
         pub fn handle_escape(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) error{InvalidEscape}!bool {
-            const map = [_]struct { prefix: [:0]const u8, f: *const fn (*tty.TtyN(history_size), buffer: [:0]const u8) void }{
+            const map = [_]struct {
+                prefix: [:0]const u8,
+                f: *const fn (*tty.TtyN(history_size), buffer: [:0]const u8) void,
+            }{
                 .{ .prefix = "[20h", .f = &handle_nothing }, // new line mode
                 .{ .prefix = "[?^h", .f = &handle_nothing }, // terminal config
                 .{ .prefix = "[20l", .f = &handle_nothing }, // line feed mode

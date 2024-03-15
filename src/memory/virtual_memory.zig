@@ -25,8 +25,15 @@ pub fn VirtualMemory(comptime PageAllocator: type) type {
 
         /// allocate virtually contiguous memory
         pub fn alloc(self: *Self, comptime T: type, n: usize) ![]T { // todo: specify error
-            const npages = ft.math.divCeil(usize, @sizeOf(ChunkHeader) + @sizeOf(T) * n, paging.page_size) catch unreachable;
-            const chunk: *ChunkHeader = @ptrCast(@alignCast(try self.pageAllocator.alloc_pages_opt(npages, .{ .physically_contiguous = false })));
+            const npages = ft.math.divCeil(
+                usize,
+                @sizeOf(ChunkHeader) + @sizeOf(T) * n,
+                paging.page_size,
+            ) catch unreachable;
+            const chunk: *ChunkHeader = @ptrCast(@alignCast(try self.pageAllocator.alloc_pages_opt(
+                npages,
+                .{ .physically_contiguous = false },
+            )));
             chunk.npages = npages;
 
             return @as([*]T, @ptrFromInt(@intFromPtr(chunk) + @sizeOf(ChunkHeader)))[0..n];
@@ -64,8 +71,15 @@ pub fn VirtualMemory(comptime PageAllocator: type) type {
             const self: *Self = @ptrCast(@alignCast(ctx));
             _ = ptr_align; // todo
             _ = ret_addr; // todo
-            const npages = ft.math.divCeil(usize, @sizeOf(ChunkHeader) + len, paging.page_size) catch unreachable;
-            const chunk: *ChunkHeader = @ptrCast(@alignCast(self.pageAllocator.alloc_pages_opt(npages, .{ .physically_contiguous = false }) catch return null));
+            const npages = ft.math.divCeil(
+                usize,
+                @sizeOf(ChunkHeader) + len,
+                paging.page_size,
+            ) catch unreachable;
+            const chunk: *ChunkHeader = @ptrCast(@alignCast(self.pageAllocator.alloc_pages_opt(
+                npages,
+                .{ .physically_contiguous = false },
+            ) catch return null));
             chunk.npages = npages;
 
             return @as([*]u8, @ptrFromInt(@intFromPtr(chunk) + @sizeOf(ChunkHeader)));

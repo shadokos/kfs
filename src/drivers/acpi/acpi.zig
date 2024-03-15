@@ -109,10 +109,27 @@ fn _validate(comptime T: type, comptime name: []const u8, entry: anytype) ACPI_e
     const len = if (@hasField(@TypeOf(entry.*), "header")) entry.header.length else @sizeOf(@TypeOf(entry.*));
 
     return if (_checksum(entry, len)) b: {
-        acpi_logger.debug("{s}: checksum:\t{s}OK{s}\t({s}0x{x:0>8}{s})\t{s}{d}{s} bytes", .{ utils.magenta ++ name ++ utils.reset, utils.green, utils.reset, utils.blue, @intFromPtr(entry), utils.reset, utils.yellow, len, utils.reset });
+        acpi_logger.debug("{s}: checksum:\t{s}OK{s}\t({s}0x{x:0>8}{s})\t{s}{d}{s} bytes", .{
+            utils.magenta ++ name ++ utils.reset,
+            utils.green,
+            utils.reset,
+            utils.blue,
+            @intFromPtr(entry),
+            utils.reset,
+            utils.yellow,
+            len,
+            utils.reset,
+        });
         break :b @as(PTR(T), @ptrFromInt(@intFromPtr(entry)));
     } else b: {
-        acpi_logger.err("{s} checksum:\t{s}KO{s}\t({s}0x{x:0>8}{s})", .{ utils.magenta ++ name ++ utils.reset, utils.red, utils.reset, utils.blue, @intFromPtr(entry), utils.reset });
+        acpi_logger.err("{s} checksum:\t{s}KO{s}\t({s}0x{x:0>8}{s})", .{
+            utils.magenta ++ name ++ utils.reset,
+            utils.red,
+            utils.reset,
+            utils.blue,
+            @intFromPtr(entry),
+            utils.reset,
+        });
         break :b ACPI_error.entry_invalid;
     };
 }
@@ -125,11 +142,24 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry
         const header: PTR(ACPISDT_Header) = map(ACPISDT_Header, entry);
 
         if (ft.mem.eql(u8, &header.signature, name)) {
-            acpi_logger.debug("{s}: Search:\t{s}OK{s}\t({s}0x{x:0>8}{s})", .{ utils.magenta ++ name ++ utils.reset, utils.green, utils.reset, utils.blue, @intFromPtr(header), utils.reset });
+            acpi_logger.debug("{s}: Search:\t{s}OK{s}\t({s}0x{x:0>8}{s})", .{
+                utils.magenta ++ name ++ utils.reset,
+                utils.green,
+                utils.reset,
+                utils.blue,
+                @intFromPtr(header),
+                utils.reset,
+            });
             return _validate(_entry_type(name), name, @as(PTR(_entry_type(name)), @ptrCast(header)));
-        } else unmap(header, header.length) catch acpi_logger.warn("Failed to unmap {s} object", .{header.signature});
+        } else unmap(header, header.length) catch acpi_logger.warn(
+            "Failed to unmap {s} object",
+            .{header.signature},
+        );
     }
-    acpi_logger.err("{s}: Search:\t{s}KO{s}", .{ utils.magenta ++ name ++ utils.reset, utils.red, utils.reset });
+    acpi_logger.err(
+        "{s}: Search:\t{s}KO{s}",
+        .{ utils.magenta ++ name ++ utils.reset, utils.red, utils.reset },
+    );
     return ACPI_error.entry_not_found;
 }
 
@@ -147,7 +177,10 @@ fn _get_rsdp() ACPI_error!PTR(RSDP) {
 
     rsdp = _validate(RSDP, "RSDP", rsdp) catch |err| return err;
 
-    acpi_logger.debug("\t- oem: {s}\n\t\t\t\t\t\t- revision: {d}\n\t\t\t\t\t\t- rsdt: 0x{x}", .{ rsdp.oemid, rsdp.revision, @intFromPtr(rsdp.rsdt_address) });
+    acpi_logger.debug(
+        "\t- oem: {s}\n\t\t\t\t\t\t- revision: {d}\n\t\t\t\t\t\t- rsdt: 0x{x}",
+        .{ rsdp.oemid, rsdp.revision, @intFromPtr(rsdp.rsdt_address) },
+    );
     return rsdp;
 }
 
@@ -166,13 +199,29 @@ fn _get_s5(dsdt: PTR(DSDT)) ACPI_error!PTR(S5Object) {
         if (ft.mem.eql(u8, data[i .. i + 5], "_S5_\x12")) {
             if (!(data[i - 1] == 0x08 or (data[i - 1] == 0x5C and data[i - 2] == 0x08))) continue;
 
-            acpi_logger.debug("{s}:\tSearch\t\t{s}OK{s}\t({s}0x{x:0>8}{s})", .{ utils.magenta ++ "_S5" ++ utils.reset, utils.green, utils.reset, utils.blue, @intFromPtr(data) + i, utils.reset });
+            acpi_logger.debug(
+                "{s}:\tSearch\t\t{s}OK{s}\t({s}0x{x:0>8}{s})",
+                .{
+                    utils.magenta ++ "_S5" ++ utils.reset,
+                    utils.green,
+                    utils.reset,
+                    utils.blue,
+                    @intFromPtr(data) + i,
+                    utils.reset,
+                },
+            );
             const s5: PTR(S5Object) = @ptrFromInt(@as(usize, @intFromPtr(&dsdt.data)) + i + 4);
-            acpi_logger.debug("{s}:\t0x{x:0>14}", .{ utils.magenta ++ "_S5" ++ utils.reset, @as(u56, @bitCast(s5.*)) });
+            acpi_logger.debug(
+                "{s}:\t0x{x:0>14}",
+                .{ utils.magenta ++ "_S5" ++ utils.reset, @as(u56, @bitCast(s5.*)) },
+            );
             return s5;
         }
     }
-    acpi_logger.err("{s}:\tSearch\t\t{s}KO{s}", .{ utils.magenta ++ "_S5" ++ utils.reset, utils.red, utils.reset });
+    acpi_logger.err(
+        "{s}:\tSearch\t\t{s}KO{s}",
+        .{ utils.magenta ++ "_S5" ++ utils.reset, utils.red, utils.reset },
+    );
     return ACPI_error.entry_not_found;
 }
 
@@ -215,13 +264,17 @@ pub fn enable() ACPI_error!void {
 pub fn init() void {
     const rsdp = _get_rsdp() catch |err| @panic(acpi_strerror("RSDP", err));
     const rsdt = _get_rsdt(rsdp) catch |err| @panic(acpi_strerror("RSDT", err));
-    const facp = _find_entry(rsdt, "FACP") catch |err| @panic(acpi_strerror("FACP", err));
+    const facp = _find_entry(rsdt, "FACP") catch |err| @panic(
+        acpi_strerror("FACP", err),
+    );
     const dsdt = _get_dsdt(facp) catch |err| @panic(acpi_strerror("DSDT", err));
     const s5 = _get_s5(dsdt) catch |err| @panic(acpi_strerror("_S5", err));
 
     acpi.fadt = &facp.fadt;
 
-    // https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/04_ACPI_Hardware_Specification/ACPI_Hardware_Specification.html#pm1-control-registers-2
+    // TODO: Add a way to ignore the line width check for the following line in CI..
+    // https://uefi.org/htmlspecs/ACPI_Spec_6_4_html/04_ACPI_Hardware_Specification/
+    // ...ACPI_Hardware_Specification.html#pm1-control-registers-2
     acpi.SLP_TYPa = @as(u16, s5.slp_typ_a_num) << 10;
     acpi.SLP_TYPb = @as(u16, s5.slp_typ_b_num) << 10;
     acpi.SLP_EN = 1 << 13;
@@ -240,13 +293,34 @@ const paging = @import("../../memory/paging.zig");
 fn map(comptime T: type, ptr: paging.PhysicalPtr) PTR(T) {
     const memory = @import("../../memory.zig");
 
-    const object: PTR(T) = @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(ptr, @sizeOf(T), .KernelSpace) catch @panic("can't map acpi object")));
+    const object: PTR(T) = @ptrCast(
+        @alignCast(memory.virtualPageAllocator.map_object_anywhere(
+            ptr,
+            @sizeOf(T),
+            .KernelSpace,
+        ) catch @panic("can't map acpi object")),
+    );
 
-    const len = if (@hasField(T, "header")) object.header.length else if (@hasField(T, "length")) object.length else return object;
+    const len = if (@hasField(
+        T,
+        "header",
+    )) object.header.length else if (@hasField(
+        T,
+        "length",
+    )) object.length else return object;
 
-    defer unmap(object, @sizeOf(T)) catch |e| acpi_logger.warn("Failed to unmap {s}: {s}", .{ @typeName(T), @errorName(e) });
+    defer unmap(object, @sizeOf(T)) catch |e| acpi_logger.warn(
+        "Failed to unmap {s}: {s}",
+        .{ @typeName(T), @errorName(e) },
+    );
 
-    return @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(ptr, len, .KernelSpace) catch @panic("can't map acpi object")));
+    return @ptrCast(
+        @alignCast(memory.virtualPageAllocator.map_object_anywhere(
+            ptr,
+            len,
+            .KernelSpace,
+        ) catch @panic("can't map acpi object")),
+    );
 }
 
 fn unmap(ptr: anytype, len: usize) !void {

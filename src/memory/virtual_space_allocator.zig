@@ -108,7 +108,8 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
                     self.free_node(n);
                     return ret;
                 } else {
-                    const ret = n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value - size;
+                    const ret = n.avl[@intFromEnum(AVL_type.Address)].value +
+                        n.avl[@intFromEnum(AVL_type.Size)].value - size;
                     self.remove_from_tree(n, AVL_type.Size);
                     n.avl[@intFromEnum(AVL_type.Size)].value -= size;
                     self.add_to_tree(n, AVL_type.Size);
@@ -124,20 +125,27 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
             while (current_node) |n| {
                 if (n.avl[@intFromEnum(AVL_type.Address)].value > address) {
                     current_node = n.avl[@intFromEnum(AVL_type.Address)].l;
-                } else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value < address) {
+                } else if (n.avl[@intFromEnum(AVL_type.Address)].value +
+                    n.avl[@intFromEnum(AVL_type.Size)].value < address)
+                {
                     current_node = n.avl[@intFromEnum(AVL_type.Address)].r;
                 } else break;
             }
             if (current_node) |n| {
-                if (address + size > n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value)
+                if (address + size > n.avl[@intFromEnum(AVL_type.Address)].value +
+                    n.avl[@intFromEnum(AVL_type.Size)].value)
                     return Error.NoSpaceFound;
-                if (n.avl[@intFromEnum(AVL_type.Address)].value == address and n.avl[@intFromEnum(AVL_type.Size)].value == size) {
+                if (n.avl[@intFromEnum(AVL_type.Address)].value == address and
+                    n.avl[@intFromEnum(AVL_type.Size)].value == size)
+                {
                     self.used_space += size;
                     self.remove_from_tree(n, AVL_type.Size);
                     self.remove_from_tree(n, AVL_type.Address);
                     self.free_node(n);
                     return;
-                } else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value == address + size) {
+                } else if (n.avl[@intFromEnum(AVL_type.Address)].value +
+                    n.avl[@intFromEnum(AVL_type.Size)].value == address + size)
+                {
                     self.used_space += size;
                     self.remove_from_tree(n, AVL_type.Size);
                     n.avl[@intFromEnum(AVL_type.Size)].value -= size;
@@ -151,7 +159,11 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
                     n.avl[@intFromEnum(AVL_type.Address)].value += size;
                 } else {
                     const tmp = n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value;
-                    try self.set_used(address, (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value) - (address));
+                    try self.set_used(
+                        address,
+                        (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value) -
+                            (address),
+                    );
                     return self.free_space(address + size, tmp - (address + size));
                 }
             } else return Error.NoSpaceFound;
@@ -171,8 +183,12 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
                         right = n;
                     }
                     current_node = n.avl[@intFromEnum(AVL_type.Address)].l;
-                } else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value <= address) {
-                    if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value == address) {
+                } else if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value <=
+                    address)
+                {
+                    if (n.avl[@intFromEnum(AVL_type.Address)].value + n.avl[@intFromEnum(AVL_type.Size)].value ==
+                        address)
+                    {
                         // we found a node to merge on the left
                         left = n;
                     }
@@ -254,7 +270,10 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
         fn check_node(self: *Self, n: *Node, field: AVL_type) i32 {
             var dl: i32 = if (n.avl[@intFromEnum(field)].l) |l| self.check_node(l, field) else 0;
             var dr: i32 = if (n.avl[@intFromEnum(field)].r) |r| self.check_node(r, field) else 0;
-            if (dl - dr != n.avl[@intFromEnum(field)].balance_factor or n.avl[@intFromEnum(field)].balance_factor > 1 or n.avl[@intFromEnum(field)].balance_factor < -1) {
+            if (dl - dr != n.avl[@intFromEnum(field)].balance_factor or
+                n.avl[@intFromEnum(field)].balance_factor > 1 or
+                .avl[@intFromEnum(field)].balance_factor < -1)
+            {
                 self.print();
                 @panic("invalid tree in " ++ @typeName(Self));
             }
@@ -277,7 +296,9 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
                         return self.fix(p, field, change);
                     }
                     return;
-                } else if (p.avl[@intFromEnum(field)].balance_factor == 1 or p.avl[@intFromEnum(field)].balance_factor == -1) {
+                } else if (p.avl[@intFromEnum(field)].balance_factor == 1 or
+                    p.avl[@intFromEnum(field)].balance_factor == -1)
+                {
                     if (change == 1) {
                         return self.fix(p, field, change);
                     }
@@ -487,7 +508,12 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
             for (0..depth) |_| {
                 printk(" ", .{});
             }
-            printk("0x{x} (n: 0x{x:0>8} p: 0x{x:0>8}) balance_factor: {d}\n", .{ n.avl[@intFromEnum(field)].value, @as(u32, @intFromPtr(n)), @as(u32, @intFromPtr(n.avl[@intFromEnum(field)].p)), n.avl[@intFromEnum(field)].balance_factor });
+            printk("0x{x} (n: 0x{x:0>8} p: 0x{x:0>8}) balance_factor: {d}\n", .{
+                n.avl[@intFromEnum(field)].value,
+                @as(u32, @intFromPtr(n)),
+                @as(u32, @intFromPtr(n.avl[@intFromEnum(field)].p)),
+                n.avl[@intFromEnum(field)].balance_factor,
+            });
             if (n.avl[@intFromEnum(field)].r) |r| {
                 self.print_node(r, field, depth + 1);
             }

@@ -236,16 +236,32 @@ pub fn kfuzz(args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
     const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    const max_size = if (args.len == 3) ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter else 10000;
+    const max_size = if (args.len == 3) ft.fmt.parseInt(
+        usize,
+        args[2],
+        0,
+    ) catch return CmdError.InvalidParameter else 10000;
 
-    return utils.fuzz(@import("../memory.zig").physicalMemory.allocator(), nb, max_size) catch CmdError.OtherError;
+    return utils.fuzz(
+        @import("../memory.zig").physicalMemory.allocator(),
+        nb,
+        max_size,
+    ) catch CmdError.OtherError;
 }
 
 pub fn vfuzz(args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
     const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    const max_size = if (args.len == 3) ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter else 10000;
+    const max_size = if (args.len == 3) ft.fmt.parseInt(
+        usize,
+        args[2],
+        0,
+    ) catch return CmdError.InvalidParameter else 10000;
 
-    return utils.fuzz(@import("../memory.zig").virtualMemory.allocator(), nb, max_size) catch CmdError.OtherError;
+    return utils.fuzz(
+        @import("../memory.zig").virtualMemory.allocator(),
+        nb,
+        max_size,
+    ) catch CmdError.OtherError;
 }

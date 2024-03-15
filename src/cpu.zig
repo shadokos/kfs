@@ -1,6 +1,13 @@
 const ft = @import("../ft/ft.zig");
 
-const Cr0Flag = enum(u5) { ProtectedMode = 0, MathPresent = 1, Emulation = 2, TaskSwitched = 3, ExtensionType = 4, Paging = 31 };
+const Cr0Flag = enum(u5) {
+    ProtectedMode = 0,
+    MathPresent = 1,
+    Emulation = 2,
+    TaskSwitched = 3,
+    ExtensionType = 4,
+    Paging = 31,
+};
 
 const Cr0 = packed struct(u32) {
     pe: bool = false,

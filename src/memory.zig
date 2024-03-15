@@ -27,7 +27,12 @@ pub var physicalMemory: PhysicalMemory = .{};
 pub fn map_kernel() void {
 
     // create space for all the tables of the kernel space
-    const tables: *align(4096) [256][paging.page_table_size]paging.page_table_entry = @ptrCast((virtualPageAllocator.alloc_pages_opt(256, .{ .type = .KernelSpace }) catch @panic("not enought space to map kernel")));
+    const tables: *align(4096) [256][paging.page_table_size]paging.page_table_entry = @ptrCast(
+        (virtualPageAllocator.alloc_pages_opt(
+            256,
+            .{ .type = .KernelSpace },
+        ) catch @panic("not enought space to map kernel")),
+    );
     // at the end of this functions the page tables are only unmapped but not freed
     defer virtualPageAllocator.unmap_object(@ptrCast(tables), 256 * paging.page_size) catch unreachable;
 
@@ -35,10 +40,14 @@ pub fn map_kernel() void {
     for (0..(paging.kernel_virtual_space_size >> 22)) |i| {
         if (paging.page_table_table_ptr[768 + i].present) {
             @memcpy(tables[i][0..], mapping.get_table_ptr(@intCast(768 + i))[0..]);
-            paging.page_dir_ptr[768 + i].address_fragment = @truncate((mapping.get_physical_ptr(@ptrCast(&tables[i])) catch unreachable) >> 12);
+            paging.page_dir_ptr[768 + i].address_fragment = @truncate((mapping.get_physical_ptr(
+                @ptrCast(&tables[i]),
+            ) catch unreachable) >> 12);
         } else {
             @memset(tables[i][0..], paging.page_table_entry{});
-            paging.page_dir_ptr[768 + i].address_fragment = @truncate((mapping.get_physical_ptr(@ptrCast(&tables[i])) catch unreachable) >> 12);
+            paging.page_dir_ptr[768 + i].address_fragment = @truncate((mapping.get_physical_ptr(
+                @ptrCast(&tables[i]),
+            ) catch unreachable) >> 12);
             paging.page_table_table_ptr[768 + i].present = true;
         }
     }
@@ -54,7 +63,15 @@ pub fn map_kernel() void {
         while (iter.next()) |e| {
             if (e.sh_addr >= paging.low_half) {
                 if (!e.sh_flags.SHF_WRITE) {
-                    virtualPageAllocator.mapper.set_rights(@ptrFromInt(e.sh_addr), ft.math.divCeil(u32, e.sh_size, paging.page_size) catch unreachable, false) catch unreachable;
+                    virtualPageAllocator.mapper.set_rights(
+                        @ptrFromInt(e.sh_addr),
+                        ft.math.divCeil(
+                            u32,
+                            e.sh_size,
+                            paging.page_size,
+                        ) catch unreachable,
+                        false,
+                    ) catch unreachable;
                 }
             }
         }
@@ -63,15 +80,30 @@ pub fn map_kernel() void {
     // free the spaces taken by the early page tables
     for (&@import("trampoline.zig").page_tables) |*table| {
         pageFrameAllocator.free_pages(@intFromPtr(table), 1) catch unreachable;
-        const mapped = virtualPageAllocator.map_object_anywhere(@intFromPtr(table), paging.page_size, .KernelSpace) catch @panic("cannot init memory");
+        const mapped = virtualPageAllocator.map_object_anywhere(
+            @intFromPtr(table),
+            paging.page_size,
+            .KernelSpace,
+        ) catch @panic("cannot init memory");
         @memset(@as(paging.VirtualPagePtr, @ptrCast(@alignCast(mapped))), 0);
         virtualPageAllocator.unmap_object(mapped, paging.page_size) catch unreachable;
     }
 
     // shrink the kernel executable space to its actual size
-    const kernel_aligned_begin = ft.mem.alignForward(usize, @intFromPtr(boot.kernel_end) + paging.low_half, paging.page_size);
-    const kernel_aligned_end = ft.mem.alignForward(usize, @import("trampoline.zig").kernel_size + paging.low_half, paging.page_size);
-    virtualPageAllocator.unmap_object(@ptrFromInt(kernel_aligned_begin), kernel_aligned_end - kernel_aligned_begin) catch @panic("can't shrink kernel");
+    const kernel_aligned_begin = ft.mem.alignForward(
+        usize,
+        @intFromPtr(boot.kernel_end) + paging.low_half,
+        paging.page_size,
+    );
+    const kernel_aligned_end = ft.mem.alignForward(
+        usize,
+        @import("trampoline.zig").kernel_size + paging.low_half,
+        paging.page_size,
+    );
+    virtualPageAllocator.unmap_object(
+        @ptrFromInt(kernel_aligned_begin),
+        kernel_aligned_end - kernel_aligned_begin,
+    ) catch @panic("can't shrink kernel");
 }
 
 pub fn init() void {
@@ -125,13 +157,18 @@ fn check_mem_availability() void {
             var area_begin: u64 = @intCast(ft.mem.alignForward(u64, e.base, page_size));
             var area_end: u64 = @intCast(ft.mem.alignBackward(u64, e.base + e.length, page_size));
             if (area_end > pageFrameAllocator.total_space)
-                area_end = @intCast(ft.mem.alignBackward(u64, pageFrameAllocator.total_space, page_size));
+                area_end = @intCast(
+                    ft.mem.alignBackward(u64, pageFrameAllocator.total_space, page_size),
+                );
             if (area_begin >= area_end) // smaller than a page
                 continue;
             while (area_begin < area_end) : (area_begin += page_size) {
                 if (area_begin < @intFromPtr(boot.kernel_end)) // area is before kernel end
                     continue;
-                pageFrameAllocator.free_pages(@truncate(area_begin), 1) catch @panic("cannot init page frame allocator");
+                pageFrameAllocator.free_pages(
+                    @truncate(area_begin),
+                    1,
+                ) catch @panic("cannot init page frame allocator");
             }
         }
     }

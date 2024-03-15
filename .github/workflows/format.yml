@@ -11,10 +11,10 @@ env:
   BIN: zig-cache/kfs.elf
   ZIG_VERSION: 0.11.0
   ZIG_CACHE: zig-cache
-  ZIG: /usr/zig/zig
+  ZIG: /tmp/zig/zig
 
 jobs:
-  build:
+  format:
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +25,7 @@ jobs:
         id: cache-zig-installation
         uses: actions/cache@v3
         with:
-          path: /usr/zig
+          path: /tmp/zig
           key: ${{ runner.os }}-zig
           restore-keys: |
             ${{ runner.os }}-zig
@@ -34,13 +34,13 @@ jobs:
         name: Install zig
         run: |
           wget https://ziglang.org/download/0.11.0/zig-linux-x86_64-${ZIG_VERSION}.tar.xz -qO /tmp/zig.tar.xz
-          sudo mkdir -p /usr/zig && echo "Zig folder created"
-          sudo tar -xf /tmp/zig.tar.xz -C /usr/zig --strip-components=1 && echo "Zig extracted"
+          mkdir -p /tmp/zig && echo "Zig folder created"
+          tar -xf /tmp/zig.tar.xz -C /tmp/zig --strip-components=1 && echo "Zig extracted"
 
       - name: Check format
         run: |
           ${ZIG} fmt --check ./src
-          result=$(grep -RE '.{120,}' src | sed -E 's/^(.{80}).*/\1(...)/g')
+          result=$(grep -REn '.{120,}' src | sed -E 's/^(.{80}).*/\1(...)/g')
           if [ -n "$result" ]; then
             echo "Error: Found lines longer than 120 characters." 1>&2
             echo "$result" 1>&2

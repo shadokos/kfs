@@ -34,7 +34,11 @@ pub const PhysicalMemory = struct {
         };
 
         inline for (0..cache_descriptions.len) |i| {
-            caches[i] = try globalCache.create(cache_descriptions[i].name, cache_descriptions[i].size, cache_descriptions[i].order);
+            caches[i] = try globalCache.create(
+                cache_descriptions[i].name,
+                cache_descriptions[i].size,
+                cache_descriptions[i].order,
+            );
         }
     }
 

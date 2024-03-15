@@ -13,19 +13,52 @@ const Allocator = @This();
 
 pub const Error = error{OutOfMemory};
 
-// fn alignedAlloc(self: Allocator, comptime T: type, comptime alignment: ?u29, n: usize) Error![]align(alignment orelse @alignOf(T)) T
+// fn alignedAlloc(
+//     self: Allocator,
+//     comptime T: type,
+//     comptime alignment: ?u29,
+//     n: usize,
+// ) Error![]align(alignment orelse @alignOf(T)) T
 
 pub fn alloc(self: Allocator, comptime T: type, n: usize) Error![]T {
-    return @as([*]T, @ptrCast(self.rawAlloc(n * @sizeOf(T), ft.math.log2(@alignOf(T)), @returnAddress()) orelse return Error.OutOfMemory))[0..n];
+    return @as(
+        [*]T,
+        @ptrCast(
+            self.rawAlloc(
+                n * @sizeOf(T),
+                ft.math.log2(@alignOf(T)),
+                @returnAddress(),
+            ) orelse return Error.OutOfMemory,
+        ),
+    )[0..n];
 }
 
-// inline fn allocAdvancedWithRetAddr(self: Allocator, comptime T: type, comptime alignment: ?u29, n: usize, return_address: usize) Error![]align(alignment orelse @alignOf(T)) T
+//inline fn allocAdvancedWithRetAddr(
+//    self: Allocator,
+//    comptime T: type,
+//    comptime alignment: ?u29,
+//    n: usize,
+//    return_address: usize,
+//) Error![]align(alignment orelse @alignOf(T)) T {}
 
 // fn allocSentinel(self: Allocator, comptime Elem: type, n: usize, comptime sentinel: Elem) Error![:sentinel]Elem
 
-// fn allocWithOptions(self: Allocator, comptime Elem: type, n: usize, comptime optional_alignment: ?u29, comptime optional_sentinel: ?Elem) Error!AllocWithOptionsPayload(Elem, optional_alignment, optional_sentinel)
+// fn allocWithOptions(
+//     self: Allocator,
+//     comptime Elem: type,
+//     n: usize,
+//     comptime optional_alignment: ?u29,
+//     comptime optional_sentinel: ?Elem,
+// ) Error!AllocWithOptionsPayload(Elem, optional_alignment, optional_sentinel) {}
 
-// fn allocWithOptionsRetAddr(self: Allocator, comptime Elem: type, n: usize, comptime optional_alignment: ?u29, comptime optional_sentinel: ?Elem, return_address: usize) Error!AllocWithOptionsPayload(Elem, optional_alignment, optional_sentinel)
+// fn allocWithOptionsRetAddr(
+//     self: Allocator,
+//     comptime Elem: type,
+//     n: usize,
+//     comptime optional_alignment: ?u29,
+//     comptime optional_sentinel: ?Elem,
+//     return_address: usize,
+// ) Error!AllocWithOptionsPayload(Elem, optional_alignment, optional_sentinel) {}
 
 fn create(self: Allocator, comptime T: type) Error!*T {
     return &(try self.alloc(T, 1))[0];
@@ -46,7 +79,11 @@ fn dupe(allocator: Allocator, comptime T: type, m: []const T) Error![]T {
 
 pub fn free(self: Allocator, memory: anytype) void {
     const T = @typeInfo(@TypeOf(memory)).Pointer.child;
-    self.rawFree(@as([*]u8, @ptrCast(@alignCast(memory.ptr)))[0 .. memory.len * @sizeOf(T)], ft.math.log2(@alignOf(T)), @returnAddress());
+    self.rawFree(
+        @as([*]u8, @ptrCast(@alignCast(memory.ptr)))[0 .. memory.len * @sizeOf(T)],
+        ft.math.log2(@alignOf(T)),
+        @returnAddress(),
+    );
 }
 
 // fn noFree(self: *anyopaque, buf: []u8, log2_buf_align: u8, ret_addr: usize) void
@@ -80,9 +117,22 @@ fn realloc(self: Allocator, old_mem: anytype, new_n: usize) t: {
     }
 }
 
-// fn reallocAdvanced(self: Allocator, old_mem: anytype, new_n: usize, return_address: usize) t: { const Slice = @typeInfo(@TypeOf(old_mem)).Pointer; break :t Error![]align(Slice.alignment) Slice.child; }
+// fn reallocAdvanced(
+//     self: Allocator,
+//     old_mem: anytype,
+//     new_n: usize,
+//     return_address: usize,
+// ) t: {
+//     const Slice = @typeInfo(@TypeOf(old_mem)).Pointer;
+//     break :t Error![]align(Slice.alignment) Slice.child;
+// } {}
 
 fn resize(self: Allocator, old_mem: anytype, new_n: usize) bool {
     const T = @typeInfo(@TypeOf(old_mem)).Pointer.child;
-    return self.rawResize(@as([*]u8, @ptrCast(@alignCast(old_mem.ptr)))[0 .. old_mem.len * @sizeOf(T)], ft.math.log2(@alignOf(T)), new_n, @returnAddress());
+    return self.rawResize(
+        @as([*]u8, @ptrCast(@alignCast(old_mem.ptr)))[0 .. old_mem.len * @sizeOf(T)],
+        ft.math.log2(@alignOf(T)),
+        new_n,
+        @returnAddress(),
+    );
 }

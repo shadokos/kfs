@@ -13,7 +13,11 @@ pub const page_flags = packed struct {
 };
 
 /// page frame descriptor
-pub const page_frame_descriptor = struct { flags: page_flags, next: ?*page_frame_descriptor = null, prev: ?*page_frame_descriptor = null };
+pub const page_frame_descriptor = struct {
+    flags: page_flags,
+    next: ?*page_frame_descriptor = null,
+    prev: ?*page_frame_descriptor = null,
+};
 
 pub const page_table_size = 1024;
 

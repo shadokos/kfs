@@ -5,7 +5,9 @@ const paging = @import("paging.zig");
 
 const max_order = 10;
 
-pub var linearAllocator: StaticAllocator(BuddyAllocator(void, max_order).size_for(paging.virtual_size / paging.page_size)) = .{};
+pub var linearAllocator: StaticAllocator(
+    BuddyAllocator(void, max_order).size_for(paging.virtual_size / paging.page_size),
+) = .{};
 
 pub const PageFrameAllocator = struct {
     total_space: u64 = undefined,
@@ -25,11 +27,17 @@ pub const PageFrameAllocator = struct {
         if (self.total_space > UnderlyingAllocator.max_possible_space(u64, &linearAllocator))
             @panic("Not enough space in page frame allocator!");
 
-        self.addressable_space_allocator = UnderlyingAllocator.init(@truncate(@min(self.total_space, paging.physical_memory_max) / @sizeOf(paging.page)), &linearAllocator);
+        self.addressable_space_allocator = UnderlyingAllocator.init(
+            @truncate(@min(self.total_space, paging.physical_memory_max) / @sizeOf(paging.page)),
+            &linearAllocator,
+        );
 
         if (self.total_space > paging.physical_memory_max) {
             const high_memory_space = self.total_space - paging.physical_memory_max;
-            self.non_addressable_space_allocator = UnderlyingAllocator.init(@truncate(high_memory_space / @sizeOf(paging.page)), &linearAllocator);
+            self.non_addressable_space_allocator = UnderlyingAllocator.init(
+                @truncate(high_memory_space / @sizeOf(paging.page)),
+                &linearAllocator,
+            );
         }
         return self;
     }
