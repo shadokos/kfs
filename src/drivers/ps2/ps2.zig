@@ -31,10 +31,10 @@ pub const Status = packed struct {
 };
 
 pub const ControllerConf = packed struct {
-    // First PS/2 port interrupt (1 = enabled, 0 = disabled)
-    first_port_interrupt: u1,
-    // Second PS/2 port interrupt (1 = enabled, 0 = disabled)
-    second_port_interrupt: u1,
+    // First PS/2 port interrupt (true = enabled, false = disabled)
+    first_port_interrupt: bool,
+    // Second PS/2 port interrupt (true = enabled, false = disabled)
+    second_port_interrupt: bool,
     // System Flag (1 = system passed POST, 0 = os shouldn't be running)
     system_flag: u1,
     // Should be zero
@@ -43,8 +43,8 @@ pub const ControllerConf = packed struct {
     first_port_clock: u1,
     // Second PS/2 port clock (1 = disabled, 0 = enabled)
     second_port_clock: u1,
-    // First PS/2 port translation (1 = enabled, 0 = disabled)
-    first_port_translation: u1,
+    // First PS/2 port translation (true = enabled, false = disabled)
+    first_port_translation: bool,
     // Must be zero
     zero2: u1 = 0,
 };
@@ -107,7 +107,19 @@ pub fn send_command(command: u8) void {
 
 pub fn enable_translation() void {
     var conf = get_configuration();
-    conf.first_port_translation = 1;
+    conf.first_port_translation = true;
+    set_configuration(conf);
+}
+
+pub fn set_first_port_interrupts(data: bool) void {
+    var conf = get_configuration();
+    conf.first_port_interrupt = data;
+    set_configuration(conf);
+}
+
+pub fn set_second_port_interrupt(data: bool) void {
+    var conf = get_configuration();
+    conf.second_port_interrupt = data;
     set_configuration(conf);
 }
 
@@ -236,9 +248,9 @@ pub fn init() void {
         ps2_logger.debug("\t\tconfiguration: 0b{b:0>8}", .{@as(u8, @bitCast(conf))});
 
         ps2_logger.debug("\t\tdisabling interrupts and translation", .{});
-        conf.first_port_interrupt = 0;
-        conf.second_port_interrupt = 0;
-        conf.first_port_translation = 0;
+        conf.first_port_interrupt = false;
+        conf.second_port_interrupt = false;
+        conf.first_port_translation = false;
         set_configuration(conf);
 
         conf = get_configuration();
@@ -267,11 +279,11 @@ pub fn init() void {
         ps2_logger.debug("\t\tDual channel controller detected", .{});
 
     // Step 6: Perform interface Tests
-    var available_ports: packed struct { p1: u1 = 0, p2: u1 = 0 } = .{};
+    var available_ports: packed struct { p1: bool = false, p2: bool = false } = .{};
     {
-        available_ports.p1 = @intFromBool(port_test(.FirstPort) catch false);
+        available_ports.p1 = port_test(.FirstPort) catch false;
         if (is_dual_channel)
-            available_ports.p2 = @intFromBool(port_test(.SecondPort) catch false);
+            available_ports.p2 = port_test(.SecondPort) catch false;
     }
 
     // Step 7: Enable PS/2 Ports
@@ -279,17 +291,21 @@ pub fn init() void {
     //   from which port we're receiving data when polling the status register
     //   So we're only enabling the first port for now assuming it's the keyboard one
 
-    if (available_ports.p1 == 0)
+    if (!available_ports.p1)
         @panic("PS/2 Controller interface tests failed, first port not working");
     // TODO: When we'll have interrupt support: Remove the above line and uncomment the following lines
     // if (@as(u2, @bitCast(available_ports)) == 0)
     // 	@panic("PS/2 Controller interface tests failed, no working ports detected");
 
-    // if (available_ports.p2 == 1)
+    // if (available_ports.p2)
     // 	enable_second_port();
-    if (available_ports.p1 == 1) {
+    if (available_ports.p1) {
         enable_translation();
+        set_first_port_interrupts(true);
         enable_first_port();
     }
+
+    const _conf = get_configuration();
+    ps2_logger.debug("config: 0b{b:0>8}", .{@as(u8, @bitCast(_conf))});
     ps2_logger.info("Controller initialized", .{});
 }

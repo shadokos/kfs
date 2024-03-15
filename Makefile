@@ -28,6 +28,7 @@ SRC = linker.ld \
 	drivers/ps2/ps2.zig \
 	gdt.zig \
 	drivers/acpi/acpi.zig \
+	drivers/pic/pic.zig \
 	drivers/acpi/types/acpi.zig \
 	drivers/acpi/types/s5.zig \
 	drivers/vga/text.zig \
