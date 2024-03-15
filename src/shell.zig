@@ -3,6 +3,7 @@ const Builtins = @import("shell/builtins.zig");
 const token = @import("shell/token.zig");
 const tty = @import("tty/tty.zig");
 const utils = @import("shell/utils.zig");
+const allocator = @import("memory.zig").physicalMemory.allocator();
 
 const TokenizerError = token.TokenizerError;
 const max_line_size: u16 = 1024;
@@ -21,6 +22,7 @@ fn exec_cmd(args: [][]u8) CmdError!void {
 }
 
 pub fn shell() u8 {
+    var reader = tty.get_reader();
     tty.get_tty().config.c_lflag.ECHOCTL = true;
 
     var err: bool = false;
@@ -29,13 +31,18 @@ pub fn shell() u8 {
         utils.print_prompt(err);
 
         // Read a line from the tty
-        var data: [max_line_size]u8 = undefined;
-        const data_len: usize = tty.get_reader().read(&data) catch return 1;
-
-        var line: *const []u8 = &data[0..data_len];
+        var slice = reader.readUntilDelimiterAlloc(allocator, '\n', 4096) catch |e| {
+            if (e == error.StreamTooLong) {
+                utils.print_error("Line is too long", .{});
+                _ = reader.skipUntilDelimiterOrEof('\n') catch {};
+            }
+            err = true;
+            continue;
+        };
+        defer allocator.free(slice);
 
         // Tokenize the line
-        const args = token.tokenize(@constCast(line)) catch |e| {
+        const args = token.tokenize(slice) catch |e| {
             switch (e) {
                 token.TokenizerError.InvalidQuote => utils.print_error("invalid quotes", .{}),
                 token.TokenizerError.MaxTokensReached => utils.print_error(

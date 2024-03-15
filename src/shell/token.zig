@@ -18,18 +18,18 @@ pub const TokenizerError = error{
     MaxTokensReached,
 };
 
-fn _skip_and_fill_whitespaces(data: *[]u8, i: *usize) void {
+fn _skip_and_fill_whitespaces(data: []u8, i: *usize) void {
     var start = i.*;
 
-    for (data.*[i.*..data.*.len]) |*c| switch (c.*) {
+    for (data[i.*..data.len]) |*c| switch (c.*) {
         0, 9...13, 32 => i.* += 1,
         else => break,
     };
-    @memset(data.*[start..i.*], 0);
+    @memset(data[start..i.*], 0);
 }
 
-pub fn _slice_token(data: *[]u8, tokenizer: *Tokenizer, i: *usize) (TokenizerError || error{EmptyToken})!void {
-    const slice = @constCast(data.*[tokenizer.offset..i.*]);
+pub fn _slice_token(data: []u8, tokenizer: *Tokenizer, i: *usize) (TokenizerError || error{EmptyToken})!void {
+    const slice = @constCast(data[tokenizer.offset..i.*]);
     _skip_and_fill_whitespaces(data, i);
     tokenizer.offset = i.*;
 
@@ -39,12 +39,12 @@ pub fn _slice_token(data: *[]u8, tokenizer: *Tokenizer, i: *usize) (TokenizerErr
     tokenizer.index += 1;
 }
 
-pub fn tokenize(data: *[]u8) TokenizerError![][]u8 {
+pub fn tokenize(data: []u8) TokenizerError![][]u8 {
     var tokenizer = Tokenizer{};
 
     var i: usize = 0;
-    while (i < data.*.len) {
-        const c = &data.*[i];
+    while (i < data.len) {
+        const c = &data[i];
         switch (tokenizer.quote) {
             .none => switch (c.*) {
                 0, 9...13, 32 => {
@@ -69,11 +69,11 @@ pub fn tokenize(data: *[]u8) TokenizerError![][]u8 {
                 tokenizer.quote = .none;
                 ft.mem.copyForwards(
                     u8,
-                    data.*[tokenizer.quote_offset .. i - 1],
-                    data.*[tokenizer.quote_offset + 1 .. i],
+                    data[tokenizer.quote_offset .. i - 1],
+                    data[tokenizer.quote_offset + 1 .. i],
                 );
-                ft.mem.copyForwards(u8, data.*[i - 1 .. data.*.len - 1], data.*[i + 1 .. data.*.len]);
-                @memset(data.*[data.*.len - 2 .. data.*.len], 0);
+                ft.mem.copyForwards(u8, data[i - 1 .. data.len - 1], data[i + 1 .. data.len]);
+                @memset(data[data.len - 2 .. data.len], 0);
                 i -|= 1;
             } else {
                 i += 1;
