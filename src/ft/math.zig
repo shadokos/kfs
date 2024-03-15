@@ -3,7 +3,7 @@ const ft = @import("ft.zig");
 pub fn log2(x: anytype) @TypeOf(x) {
     switch (@typeInfo(@TypeOf(x))) {
         .Int, .ComptimeInt => {
-            var i: usize = 0;
+            var i: @TypeOf(x) = 0;
             var absolute = abs(@TypeOf(x), x);
             while ((absolute >> @intCast(i)) > 1) : (i += 1) {}
             return i;
