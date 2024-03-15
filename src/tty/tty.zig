@@ -589,8 +589,8 @@ pub fn set_tty(n: u8) !void {
 }
 
 /// return the reader object of the current tty
-pub inline fn get_reader() Tty.Reader {
-    return tty_array[current_tty].reader();
+pub inline fn get_reader() ft.io.AnyReader {
+    return tty_array[current_tty].reader().any();
 }
 
 /// return the writer object of the current tty
