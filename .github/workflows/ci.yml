@@ -1,9 +1,9 @@
-name: Format
+name: CI
 on:
   push:
-    branches: ['main', 'dev/**', '*/ci/*']
+    branches: ['main', 'dev/**']
   pull_request:
-    branches: ['main', 'dev/**', '*/ci/*']
+    branches: ['main', 'dev/**']
 
 env:
   NAME: kfs
@@ -11,9 +11,36 @@ env:
   BIN: zig-cache/kfs.elf
   ZIG_VERSION: 0.11.0
   ZIG_CACHE: zig-cache
+  ZIG_PATH: /tmp/zig
   ZIG: /tmp/zig/zig
 
 jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Cache zig installation
+        id: cache-zig-installation
+        uses: actions/cache@v3
+        with:
+          path: /tmp/zig
+          key: ${{ runner.os }}-zig
+          restore-keys: |
+            ${{ runner.os }}-zig
+
+      - if: steps.cache-zig-installation.outputs.cache-hit != 'true'
+        name: Install zig
+        run: |
+          wget https://ziglang.org/download/0.11.0/zig-linux-x86_64-${ZIG_VERSION}.tar.xz -qO /tmp/zig.tar.xz
+          sudo mkdir -p ${ZIG_PATH} && echo "Zig folder created"
+          sudo tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
+
+      - name: Build kernel sources
+        run: make ${BIN}
+
   format:
     runs-on: ubuntu-latest
 
@@ -34,8 +61,8 @@ jobs:
         name: Install zig
         run: |
           wget https://ziglang.org/download/0.11.0/zig-linux-x86_64-${ZIG_VERSION}.tar.xz -qO /tmp/zig.tar.xz
-          mkdir -p /tmp/zig && echo "Zig folder created"
-          tar -xf /tmp/zig.tar.xz -C /tmp/zig --strip-components=1 && echo "Zig extracted"
+          mkdir -p ${ZIG_PATH} && echo "Zig folder created"
+          tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
 
       - name: Check format
         run: |
