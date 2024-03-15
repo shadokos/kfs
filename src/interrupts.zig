@@ -73,9 +73,17 @@ pub fn init() void {
         0,
         0b1000,
     );
-    idtr.offset = @intFromPtr(&idt);
+    idt[33] = InterruptDescriptor.init(
+        .{ .noerr = @import("tty/keyboard.zig").handler },
+        .Interrupt,
+        0,
+        0b1000,
+    );
 
     @import("drivers/pic/pic.zig").remap(0x20, 0x28);
+    @import("drivers/pic/pic.zig").enable_irq(.Keyboard);
+
+    idtr.offset = @intFromPtr(&idt);
     cpu.load_idt(&idtr);
     cpu.enable_interrupts();
     logger.info("Idt initialized", .{});
