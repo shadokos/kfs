@@ -1,4 +1,6 @@
-const logger = @import("ft/ft.zig").log.scoped(.interrupts);
+const cpu = @import("cpu.zig");
+const interrupt_logger = @import("ft/ft.zig").log.scoped(.interrupts);
+const logger = @import("ft/ft.zig").log.scoped(.idt);
 
 pub const Handler = extern union {
     ptr: usize,
@@ -6,7 +8,7 @@ pub const Handler = extern union {
     noerr: *const fn () callconv(.Interrupt) void,
 };
 
-const IDTR = packed struct {
+pub const IDTR = packed struct {
     size: u16 = 0x7ff,
     offset: u64 = undefined,
 };
@@ -23,8 +25,8 @@ pub const InterruptDescriptor = packed struct {
     offset_1: u16 = undefined,
     selector: u16 = undefined,
     unused: u8 = 0,
-    gate: GateType = undefined,
-    privilege: u2 = undefined,
+    gate: GateType = .Interrupt,
+    privilege: u2 = 0,
     present: bool = false,
     offset_2: u16 = undefined,
 
@@ -52,32 +54,53 @@ pub const InterruptDescriptor = packed struct {
 };
 
 var idt: [256]InterruptDescriptor = [_]InterruptDescriptor{.{}} ** 256;
-
-fn zero_div() callconv(.Interrupt) void {
-    @panic("ZERO DIV :(");
-}
-
-fn handler_err(code: u32) callconv(.Interrupt) void {
-    logger.err("handler_err: {d}", .{code});
-}
-
-fn handler_noerr() callconv(.Interrupt) void {
-    logger.err("handler_noerr", .{});
-}
+var default_handlers: [256]Handler = undefined;
 
 pub fn init() void {
     logger.debug("Initializing idt...", .{});
-    idt[0] = InterruptDescriptor.init(.{ .noerr = &zero_div }, .Interrupt, 0, 0b1000);
-    for (idt[1..32], 1..) |*entry, i| entry.* = InterruptDescriptor.init(switch (i) {
-        8, 10...14, 17, 30 => .{ .err = &handler_err },
-        else => .{ .noerr = &handler_noerr },
-    }, .Interrupt, 0, 0b1000);
-    idtr.offset = @intFromPtr(&idt);
-    const ptr: *const IDTR = &idtr;
-    asm volatile (
-        \\ lidt (%%eax)
-        \\ sti
-        :
-        : [ptr] "{eax}" (ptr),
+
+    inline for (default_handlers[0..256], 0..) |*entry, i| {
+        entry.* = switch (i) {
+            inline 31...255 => |id| default_handler(id, "unhandled", .except),
+            inline 8, 10...14, 17, 30 => |id| default_handler(id, "unhandled", .err),
+            inline else => |id| default_handler(@truncate(id), "unhandled", .noerr),
+        };
+    }
+
+    inline for (idt[0..256], 0..) |*entry, i| entry.* = InterruptDescriptor.init(
+        default_handlers[i],
+        .Interrupt,
+        0,
+        0b1000,
     );
+    idtr.offset = @intFromPtr(&idt);
+
+    @import("drivers/pic/pic.zig").remap(0x20, 0x28);
+    cpu.load_idt(&idtr);
+    cpu.enable_interrupts();
+    logger.info("Idt initialized", .{});
+}
+
+pub fn default_handler(
+    comptime id: u8,
+    comptime name: []const u8,
+    comptime t: enum { err, noerr, except },
+) Handler {
+    const handlers = struct {
+        pub fn exception() callconv(.Interrupt) void {
+            interrupt_logger.err("exception {d}, {s}", .{ id, name });
+            @import("drivers/pic/pic.zig").ack();
+        }
+        pub fn noerr() callconv(.Interrupt) void {
+            @import("ft/ft.zig").log.err("irq {d}, {s}", .{ id, name });
+        }
+        pub fn err(code: u32) callconv(.Interrupt) void {
+            @import("ft/ft.zig").log.err("irq {d}, {s}, 0x{x}", .{ id, name, code });
+        }
+    };
+    return switch (t) {
+        .err => .{ .err = &handlers.err },
+        .noerr => .{ .noerr = &handlers.noerr },
+        .except => .{ .noerr = &handlers.exception },
+    };
 }
