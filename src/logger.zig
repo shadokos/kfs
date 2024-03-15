@@ -27,10 +27,13 @@ pub fn kernel_log(
     if (message_level == .err and scope == .default) {
         if (@import("build_options").optimize != .Debug) {
             screen_of_death(format, args);
-            while (true) {}
+            while (true) @import("cpu.zig").halt();
         } else {
             tty.get_tty().config.c_lflag.ECHO = false;
-            while (true) @import("tty/keyboard.zig").kb_read();
+            while (true) {
+                @import("cpu.zig").halt();
+                @import("tty/keyboard.zig").kb_read();
+            }
         }
     }
 }
