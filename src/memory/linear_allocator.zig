@@ -18,12 +18,24 @@ pub const LinearAllocator = struct {
     pub fn alloc(self: *Self, comptime T: type, n: usize) Error![]T {
         if (self.locked)
             return Error.Locked;
-        if ((@import("std").math.divCeil(usize, @bitSizeOf(T) * (n + 1), 8) catch unreachable) > self.remaining_space()) {
+        if ((@import("std").math.divCeil(
+            usize,
+            @bitSizeOf(T) * (n + 1),
+            8,
+        ) catch unreachable) > self.remaining_space()) {
             return Error.NoSpaceLeft;
         }
-        self.index += @import("std").mem.alignForward(usize, @intFromPtr(self.buffer) + self.index, @alignOf(T)) - (@intFromPtr(self.buffer) + self.index);
+        self.index += @import("std").mem.alignForward(
+            usize,
+            @intFromPtr(self.buffer) + self.index,
+            @alignOf(T),
+        ) - (@intFromPtr(self.buffer) + self.index);
         const ret: []T = @as([*]T, @ptrFromInt(@intFromPtr(self.buffer) + self.index))[0..n];
-        self.index += (@import("std").math.divCeil(usize, n * @bitSizeOf(T), 8) catch unreachable);
+        self.index += (@import("std").math.divCeil(
+            usize,
+            n * @bitSizeOf(T),
+            8,
+        ) catch unreachable);
         return ret;
     }
 

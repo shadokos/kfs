@@ -56,7 +56,11 @@ const letter_exclamation =
     "\x20\x20\x20\x20\x20\n" ++
     "\x20\x20\xb3\x20\x20\n";
 
-pub fn print_ascii_art(image: []const u8, coord: struct { x: u16, y: u16 }, colors: struct { bg: []const u8, fg: []const u8 }) void {
+pub fn print_ascii_art(
+    image: []const u8,
+    coord: struct { x: u16, y: u16 },
+    colors: struct { bg: []const u8, fg: []const u8 },
+) void {
     var _coord = coord;
     tty.printk("\x1b[2m\x1b[37m{s}{s}", .{ colors.bg, colors.fg });
     for (image) |c| switch (c) {

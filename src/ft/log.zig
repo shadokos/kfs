@@ -25,7 +25,12 @@ pub const default = scoped(default_log_scope);
 
 // fn defaultLogEnabled(comptime message_level: Level) bool
 
-pub fn defaultLog(comptime message_level: Level, comptime scope: anytype, comptime format: []const u8, args: anytype) void {
+pub fn defaultLog(
+    comptime message_level: Level,
+    comptime scope: anytype,
+    comptime format: []const u8,
+    args: anytype,
+) void {
     // TODO: Maybe implement a default log function using tty.printk??
     _ = scope;
     _ = message_level;

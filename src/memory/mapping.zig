@@ -59,17 +59,24 @@ pub fn MapperT(comptime PageFrameAllocatorType: type) type {
                 .writable = true,
             };
 
-            const table_virtual_ptr: *[paging.page_table_size]paging.page_table_entry = @ptrFromInt(@as(u32, @bitCast(paging.VirtualPtrStruct{
-                .dir_index = paging.page_dir >> 22,
-                .table_index = table,
-                .page_index = 0,
-            })));
+            const table_virtual_ptr: *[paging.page_table_size]paging.page_table_entry = @ptrFromInt(@as(
+                u32,
+                @bitCast(paging.VirtualPtrStruct{
+                    .dir_index = paging.page_dir >> 22,
+                    .table_index = table,
+                    .page_index = 0,
+                }),
+            ));
 
             @memset(table_virtual_ptr[0..], paging.page_table_entry{});
         }
 
         /// map one page
-        fn map_one(self: *Self, virtual: paging.VirtualPagePtr, physical: paging.PhysicalPtr) (PageFrameAllocatorType.Error || Error)!void {
+        fn map_one(
+            self: *Self,
+            virtual: paging.VirtualPagePtr,
+            physical: paging.PhysicalPtr,
+        ) (PageFrameAllocatorType.Error || Error)!void {
             const virtualStruct: paging.VirtualPtrStruct = @bitCast(@intFromPtr(virtual));
 
             if (!self.page_directory[virtualStruct.dir_index].present)
@@ -107,12 +114,20 @@ pub fn MapperT(comptime PageFrameAllocatorType: type) type {
         }
 
         /// map `npages` pages (pointers must be aligned)
-        pub fn map(self: *Self, virtual: paging.VirtualPagePtr, physical: paging.PhysicalPtr, npages: usize) (PageFrameAllocatorType.Error || Error)!void {
+        pub fn map(
+            self: *Self,
+            virtual: paging.VirtualPagePtr,
+            physical: paging.PhysicalPtr,
+            npages: usize,
+        ) (PageFrameAllocatorType.Error || Error)!void {
             if (!ft.mem.isAligned(physical, paging.page_size))
                 return Error.MisalignedPtr;
 
             for (0..npages) |p| {
-                try self.map_one(@ptrFromInt(@intFromPtr(virtual) + p * paging.page_size), physical + p * paging.page_size);
+                try self.map_one(
+                    @ptrFromInt(@intFromPtr(virtual) + p * paging.page_size),
+                    physical + p * paging.page_size,
+                );
             }
         }
 
@@ -136,7 +151,14 @@ pub fn MapperT(comptime PageFrameAllocatorType: type) type {
         /// copy the active page directory and page tables to this page_directory
         fn transfer(self: *Self) (PageFrameAllocatorType.Error)!void {
             @memcpy(self.page_directory[0..], paging.page_dir_ptr);
-            self.page_directory[paging.page_dir >> 22] = .{ .present = true, .writable = true, .owner = .Supervisor, .address_fragment = @truncate((get_physical_ptr(@ptrCast(&self.page_directory)) catch unreachable) >> 12) };
+            self.page_directory[paging.page_dir >> 22] = .{
+                .present = true,
+                .writable = true,
+                .owner = .Supervisor,
+                .address_fragment = @truncate((get_physical_ptr(
+                    @ptrCast(&self.page_directory),
+                ) catch unreachable) >> 12),
+            };
             self.activate();
             const virtual_tmp: @TypeOf(paging.page_table_table_ptr) = @ptrFromInt(paging.temporary_page);
             for (paging.page_table_table_ptr[0..(paging.low_half >> 22)], 0..) |*e, i| {

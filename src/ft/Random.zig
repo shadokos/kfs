@@ -41,7 +41,17 @@ pub fn bytes(r: Random, buf: []u8) void {
 
 pub fn intRangeAtMost(r: Random, comptime T: type, at_least: T, at_most: T) T {
     const T2 = ft.meta.Int(.signed, @typeInfo(T).Int.bits + 2);
-    return @truncate(@as(ft.meta.Int(.unsigned, @typeInfo(T).Int.bits + 2), @intCast(@mod(@as(T2, @intCast(r.int(T))), (@as(T2, @intCast(at_most)) - @as(T2, @intCast(at_least)) + 1) + @as(T2, @intCast(at_least))))));
+    return @truncate(
+        @as(
+            ft.meta.Int(.unsigned, @typeInfo(T).Int.bits + 2),
+            @intCast(
+                @mod(
+                    @as(T2, @intCast(r.int(T))),
+                    (@as(T2, @intCast(at_most)) - @as(T2, @intCast(at_least)) + 1) + @as(T2, @intCast(at_least)),
+                ),
+            ),
+        ),
+    );
 }
 
 // fn intRangeAtMostBiased(r: Random, comptime T: type, at_least: T, at_most: T) T

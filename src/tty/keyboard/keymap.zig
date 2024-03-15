@@ -15,7 +15,20 @@ pub const ALT: u16 = 0x0800;
 pub const HASNUM: u16 = 0x4000;
 pub const HASCAPS: u16 = 0x8000;
 
-pub const escape_map: [12][]const u8 = [_][]const u8{ "\x1b[H", "\x1b[Y", "\x1b[A", "\x1b[B", "\x1b[D", "\x1b[C", "\x1bD", "\x1bM", "\x1b[G", "\x1b[S", "\x1b[T", "\x1b[@" };
+pub const escape_map: [12][]const u8 = [_][]const u8{
+    "\x1b[H",
+    "\x1b[Y",
+    "\x1b[A",
+    "\x1b[B",
+    "\x1b[D",
+    "\x1b[C",
+    "\x1bD",
+    "\x1bM",
+    "\x1b[G",
+    "\x1b[S",
+    "\x1b[T",
+    "\x1b[@",
+};
 
 /// Map to control code
 pub inline fn C(comptime scancode: u16) u16 {

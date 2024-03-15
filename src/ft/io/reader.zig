@@ -1,6 +1,9 @@
 const ft = @import("../ft.zig");
 
-pub fn Reader(comptime Context: type, comptime ReadError: type, comptime readFn: fn (Context, []u8) ReadError!usize) type {
+pub fn Reader(comptime Context: type, comptime ReadError: type, comptime readFn: fn (
+    Context,
+    []u8,
+) ReadError!usize) type {
     return struct {
         context: Context,
 

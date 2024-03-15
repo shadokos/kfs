@@ -12,39 +12,75 @@ fn print_helper(h: Help) void {
 }
 
 pub fn stack() void {
-    print_helper(Help{ .name = "stack", .description = "Display ebp traceback and dump the stack frames", .usage = null });
+    print_helper(Help{
+        .name = "stack",
+        .description = "Display ebp traceback and dump the stack frames",
+        .usage = null,
+    });
 }
 
 pub fn help() void {
-    print_helper(Help{ .name = "help", .description = "Prints the help message", .usage = "help <command>" });
+    print_helper(Help{
+        .name = "help",
+        .description = "Prints the help message",
+        .usage = "help <command>",
+    });
 }
 
 pub fn clear() void {
-    print_helper(Help{ .name = "clear", .description = "Clears the screen", .usage = null });
+    print_helper(Help{
+        .name = "clear",
+        .description = "Clears the screen",
+        .usage = null,
+    });
 }
 
 pub fn hexdump() void {
-    print_helper(Help{ .name = "hexdump", .description = "Dump memory", .usage = "hexdump <base> <length>" });
+    print_helper(Help{
+        .name = "hexdump",
+        .description = "Dump memory",
+        .usage = "hexdump <base> <length>",
+    });
 }
 
 pub fn mmap() void {
-    print_helper(Help{ .name = "mmap", .description = "Show multiboot2 mmap tag content", .usage = null });
+    print_helper(Help{
+        .name = "mmap",
+        .description = "Show multiboot2 mmap tag content",
+        .usage = null,
+    });
 }
 
 pub fn keymap() void {
-    print_helper(Help{ .name = "keymap", .description = "Set keymap or list installed keymaps", .usage = "keymap [<name>]" });
+    print_helper(Help{
+        .name = "keymap",
+        .description = "Set keymap or list installed keymaps",
+        .usage = "keymap [<name>]",
+    });
 }
 
 pub fn theme() void {
-    print_helper(Help{ .name = "theme", .description = "Set theme or list available themes", .usage = "theme [<name>]" });
+    print_helper(Help{
+        .name = "theme",
+        .description = "Set theme or list available themes",
+        .usage = "theme [<name>]",
+    });
 }
 
 pub fn reboot() void {
-    print_helper(Help{ .name = "reboot", .description = "Reboot the system", .usage = null });
+    print_helper(Help{
+        .name = "reboot",
+        .description = "Reboot the system",
+        .usage = null,
+    });
 }
 
 pub fn shutdown() void {
-    print_helper(Help{ .name = "shutdown", .description = "Shutdown the system", .usage = null });
+    print_helper(Help{
+        .name = "shutdown",
+        .description = "Shutdown the system",
+        .usage = null,
+    });
 }
 
 pub fn kfuzz() void {

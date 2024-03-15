@@ -41,7 +41,11 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
 
         /// init a fuzzer object
         pub fn init(_allocator: ft.mem.Allocator, _strategy: ?Strategy) Self {
-            return Self{ .allocator = _allocator, .rand = xoro.random(), .strategy = _strategy orelse default_strategy };
+            return Self{
+                .allocator = _allocator,
+                .rand = xoro.random(),
+                .strategy = _strategy orelse default_strategy,
+            };
         }
 
         /// deinit a fuzzer object
@@ -56,7 +60,8 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
             return @truncate(((n >> 0) & 0xff) ^ ((n >> 8) & 0xff) ^ ((n >> 16) & 0xff) ^ ((n >> 24) & 0xff));
         }
 
-        /// main function, iterations is the number of actions that will be made, max_size is the maximum size of an allocation
+        /// main function, iterations is the number of actions that will be made,
+        /// max_size is the maximum size of an allocation
         pub fn fuzz(self: *Self, iterations: usize, max_size: usize) !void {
             var action: Action = .Allocate;
             for (0..iterations) |_| {
@@ -71,7 +76,16 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
                         self.n_alloc +|= 1;
                         @memset(ptr, @as(u8, checksum(@intFromPtr(ptr.ptr))));
                         self.add_chunk(ptr);
-                        printk("\x1b[37malloc(\x1b[34m{d: <5}\x1b[37m)\x1b[31m => \x1b[34m0x{x:0>8}\x1b[0m checksum: \x1b[35m{x:0>2}\x1b[0m\n", .{ size, @intFromPtr(ptr.ptr), checksum(@intFromPtr(ptr.ptr)) });
+                        printk(
+                            "\x1b[37malloc(\x1b[34m{d: " ++
+                                "<5}\x1b[37m)\x1b[31m => " ++
+                                "\x1b[34m0x{x:0>8}\x1b[0m checksum: \x1b[35m{x:0>2}\x1b[0m\n",
+                            .{
+                                size,
+                                @intFromPtr(ptr.ptr),
+                                checksum(@intFromPtr(ptr.ptr)),
+                            },
+                        );
                     },
                     .Free => if (self.size != 0) {
                         const chunk = self.rand.intRangeLessThan(usize, 0, self.size);
@@ -81,7 +95,12 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
                         const sum = checksum(@intFromPtr(ptr));
                         for (self.chunks[chunk], 0..) |c, i| {
                             if (c != sum) {
-                                printk("\x1b[31mInvalid checksum, expected \x1b[35m{x:0>2}\x1b[31m, got [\x1b[35m{x:0>2}\x1b[31m]\x1b[31m at \x1b[34m{d}\x1b[0m\n", .{ sum, c, i });
+                                printk(
+                                    "\x1b[31mInvalid checksum, expected \x1b[35m{x:0>2}\x1b[31m, " ++
+                                        "got [\x1b[35m{x:0>2}\x1b[31m]\x1b[31m " ++
+                                        "at \x1b[34m{d}\x1b[0m\n",
+                                    .{ sum, c, i },
+                                );
                                 return error.FuzzingFailure;
                             }
                         }
@@ -97,7 +116,11 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
 
         /// streaks strategy (alternate between many allocation and many free)
         pub fn streaks(self: *Self, previous_choice: Action) Action {
-            return if (self.rand.intRangeAtMost(usize, 0, 100) > 5) previous_choice else switch (previous_choice) {
+            return if (self.rand.intRangeAtMost(
+                usize,
+                0,
+                100,
+            ) > 5) previous_choice else switch (previous_choice) {
                 .Free => .Allocate,
                 .Allocate => .Free,
             };
@@ -112,7 +135,11 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
         /// converging strategy (the size of the bag converge towards half of its capacity)
         pub fn converging(self: *Self, previous_choice: Action) Action {
             _ = previous_choice;
-            return if (self.rand.intRangeAtMost(usize, 0, bag_size) > self.size) .Allocate else .Free;
+            return if (self.rand.intRangeAtMost(
+                usize,
+                0,
+                bag_size,
+            ) > self.size) .Allocate else .Free;
         }
 
         /// add a chunk to the bag

@@ -52,9 +52,15 @@ pub fn parseInt(comptime T: type, buf: []const u8, _base: u8) ParseIntError!T {
         if (ov[1] != 0) return ParseIntError.Overflow;
 
         if (is_neg) {
-            ov = @subWithOverflow(ov[0], @as(U, @intCast(charToDigit(buf[index], base) catch return ParseIntError.InvalidCharacter)));
+            ov = @subWithOverflow(
+                ov[0],
+                @as(U, @intCast(charToDigit(buf[index], base) catch return ParseIntError.InvalidCharacter)),
+            );
         } else {
-            ov = @addWithOverflow(ov[0], @as(U, @intCast(charToDigit(buf[index], base) catch return ParseIntError.InvalidCharacter)));
+            ov = @addWithOverflow(
+                ov[0],
+                @as(U, @intCast(charToDigit(buf[index], base) catch return ParseIntError.InvalidCharacter)),
+            );
         }
         if (ov[1] != 0) return ParseIntError.Overflow;
 
@@ -70,13 +76,34 @@ test "parseInt" { // stolen from zig's ft lib
     try std.testing.expect((try parseInt(i32, "-10", 10)) == -10);
     try std.testing.expect((try parseInt(i32, "+10", 10)) == 10);
     try std.testing.expect((try parseInt(u32, "+10", 10)) == 10);
-    try std.testing.expectError(error.Overflow, parseInt(u32, "-10", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, " 10", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "10 ", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "_10_", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0x_10_", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0x10_", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0x_10", 10));
+    try std.testing.expectError(
+        error.Overflow,
+        parseInt(u32, "-10", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, " 10", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "10 ", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "_10_", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "0x_10_", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "0x10_", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "0x_10", 10),
+    );
     try std.testing.expect((try parseInt(u8, "255", 10)) == 255);
     try std.testing.expectError(error.Overflow, parseInt(u8, "256", 10));
 
@@ -93,12 +120,30 @@ test "parseInt" { // stolen from zig's ft lib
 
     // empty string or bare +- is invalid
 
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(i32, "", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "+", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(i32, "+", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "-", 10));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(i32, "-", 10));
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(i32, "", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "+", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(i32, "+", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "-", 10),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(i32, "-", 10),
+    );
 
     // autodectect the base todo
 
@@ -121,9 +166,18 @@ test "parseInt" { // stolen from zig's ft lib
 
     // bare binary/octal/decimal prefix is invalid
 
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0b", 0));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0o", 0));
-    try std.testing.expectError(error.InvalidCharacter, parseInt(u32, "0x", 0));
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "0b", 0),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "0o", 0),
+    );
+    try std.testing.expectError(
+        error.InvalidCharacter,
+        parseInt(u32, "0x", 0),
+    );
 
     // edge cases which previously errored due to base overflowing T
 
@@ -164,7 +218,21 @@ const Argument = union(enum) {
     index: u32,
     name: []const u8,
 };
-const Specifier = enum { lower_hexa, upper_hexa, string, float, decimal, binary, octal, ascii, utf, optional, err, address, any };
+const Specifier = enum {
+    lower_hexa,
+    upper_hexa,
+    string,
+    float,
+    decimal,
+    binary,
+    octal,
+    ascii,
+    utf,
+    optional,
+    err,
+    address,
+    any,
+};
 
 pub const FormatOptions = struct { precision: ?usize = null, width: ?usize = null, alignment: enum {
     left,
@@ -201,7 +269,12 @@ fn expect(comptime set: []const u8, comptime str: *[]const u8) !u8 {
 fn get_argument(comptime fmt: *[]const u8) !?Argument {
     comptime {
         if (try accept("[", fmt)) |_| {
-            const end = ft.mem.indexOfScalarPos(u8, fmt.*, 0, ']') orelse error.UnexpectedChar;
+            const end = ft.mem.indexOfScalarPos(
+                u8,
+                fmt.*,
+                0,
+                ']',
+            ) orelse error.UnexpectedChar;
             comptime var ret = .{ .name = fmt.*[0..end] };
             fmt.* = fmt.*[end..];
             _ = try expect("]", fmt);
@@ -211,7 +284,9 @@ fn get_argument(comptime fmt: *[]const u8) !?Argument {
             while (end < fmt.*.len and (fmt.*[end] >= '0' and fmt.*[end] <= '9')) {
                 end += 1;
             }
-            const ret = Argument{ .index = parseInt(u32, fmt.*[0..end], 10) catch @compileError("invalid index") };
+            const ret = Argument{
+                .index = parseInt(u32, fmt.*[0..end], 10) catch @compileError("invalid index"),
+            };
             fmt.* = fmt.*[end..];
             return ret;
         }
@@ -325,7 +400,13 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
         .Int, .ComptimeInt => {
             switch (specifier) {
                 .decimal => try formatInt(obj, 10, Case.lower, options, writer),
-                .lower_hexa, .upper_hexa => try formatInt(obj, 16, if (specifier == .lower_hexa) Case.lower else Case.upper, options, writer),
+                .lower_hexa, .upper_hexa => try formatInt(
+                    obj,
+                    16,
+                    if (specifier == .lower_hexa) Case.lower else Case.upper,
+                    options,
+                    writer,
+                ),
                 .octal => try formatInt(obj, 8, Case.lower, options, writer),
                 .binary => try formatInt(obj, 2, Case.lower, options, writer),
                 else => try formatInt(obj, 10, Case.lower, options, writer),
@@ -338,7 +419,11 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
                         .address => {
                             _ = try writer.write(@typeName(pointer.child));
                             try writer.writeByte('@');
-                            try formatInt(@intFromPtr(obj), 16, Case.lower, .{ .width = @sizeOf(*u8) * 2, .alignment = .right, .fill = '0' }, writer);
+                            try formatInt(@intFromPtr(obj), 16, Case.lower, .{
+                                .width = @sizeOf(*u8) * 2,
+                                .alignment = .right,
+                                .fill = '0',
+                            }, writer);
                         },
                         else => {
                             try formatObj(obj.*, specifier, options, writer);
@@ -353,7 +438,11 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
                         .address => {
                             _ = try writer.write(@typeName(@TypeOf(obj)));
                             try writer.writeByte('@');
-                            try formatInt(@intFromPtr(obj), 16, Case.lower, .{ .width = @sizeOf(*u8) * 2, .alignment = .right, .fill = '0' }, writer);
+                            try formatInt(@intFromPtr(obj), 16, Case.lower, .{
+                                .width = @sizeOf(*u8) * 2,
+                                .alignment = .right,
+                                .fill = '0',
+                            }, writer);
                         },
                         else => {
                             @compileError("invalid specifier: " ++ @tagName(specifier));

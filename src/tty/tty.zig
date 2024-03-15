@@ -192,17 +192,25 @@ pub fn TtyN(comptime history_size: u32) type {
 
         /// perform input processing as defined by POSIX and according to the current termios configuration
         fn input_processing(self: *Self, c: u8) ?u8 {
-            return if (self.config.c_iflag.IGNCR and c == '\r') null else if (self.config.c_iflag.ICRNL and c == '\r') '\n' else if (self.config.c_iflag.INLCR and c == '\n') '\r' else c;
+            return if (self.config.c_iflag.IGNCR and c == '\r') null else if (self.config.c_iflag.ICRNL and
+                c == '\r') '\n' else if (self.config.c_iflag.INLCR and
+                c == '\n') '\r' else c;
         }
 
         /// return true if the char c is an end of line in the current termios configuration
         fn is_end_of_line(self: *Self, c: u8) bool {
-            return c == '\n' or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOL)] or c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)];
+            return c == '\n' or
+                c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOL)] or
+                c == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)];
         }
 
         /// return true if the char must be translated by ECHOCTL
         fn is_echoctl(self: Self, c: u8) bool {
-            return c & 0b11100000 == 0 and c != '\t' and c != '\n' and c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTART)] and c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTOP)];
+            return c & 0b11100000 == 0 and
+                c != '\t' and
+                c != '\n' and
+                c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTART)] and
+                c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTOP)];
         }
 
         /// erase one char from the buffer
@@ -257,7 +265,9 @@ pub fn TtyN(comptime history_size: u32) type {
                 self.unprocessed_begin = self.current_line_end;
             } else {
                 while (self.current_line_end != self.read_head) {
-                    if (self.config.c_lflag.ECHO or (self.input_buffer[self.current_line_end] == '\n' and self.config.c_lflag.ECHONL))
+                    if (self.config.c_lflag.ECHO or
+                        (self.input_buffer[self.current_line_end] == '\n' and
+                        self.config.c_lflag.ECHONL))
                         self.putchar(self.input_buffer[self.current_line_end]);
                     self.current_line_end +%= 1;
                 }
@@ -298,7 +308,8 @@ pub fn TtyN(comptime history_size: u32) type {
                     }
                 },
                 '\t' => {
-                    self.move_cursor(0, @as(i32, @intCast(4 -| self.pos.col % 4))); // todo: REAL tabs
+                    // TODO: REAL tabs
+                    self.move_cursor(0, @as(i32, @intCast(4 -| self.pos.col % 4)));
                 },
                 '\r' => {
                     self.move_cursor(0, -@as(i32, @intCast(self.pos.col)));
@@ -310,7 +321,7 @@ pub fn TtyN(comptime history_size: u32) type {
                     self.move_cursor(1, 0);
                 },
                 12 => { // form feed
-                    // todo?
+                    // TODO?
                     // self.move_cursor(height, -@as(i32, @intCast(self.pos.col)));
                 },
                 ' '...'~', 0x80...0xfe => {
@@ -348,7 +359,9 @@ pub fn TtyN(comptime history_size: u32) type {
                             self.process_whitespaces('\n');
                         } else if (self.config.c_oflag.OCRNL and c == '\r') {
                             self.process_whitespaces('\n');
-                        } else if (self.config.c_oflag.OCRNL and c == '\r' and self.pos.col == 0) {} else if (c == 0x1b) {
+                        } else if (self.config.c_oflag.OCRNL and c == '\r' and self.pos.col == 0) {
+                            // pass
+                        } else if (c == 0x1b) {
                             self.write_state = .Escape;
                         } else {
                             self.process_whitespaces(c);
@@ -407,7 +420,20 @@ pub fn TtyN(comptime history_size: u32) type {
 
         /// return the current terminal state for save/restore
         pub fn get_state(self: *Self) Self.State {
-            return .{ .pos = .{ .line = @intCast(@mod(@as(i32, @intCast(self.pos.line)) - (@as(i32, @intCast(self.head_line)) - @as(i32, @intCast(self.scroll_offset)) - @as(i32, @intCast(height - 1))), history_size)), .col = self.pos.col }, .attributes = self.attributes, .current_color = self.current_color };
+            return .{
+                .pos = .{
+                    .line = @intCast(@mod(
+                        @as(i32, @intCast(self.pos.line)) -
+                            (@as(i32, @intCast(self.head_line)) -
+                            @as(i32, @intCast(self.scroll_offset)) -
+                            @as(i32, @intCast(height - 1))),
+                        history_size,
+                    )),
+                    .col = self.pos.col,
+                },
+                .attributes = self.attributes,
+                .current_color = self.current_color,
+            };
         }
 
         /// set the current terminal state
@@ -458,7 +484,9 @@ pub fn TtyN(comptime history_size: u32) type {
         }
 
         pub fn blank_char(self: *Self) u16 {
-            return ' ' | (@as(u16, if (self.theme) |t| t.background_idx else 0) << 12) | (@as(u16, (if (self.theme) |t| t.foreground_idx else 15)) << 8);
+            return ' ' |
+                (@as(u16, if (self.theme) |t| t.background_idx else 0) << 12) |
+                (@as(u16, (if (self.theme) |t| t.foreground_idx else 15)) << 8);
         }
 
         /// soft scroll in the terminal history
@@ -516,9 +544,11 @@ pub fn TtyN(comptime history_size: u32) type {
                 return;
             for (0..height) |l| {
                 for (0..width) |c| {
-                    const view_line = (history_size + history_size + self.head_line + 1 -| height -| self.scroll_offset) % history_size;
+                    const view_line = (history_size + history_size + self.head_line + 1 -|
+                        height -| self.scroll_offset) % history_size;
                     const buffer_line = (view_line + l) % history_size;
-                    vga.put_char(l, c, if (((buffer_line < self.head_line or (buffer_line == self.head_line))) or (self.head_line < view_line and buffer_line >= view_line))
+                    vga.put_char(l, c, if (((buffer_line < self.head_line or (buffer_line == self.head_line))) or
+                        (self.head_line < view_line and buffer_line >= view_line))
                         switch (self.history_buffer[buffer_line][c]) {
                             0 => self.blank_char(),
                             else => |char| char,

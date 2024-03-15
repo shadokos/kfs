@@ -93,24 +93,39 @@ pub const Slab = struct {
         return .Partial;
     }
 
+    // TODO: Remove this method, for debugging purpose only...
     pub fn debug(self: *Self) void {
         printk("self: 0x{x}\n", .{@intFromPtr(self)});
         printk("Slab Header:\n", .{});
         inline for (@typeInfo(SlabHeader).Struct.fields) |field|
-            printk("  header.{s}: 0x{x} ({d} bytes)\n", .{ field.name, @intFromPtr(&@field(self.header, field.name)), @sizeOf(field.type) });
+            printk("  header.{s}: 0x{x} ({d} bytes)\n", .{
+                field.name,
+                @intFromPtr(&@field(self.header, field.name)),
+                @sizeOf(field.type),
+            });
 
         printk("Bitmap:\n", .{});
         inline for (@typeInfo(BitMap).Struct.fields) |field|
-            printk("  bitmap.{s}: 0x{x} ({d} bytes)\n", .{ field.name, @intFromPtr(&@field(self.bitmap, field.name)), @sizeOf(field.type) });
+            printk("  bitmap.{s}: 0x{x} ({d} bytes)\n", .{
+                field.name,
+                @intFromPtr(&@field(self.bitmap, field.name)),
+                @sizeOf(field.type),
+            });
 
         printk("Data:\n", .{});
         printk("  data: 0x{x} ({d} bytes)\n", .{ @intFromPtr(&self.data[0]), @sizeOf(@TypeOf(self.data)) });
 
         printk("Values:\n", .{});
-        if (self.header.next_free) |next_free| printk("  next_free: {d}\n", .{next_free}) else printk("  next_free: null\n", .{});
+        if (self.header.next_free) |next_free| printk("  next_free: {d}\n", .{
+            next_free,
+        }) else printk("  next_free: null\n", .{});
         printk("  cache: 0x{x}\n", .{@intFromPtr(self.header.cache)});
-        if (self.header.next) |next| printk("  next: 0x{x}\n", .{@intFromPtr(next)}) else printk("  next: null\n", .{});
-        if (self.header.prev) |prev| printk("  prev: 0x{x}\n", .{@intFromPtr(prev)}) else printk("  prev: null\n", .{});
+        if (self.header.next) |next| printk("  next: 0x{x}\n", .{
+            @intFromPtr(next),
+        }) else printk("  next: null\n", .{});
+        if (self.header.prev) |prev| printk("  prev: 0x{x}\n", .{
+            @intFromPtr(prev),
+        }) else printk("  prev: null\n", .{});
         printk("  in_use: {d}\n", .{self.header.in_use});
         printk("  state: {d}\n", .{self.get_state()});
         printk("\n", .{});

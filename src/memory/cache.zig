@@ -137,7 +137,9 @@ pub const Cache = struct {
 
     pub fn free(self: *Self, ptr: *usize) (Slab.Error || BitMap.Error)!void {
         const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size);
-        const page_descriptor = self.allocator.get_page_frame_descriptor(@ptrFromInt(addr)) catch return Slab.Error.InvalidArgument;
+        const page_descriptor = self.allocator.get_page_frame_descriptor(
+            @ptrFromInt(addr),
+        ) catch return Slab.Error.InvalidArgument;
 
         if (page_descriptor.flags.slab == false) return Slab.Error.InvalidArgument;
         const slab: *Slab = @ptrCast(@alignCast(page_descriptor.next));

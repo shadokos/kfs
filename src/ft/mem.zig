@@ -6,7 +6,14 @@ pub fn len(value: anytype) usize {
     switch (@typeInfo(@TypeOf(value))) {
         .Pointer => |info| switch (info.size) {
             .Many => {
-                const sentinel: *const info.child = @as(*const info.child, @ptrCast(info.sentinel orelse @compileError("Invalid type for mem.len: " ++ @typeName(@TypeOf(value)) ++ " type has no sentinel")));
+                const sentinel: *const info.child = @as(
+                    *const info.child,
+                    @ptrCast(
+                        info.sentinel orelse @compileError(
+                            "Invalid type for mem.len: " ++ @typeName(@TypeOf(value)) ++ " type has no sentinel",
+                        ),
+                    ),
+                );
                 return indexOfSentinel(info.child, sentinel.*, value);
             },
             .C => {

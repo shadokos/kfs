@@ -38,7 +38,10 @@ pub fn shell() u8 {
         const args = token.tokenize(@constCast(line)) catch |e| {
             switch (e) {
                 token.TokenizerError.InvalidQuote => utils.print_error("invalid quotes", .{}),
-                token.TokenizerError.MaxTokensReached => utils.print_error("too many tokens (max: {d})", .{token.max_tokens}),
+                token.TokenizerError.MaxTokensReached => utils.print_error(
+                    "too many tokens (max: {d})",
+                    .{token.max_tokens},
+                ),
             }
             err = true;
             continue;

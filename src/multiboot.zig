@@ -5,7 +5,12 @@ const tty = @import("tty/tty.zig");
 const ft = @import("ft/ft.zig");
 
 fn mbi_requestN(comptime types: []const u32) type {
-    return extern struct { type: u16 = 1, flags: u16 = 0, size: u32 = @sizeOf(@This()), mbis: [types.len]u32 = types[0..].* };
+    return extern struct {
+        type: u16 = 1,
+        flags: u16 = 0,
+        size: u32 = @sizeOf(@This()),
+        mbis: [types.len]u32 = types[0..].*,
+    };
 }
 
 fn get_header_type(comptime types: []const u32) type {
@@ -21,12 +26,22 @@ fn get_header_type(comptime types: []const u32) type {
     };
 }
 
-pub const header_type = get_header_type(([_]u32{ multiboot2_h.MULTIBOOT_TAG_TYPE_BASIC_MEMINFO, multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP, multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD, multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW, multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS })[0..]);
+pub const header_type = get_header_type(
+    ([_]u32{
+        multiboot2_h.MULTIBOOT_TAG_TYPE_BASIC_MEMINFO,
+        multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP,
+        multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD,
+        multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW,
+        multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS,
+    })[0..],
+);
 
 pub fn get_header() header_type {
     var ret: header_type = .{};
 
-    ret.header.checksum = @bitCast(-(@as(i32, @bitCast(ret.header.magic)) + @as(i32, @bitCast(ret.header.architecture)) + @as(i32, @bitCast(ret.header.header_length))));
+    ret.header.checksum = @bitCast(-(@as(i32, @bitCast(ret.header.magic)) +
+        @as(i32, @bitCast(ret.header.architecture)) +
+        @as(i32, @bitCast(ret.header.header_length))));
 
     return ret;
 }
@@ -106,7 +121,8 @@ pub const section_hdr_it = extern struct {
 
     const tag_type = get_tag_type(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS);
     pub fn next(self: *@This()) ?*section_entry {
-        const ret: *section_entry = @ptrFromInt(@intFromPtr(self.base) + @sizeOf(tag_type) + self.base.entsize * self.index);
+        const ret: *section_entry = @ptrFromInt(@intFromPtr(self.base) + @sizeOf(tag_type) +
+            self.base.entsize * self.index);
         if (self.base.entsize == 0 or @intFromPtr(ret) >= @intFromPtr(self.base) + self.base.size)
             return null;
         self.index += 1;
@@ -258,7 +274,15 @@ pub fn list_tags() void {
 
 pub fn map(ptr: paging.PhysicalPtr) *info_header {
     const memory = @import("memory.zig");
-    const header: *info_header = @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(ptr, @sizeOf(info_header), .KernelSpace) catch @panic("can't map multiboot_info")));
+    const header: *info_header = @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(
+        ptr,
+        @sizeOf(info_header),
+        .KernelSpace,
+    ) catch @panic("can't map multiboot_info")));
     defer memory.virtualPageAllocator.unmap_object(@ptrCast(header), @sizeOf(info_header)) catch unreachable;
-    return @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(ptr, header.total_size, .KernelSpace) catch @panic("can't map multiboot_info")));
+    return @ptrCast(@alignCast(memory.virtualPageAllocator.map_object_anywhere(
+        ptr,
+        header.total_size,
+        .KernelSpace,
+    ) catch @panic("can't map multiboot_info")));
 }

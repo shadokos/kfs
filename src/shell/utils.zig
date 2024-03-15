@@ -170,7 +170,22 @@ pub inline fn dump_stack() void {
             \\Size: {s}0x{x}{s} ({s}{d}{s}) bytes
             \\ebp: {s}0x{x}{s}, esp: {s}0x{x}{s}
         ,
-            .{ "\xCD" ** 11 ++ "\xD1" ++ "\xCD" ** (tty.width - 12), "\xB3\n" ++ "\xC4" ** 11 ++ "\xD9\n", green, size, reset, green, size, reset, yellow, si.fp, reset, red, esp, reset },
+            .{
+                "\xCD" ** 11 ++ "\xD1" ++ "\xCD" ** (tty.width - 12),
+                "\xB3\n" ++ "\xC4" ** 11 ++ "\xD9\n",
+                green,
+                size,
+                reset,
+                green,
+                size,
+                reset,
+                yellow,
+                si.fp,
+                reset,
+                red,
+                esp,
+                reset,
+            },
         );
         if (pc) |addr| tty.printk(", pc: {s}0x{x}{s}", .{ blue, addr, reset });
         tty.printk("\n\nhex dump:\n", .{});
@@ -196,15 +211,35 @@ pub fn print_mmap() void {
     }
 
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP)) |t| {
-        tty.printk("\xC9{s:\xCD<18}\xD1{s:\xCD^18}\xD1{s:\xCD<18}\xBB\n", .{ "", " MMAP ", "" }); // 14
-        tty.printk("\xBA {s: <16} \xB3 {s: <16} \xB3 {s: <16} \xBA\n", .{ "base", "length", "type" }); // 14
+        tty.printk("\xC9{s:\xCD<18}\xD1{s:\xCD^18}\xD1{s:\xCD<18}\xBB\n", .{
+            "",
+            " MMAP ",
+            "",
+        }); // 14
+        tty.printk("\xBA {s: <16} \xB3 {s: <16} \xB3 {s: <16} \xBA\n", .{
+            "base",
+            "length",
+            "type",
+        }); // 14
 
         var iter = multiboot.mmap_it{ .base = t };
         while (iter.next()) |e| {
-            tty.printk("\xCC{s:\xCD<18}\xD8{s:\xCD^18}\xD8{s:\xCD<18}\xB9\n", .{ "", "", "" }); // 14
-            tty.printk("\xBA 0x{x:0>14} \xB3 0x{x:0>14} \xB3 {d: <16} \xBA\n", .{ e.base, e.length, e.type }); // 14
+            tty.printk("\xCC{s:\xCD<18}\xD8{s:\xCD^18}\xD8{s:\xCD<18}\xB9\n", .{
+                "",
+                "",
+                "",
+            }); // 14
+            tty.printk("\xBA 0x{x:0>14} \xB3 0x{x:0>14} \xB3 {d: <16} \xBA\n", .{
+                e.base,
+                e.length,
+                e.type,
+            }); // 14
         }
-        tty.printk("\xC8{s:\xCD<18}\xCF{s:\xCD^18}\xCF{s:\xCD<18}\xBC\n", .{ "", "", "" }); // 14
+        tty.printk("\xC8{s:\xCD<18}\xCF{s:\xCD^18}\xCF{s:\xCD<18}\xBC\n", .{
+            "",
+            "",
+            "",
+        }); // 14
     }
 }
 
@@ -213,9 +248,21 @@ pub fn print_elf() void {
     const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS)) |t| {
         var iter = multiboot.section_hdr_it{ .base = t };
-        tty.printk("{s: <32} {s: <8} {s: <8} {s: <8} {s: <8}\n", .{ "flags", "virtual", "physical", "size", "type" });
+        tty.printk("{s: <32} {s: <8} {s: <8} {s: <8} {s: <8}\n", .{
+            "flags",
+            "virtual",
+            "physical",
+            "size",
+            "type",
+        });
         while (iter.next()) |e| {
-            tty.printk("{b:0>32} {x:0>8} {x:0>8} {x:0>8} {}\n", .{ @as(u32, @bitCast(e.sh_flags)), e.sh_addr, e.sh_offset, e.sh_size, @intFromEnum(e.sh_type) });
+            tty.printk("{b:0>32} {x:0>8} {x:0>8} {x:0>8} {}\n", .{
+                @as(u32, @bitCast(e.sh_flags)),
+                e.sh_addr,
+                e.sh_offset,
+                e.sh_size,
+                @intFromEnum(e.sh_type),
+            });
         }
     }
 }

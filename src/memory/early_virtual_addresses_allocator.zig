@@ -16,7 +16,10 @@ pub const EarlyVirtualSpaceAllocator = struct {
             @panic("cannot allocate more than one page with early virtual address space allocator");
         }
         const first_dir: paging.dir_idx = @truncate(self.address >> 10); // todo
-        const last_dir: paging.dir_idx = first_dir + @as(paging.dir_idx, @intCast(ft.math.divCeil(usize, self.size, 1 << 10) catch unreachable));
+        const last_dir: paging.dir_idx = first_dir + @as(
+            paging.dir_idx,
+            @intCast(ft.math.divCeil(usize, self.size, 1 << 10) catch unreachable),
+        );
 
         for (paging.page_dir_ptr[first_dir..last_dir], first_dir..) |dir_entry, dir_index| {
             const first_entry: paging.table_idx = @intCast(self.address % (1 << 10));

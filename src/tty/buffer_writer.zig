@@ -1,7 +1,12 @@
 const ft = @import("../ft/ft.zig");
 
 /// this class wrap a Writer and provide bufferization
-pub fn BufferWriter(comptime Context: type, comptime Error: type, comptime callback: fn (context: Context, bytes: []const u8) Error!usize, comptime size: comptime_int) type {
+pub fn BufferWriter(
+    comptime Context: type,
+    comptime Error: type,
+    comptime callback: fn (context: Context, bytes: []const u8) Error!usize,
+    comptime size: comptime_int,
+) type {
     if (size <= 0)
         @compileError("buffer writer size must be greater than 0");
     return struct {
