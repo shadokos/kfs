@@ -159,6 +159,7 @@ pub fn ArrayListAligned(comptime T: type, comptime alignment: ?u29) type {
             };
             ret.slice.len = self.slice.len;
             @memcpy(ret.slice, self.slice);
+            return ret;
         }
 
         pub fn deinit(self: Self) void {

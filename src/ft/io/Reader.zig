@@ -91,7 +91,7 @@ pub fn readByte(self: Self) anyerror!u8 {
 }
 
 pub fn readByteSigned(self: Self) anyerror!i8 {
-    return @bitCast(self.readByte());
+    return @bitCast(try self.readByte());
 }
 
 pub fn readBytesNoEof(self: Self, comptime num_bytes: usize) anyerror![num_bytes]u8 {
