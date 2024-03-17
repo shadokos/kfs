@@ -1,4 +1,9 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft/ft.zig");
+
+pub const PrivilegeLevel = enum(u2) {
+    Supervisor = 0,
+    User = 3,
+};
 
 const Cr0Flag = enum(u5) {
     ProtectedMode = 0,
@@ -156,6 +161,34 @@ pub inline fn load_idt(idtr: *const @import("interrupts.zig").IDTR) void {
     asm volatile ("lidt (%%eax)"
         :
         : [idtr] "{eax}" (idtr),
+    );
+}
+
+pub inline fn load_gdt(gdtr: *const @import("gdt.zig").GDTR) void {
+    asm volatile ("lgdt (%%eax)"
+        :
+        : [idtr] "{eax}" (gdtr),
+    );
+}
+
+// todo: non comptime code segment
+pub inline fn load_segments(comptime code: u16, data: u16, stack: u16) void {
+    comptime var code_selector_buf: [10]u8 = undefined;
+    comptime var stream = ft.io.fixedBufferStream(code_selector_buf[0..]);
+    comptime stream.writer().print("0b{b}", .{code}) catch |e| @compileError(e);
+    asm volatile ("jmp $" ++ stream.getWritten() ++ ", $.reload_CS\n" ++
+            \\ .reload_CS:
+            \\ movw %[data], %ax
+            \\ movw %ax, %ds
+            \\ movw %ax, %es
+            \\ movw %ax, %fs
+            \\ movw %ax, %gs
+            \\ movw %[stack], %ax
+            \\ movw %ax, %ss
+        :
+        : [code] "{bx}" (code),
+          [data] "{cx}" (data),
+          [stack] "{dx}" (stack),
     );
 }
 

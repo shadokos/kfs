@@ -1,4 +1,5 @@
 const logger = @import("ft/ft.zig").log.scoped(.gdt);
+const cpu = @import("cpu.zig");
 
 const flag_type = packed struct(u4) {
     _reserved: bool = false,
@@ -13,7 +14,7 @@ const access_byte_type = packed struct(u8) {
     direction: bool = false,
     executable: bool = false,
     type: bool = false,
-    privilege: u2 = 0,
+    privilege: cpu.PrivilegeLevel = cpu.PrivilegeLevel.Supervisor,
     present: bool = false,
 };
 
@@ -33,9 +34,7 @@ fn encode_gdt(entry: gdt_entry) u64 {
         (@as(u64, entry.limit) & 0xffff));
 }
 
-const GDT_SIZE = 7;
-
-export const GDT: [GDT_SIZE]u64 = .{
+const GDT = [_]u64{
     0,
     encode_gdt(.{ // kernel code
         .base = 0,
@@ -48,7 +47,7 @@ export const GDT: [GDT_SIZE]u64 = .{
         .access_byte = @bitCast(access_byte_type{
             .type = true,
             .present = true,
-            .privilege = 0,
+            .privilege = cpu.PrivilegeLevel.Supervisor,
             .executable = true,
             .readable_writable = true,
         }),
@@ -64,7 +63,7 @@ export const GDT: [GDT_SIZE]u64 = .{
         .access_byte = @bitCast(access_byte_type{
             .type = true,
             .present = true,
-            .privilege = 0,
+            .privilege = cpu.PrivilegeLevel.Supervisor,
             .readable_writable = true,
         }),
     }),
@@ -79,7 +78,7 @@ export const GDT: [GDT_SIZE]u64 = .{
         .access_byte = @bitCast(access_byte_type{
             .type = true,
             .present = true,
-            .privilege = 0,
+            .privilege = cpu.PrivilegeLevel.Supervisor,
             .readable_writable = true,
         }),
     }),
@@ -94,7 +93,7 @@ export const GDT: [GDT_SIZE]u64 = .{
         .access_byte = @bitCast(access_byte_type{
             .type = true,
             .present = true,
-            .privilege = 3,
+            .privilege = cpu.PrivilegeLevel.User,
             .executable = true,
             .readable_writable = true,
         }),
@@ -110,7 +109,7 @@ export const GDT: [GDT_SIZE]u64 = .{
         .access_byte = @bitCast(access_byte_type{
             .type = true,
             .present = true,
-            .privilege = 3,
+            .privilege = cpu.PrivilegeLevel.User,
             .readable_writable = true,
         }),
     }),
@@ -125,40 +124,40 @@ export const GDT: [GDT_SIZE]u64 = .{
         .access_byte = @bitCast(access_byte_type{
             .type = true,
             .present = true,
-            .privilege = 3,
+            .privilege = cpu.PrivilegeLevel.User,
             .readable_writable = true,
         }),
     }),
 };
 
-const GDTR_type = packed struct(u48) {
+pub const GDTR = packed struct(u48) {
     size: u16,
     base: u32,
 };
 
-export var GDTR: [3]u16 = undefined;
+const TableType = enum(u1) {
+    GDT = 0,
+    LDT = 1,
+};
+
+pub fn get_selector(selector: u12, table: TableType, privilege: cpu.PrivilegeLevel) u16 {
+    return (@as(u16, selector) << 3) | (@as(u16, @intFromEnum(table)) << 2) | @as(u16, @intFromEnum(privilege));
+}
+
+var gdtr: GDTR = undefined;
 
 pub fn init() void {
     logger.debug("Initializing gdt...", .{});
-    GDTR = @bitCast(GDTR_type{
-        .size = GDT_SIZE * @sizeOf(@typeInfo(@TypeOf(GDT)).Array.child),
+    gdtr = .{
+        .size = GDT.len * @sizeOf(@typeInfo(@TypeOf(GDT)).Array.child) - 1,
         .base = @intFromPtr(&GDT),
-    });
-    asm volatile (
-    // disable interrupts
-        \\ cli
-        // load gdt
-        \\ lgdt (GDTR)
-        // load segment registers
-        \\ jmp $0b00001000, $.reload_CS
-        \\ .reload_CS:
-        \\ movw $0b00010000, %ax
-        \\ movw %ax, %ds
-        \\ movw %ax, %es
-        \\ movw %ax, %fs
-        \\ movw %ax, %gs
-        \\ movw $0b00011000, %ax
-        \\ movw %ax, %ss
+    };
+
+    cpu.load_gdt(&gdtr);
+    cpu.load_segments(
+        comptime get_selector(1, .GDT, cpu.PrivilegeLevel.Supervisor),
+        comptime get_selector(2, .GDT, cpu.PrivilegeLevel.Supervisor),
+        comptime get_selector(3, .GDT, cpu.PrivilegeLevel.Supervisor),
     );
     logger.info("Gdt initialized", .{});
 }
