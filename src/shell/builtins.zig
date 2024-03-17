@@ -3,9 +3,12 @@ const tty = @import("../tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("utils.zig");
 const CmdError = @import("../shell.zig").CmdError;
+
+// TODO Replace printk with format(shell.writer, format, args)...
+// As this builtin definitions are only used with graphic mode, it's ok to use printk for now
 const printk = tty.printk;
 
-pub fn stack(_: anytype) CmdError!void {
+pub fn stack(_: anytype, _: anytype) CmdError!void {
     if (@import("build_options").optimize != .Debug) {
         utils.print_error("{s}", .{"The stack builtin is only available in debug mode"});
         return CmdError.OtherError;
@@ -21,7 +24,7 @@ fn _help_available_commands() void {
     }
 }
 
-pub fn help(data: [][]u8) CmdError!void {
+pub fn help(_: anytype, data: [][]u8) CmdError!void {
     if (data.len <= 1) {
         _help_available_commands();
         return;
@@ -37,12 +40,12 @@ pub fn help(data: [][]u8) CmdError!void {
     return CmdError.OtherError;
 }
 
-pub fn clear(_: [][]u8) CmdError!void {
+pub fn clear(_: anytype, _: [][]u8) CmdError!void {
     printk("\x1b[2J\x1b[H", .{});
     return;
 }
 
-pub fn hexdump(args: [][]u8) CmdError!void {
+pub fn hexdump(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) {
         return CmdError.InvalidNumberOfArguments;
     }
@@ -51,15 +54,15 @@ pub fn hexdump(args: [][]u8) CmdError!void {
     utils.memory_dump(begin, begin +| len);
 }
 
-pub fn mmap(_: [][]u8) CmdError!void {
+pub fn mmap(_: anytype, _: [][]u8) CmdError!void {
     utils.print_mmap();
 }
 
-pub fn elf(_: [][]u8) CmdError!void {
+pub fn elf(_: anytype, _: [][]u8) CmdError!void {
     utils.print_elf();
 }
 
-pub fn keymap(args: [][]u8) CmdError!void {
+pub fn keymap(_: anytype, args: [][]u8) CmdError!void {
     const km = @import("../tty/keyboard/keymap.zig");
     switch (args.len) {
         1 => {
@@ -75,7 +78,7 @@ pub fn keymap(args: [][]u8) CmdError!void {
     }
 }
 
-pub fn theme(args: [][]u8) CmdError!void {
+pub fn theme(_: anytype, args: [][]u8) CmdError!void {
     const t = @import("../tty/themes.zig");
     switch (args.len) {
         1 => {
@@ -97,13 +100,13 @@ pub fn theme(args: [][]u8) CmdError!void {
     }
 }
 
-pub fn shutdown(_: [][]u8) CmdError!void {
+pub fn shutdown(_: anytype, _: [][]u8) CmdError!void {
     @import("../drivers/acpi/acpi.zig").power_off();
     utils.print_error("Failed to shutdown", .{});
     return CmdError.OtherError;
 }
 
-pub fn reboot(_: [][]u8) CmdError!void {
+pub fn reboot(_: anytype, _: [][]u8) CmdError!void {
     // Try to reboot using PS/2 Controller
     @import("../drivers/ps2/ps2.zig").cpu_reset();
 
@@ -114,17 +117,17 @@ pub fn reboot(_: [][]u8) CmdError!void {
     return CmdError.OtherError;
 }
 
-pub fn vm(_: [][]u8) CmdError!void {
+pub fn vm(_: anytype, _: [][]u8) CmdError!void {
     @import("../memory.zig").virtualPageAllocator.print();
 }
 
-pub fn pm(_: [][]u8) CmdError!void {
+pub fn pm(_: anytype, _: [][]u8) CmdError!void {
     @import("../memory.zig").pageFrameAllocator.print();
 }
 
 const vpa = &@import("../memory.zig").virtualPageAllocator;
 
-pub fn alloc_page(args: [][]u8) CmdError!void {
+pub fn alloc_page(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
     const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
     const pages = vpa.alloc_pages(nb) catch {
@@ -134,7 +137,7 @@ pub fn alloc_page(args: [][]u8) CmdError!void {
     printk("Allocated {d} pages at 0x{x:0>8}\n", .{ nb, @intFromPtr(pages) });
 }
 
-pub fn kmalloc(args: [][]u8) CmdError!void {
+pub fn kmalloc(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
     var kmem = &@import("../memory.zig").physicalMemory;
     const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
@@ -145,7 +148,7 @@ pub fn kmalloc(args: [][]u8) CmdError!void {
     printk("Allocated {d} bytes at 0x{x}\n", .{ nb, @intFromPtr(&obj[0]) });
 }
 
-pub fn kfree(args: [][]u8) CmdError!void {
+pub fn kfree(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
     var kmem = &@import("../memory.zig").physicalMemory;
@@ -157,7 +160,7 @@ pub fn kfree(args: [][]u8) CmdError!void {
     kmem.free(@as(*usize, @ptrFromInt(addr)));
 }
 
-pub fn ksize(args: [][]u8) CmdError!void {
+pub fn ksize(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
     var kmem = &@import("../memory.zig").physicalMemory;
@@ -173,7 +176,7 @@ pub fn ksize(args: [][]u8) CmdError!void {
     printk("Size of 0x{x} is {d} bytes\n", .{ addr, size });
 }
 
-pub fn krealloc(args: [][]u8) CmdError!void {
+pub fn krealloc(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) return CmdError.InvalidNumberOfArguments;
 
     var kmem = &@import("../memory.zig").physicalMemory;
@@ -190,18 +193,18 @@ pub fn krealloc(args: [][]u8) CmdError!void {
     tty.printk("Realloc 0x{x} to 0x{x} (new_len: {d})\n", .{ addr, @intFromPtr(&obj[0]), obj.len });
 }
 
-pub fn slabinfo(_: [][]u8) CmdError!void {
+pub fn slabinfo(_: anytype, _: [][]u8) CmdError!void {
     (&@import("../memory.zig").globalCache).print();
 }
 
-pub fn multiboot_info(_: [][]u8) CmdError!void {
+pub fn multiboot_info(_: anytype, _: [][]u8) CmdError!void {
     printk("{*}\n", .{@import("../boot.zig").multiboot_info});
     @import("../multiboot.zig").list_tags();
 }
 
 // TODO: Remove this builtin
 // ... For debugging purposes only
-pub fn cache_create(args: [][]u8) CmdError!void {
+pub fn cache_create(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 4) return CmdError.InvalidNumberOfArguments;
     const globalCache = &@import("../memory.zig").globalCache;
     const name = args[1];
@@ -216,7 +219,7 @@ pub fn cache_create(args: [][]u8) CmdError!void {
 
 // // TODO: Remove this builtin
 // ... For debugging purposes only
-pub fn cache_destroy(args: [][]u8) CmdError!void {
+pub fn cache_destroy(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
     const globalCache = &@import("../memory.zig").globalCache;
@@ -227,12 +230,12 @@ pub fn cache_destroy(args: [][]u8) CmdError!void {
 
 // TODO: Remove this builtin
 // ... For debugging purposes only
-pub fn shrink(_: [][]u8) CmdError!void {
+pub fn shrink(_: anytype, _: [][]u8) CmdError!void {
     var node: ?*@import("../memory/cache.zig").Cache = &@import("../memory.zig").globalCache.cache;
     while (node) |n| : (node = n.next) n.shrink();
 }
 
-pub fn kfuzz(args: [][]u8) CmdError!void {
+pub fn kfuzz(_: anytype, args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
     const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
@@ -249,7 +252,7 @@ pub fn kfuzz(args: [][]u8) CmdError!void {
     ) catch CmdError.OtherError;
 }
 
-pub fn vfuzz(args: [][]u8) CmdError!void {
+pub fn vfuzz(_: anytype, args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
     const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
