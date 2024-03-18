@@ -27,7 +27,7 @@ const Cr0 = packed struct(u32) {
 pub inline fn get_cr0() Cr0 {
     return asm (
         \\ mov %cr0, %eax
-        : [_] "={eax}" (Cr0),
+        : [_] "={eax}" (-> Cr0),
     );
 }
 
@@ -42,7 +42,7 @@ pub inline fn set_cr0(value: Cr0) void {
 pub inline fn get_cr2() u32 {
     return asm (
         \\ mov %cr2, %eax
-        : [_] "={eax}" (Cr0),
+        : [_] "={eax}" (-> u32),
     );
 }
 

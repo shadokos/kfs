@@ -55,7 +55,7 @@ pub const InterruptDescriptor = packed struct {
     }
 };
 
-const Exceptions = enum(u8) {
+pub const Exceptions = enum(u8) {
     DivisionError = 0,
     Debug = 1,
     NonMaskableInterrupt = 2,
