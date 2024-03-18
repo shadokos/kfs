@@ -61,10 +61,11 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
     @import("tty/tty.zig").init();
     logger.info("Terminal initialized", .{});
 
-    @import("memory.zig").init();
-
     @import("gdt.zig").init();
+
     @import("interrupts.zig").init();
+
+    @import("memory.zig").init();
 
     multiboot_info = multiboot.map(ebx);
 
