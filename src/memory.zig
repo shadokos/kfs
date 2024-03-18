@@ -1,4 +1,6 @@
+const cpu = @import("cpu.zig");
 const boot = @import("boot.zig");
+const interrupts = @import("interrupts.zig");
 const ft = @import("ft/ft.zig");
 const tty = @import("./tty/tty.zig");
 const printk = @import("./tty/tty.zig").printk;
@@ -106,8 +108,30 @@ pub fn map_kernel() void {
     ) catch @panic("can't shrink kernel");
 }
 
+fn page_fault_handler(arg: u32) callconv(.Interrupt) void {
+    const ErrorType = packed struct(u32) { present: bool, type: enum(u1) {
+        Read = 0,
+        Write = 1,
+    }, mode: enum(u1) {
+        Supervisor = 0,
+        User = 1,
+    }, unused: u29 = undefined };
+    const error_object: ErrorType = @bitCast(arg);
+    @import("ft/ft.zig").log.err(
+        "PAGE FAULT!\n\taddress 0x{x:0>8} is not mapped\n\taction type: {s}\n\tmode: {s}\n\terror: {s}",
+        .{
+            cpu.get_cr2(),
+            @tagName(error_object.type),
+            @tagName(error_object.mode),
+            if (error_object.present) "page-level protection violation" else "page not present",
+        },
+    );
+}
+
 pub fn init() void {
     logger.debug("Initializing memory", .{});
+
+    interrupts.set_trap_gate(interrupts.Exceptions.PageFault, interrupts.Handler{ .err = &page_fault_handler });
 
     var total_space: u64 = get_max_mem();
 
