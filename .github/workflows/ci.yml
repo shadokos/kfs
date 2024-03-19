@@ -61,8 +61,8 @@ jobs:
         name: Install zig
         run: |
           wget https://ziglang.org/download/0.11.0/zig-linux-x86_64-${ZIG_VERSION}.tar.xz -qO /tmp/zig.tar.xz
-          sudo mkdir -p ${ZIG_PATH} && echo "Zig folder created"
-          sudo tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
+          mkdir -p ${ZIG_PATH} && echo "Zig folder created"
+          tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
 
       - name: Build kernel sources
         run: make ZIG_ARGS="--global-cache-dir /tmp/zig/.global_cache" ${BIN}
