@@ -40,7 +40,49 @@ pub fn GenericReader(
     };
 }
 
-pub const Writer = @import("io/writer.zig").Writer;
+pub fn GenericWriter(
+    comptime Context: type,
+    comptime WriteError: type,
+    comptime writeFn: fn (context: Context, bytes: []const u8) WriteError!usize,
+) type {
+    return struct {
+        context: Context,
+
+        const Self = @This();
+        pub const Error = WriteError;
+
+        pub fn write(self: Self, bytes: []const u8) Error!usize {
+            return writeFn(self.context, bytes);
+        }
+
+        pub fn writeAll(self: Self, bytes: []const u8) Error!void {
+            try self.any().writeAll(bytes);
+        }
+
+        pub fn print(self: Self, comptime format: []const u8, args: anytype) Error!void {
+            try self.any().print(format, args);
+        }
+
+        pub fn writeByte(self: Self, byte: u8) Error!void {
+            return @errorCast(self.any().writeByte(byte));
+        }
+
+        pub inline fn any(self: *const Self) AnyWriter {
+            return .{
+                .context = @ptrCast(&self.context),
+                .writeFn = typeErasedWriteFn,
+            };
+        }
+
+        fn typeErasedWriteFn(context: *const anyopaque, bytes: []const u8) Error!usize {
+            const ptr: *const Context = @alignCast(@ptrCast(context));
+            return writeFn(ptr.*, bytes);
+        }
+    };
+}
+
+pub const Writer = GenericWriter;
+pub const AnyWriter = @import("io/Writer.zig");
 
 pub const AnyReader = @import("io/Reader.zig");
 pub const Reader = GenericReader;
