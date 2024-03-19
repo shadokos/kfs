@@ -595,8 +595,8 @@ pub inline fn get_reader() ft.io.AnyReader {
 }
 
 /// return the writer object of the current tty
-pub inline fn get_writer() Tty.Writer {
-    return get_tty().writer();
+pub inline fn get_writer() ft.io.AnyWriter {
+    return get_tty().writer().any();
 }
 
 /// The BufferWriter type for Tty

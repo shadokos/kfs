@@ -1,6 +1,6 @@
 const ft = @import("../../ft/ft.zig");
 const tty = @import("../../tty/tty.zig");
-const utils = @import("../../shell/utils.zig");
+const utils = @import("../../shell/default/utils.zig");
 const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
 const cpu = @import("../../cpu.zig");

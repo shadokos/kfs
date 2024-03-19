@@ -1,6 +1,7 @@
-const tty = @import("../tty/tty.zig");
-const ft = @import("../ft/ft.zig");
+const tty = @import("../../tty/tty.zig");
+const ft = @import("../../ft/ft.zig");
 const StackIterator = ft.debug.StackIterator;
+const Shell = @import("shell.zig").Shell;
 
 pub const inverse = "\x1b[7m";
 pub const red = "\x1b[31m";
@@ -19,27 +20,27 @@ pub const bg_cyan = "\x1b[46m";
 pub const bg_white = "\x1b[47m";
 pub const reset = "\x1b[0m";
 
-const prompt: *const [2:0]u8 = "$>";
+const prompt: *const [1:0]u8 = "\xaf";
 extern var stack_bottom: [*]u8;
 
-pub fn ensure_newline() void {
-    tty.printk("{s}\x1b[{d}C\r", .{
+pub fn ensure_newline(writer: ft.io.AnyWriter) void {
+    ft.fmt.format(writer, "{s}\x1b[{d}C\r", .{
         inverse ++ "%" ++ reset, // No newline char: '%' character in reverse
         tty.width - 2, // Move cursor to the end of the line or on the next line if the line is not empty
-    });
+    }) catch {};
 }
 
-pub fn print_error(comptime msg: []const u8, args: anytype) void {
-    ensure_newline();
-    tty.printk(red ++ "Error" ++ reset ++ ": " ++ msg ++ "\n", args);
+pub fn print_error(shell: anytype, comptime msg: []const u8, args: anytype) void {
+    ensure_newline(shell.writer);
+    ft.fmt.format(shell.writer, red ++ "Error" ++ reset ++ ": " ++ msg ++ "\n", args) catch {};
 }
 
-pub fn print_prompt(err: bool) void {
-    ensure_newline();
-    tty.printk("{s}{s}" ++ reset ++ " ", .{ // print the prompt:
-        if (err) red else cyan, // prompt collor depending on the last command status
+pub fn print_prompt(shell: *const Shell) void {
+    ensure_newline(shell.writer);
+    ft.fmt.format(shell.writer, "{s}{s}" ++ reset ++ " ", .{ // print the prompt:
+        if (shell.err) red else cyan, // prompt collor depending on the last command status
         prompt, // prompt
-    });
+    }) catch {};
 }
 
 pub fn memory_dump(start_address: usize, end_address: usize) void {
@@ -202,8 +203,8 @@ pub inline fn dump_stack() void {
 }
 
 pub fn print_mmap() void {
-    const multiboot = @import("../multiboot.zig");
-    const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
+    const multiboot = @import("../../multiboot.zig");
+    const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
 
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_BASIC_MEMINFO)) |basic_meminfo| {
         tty.printk("mem lower: 0x{x:0>8} Kb\n", .{basic_meminfo.mem_lower});
@@ -244,8 +245,8 @@ pub fn print_mmap() void {
 }
 
 pub fn print_elf() void {
-    const multiboot = @import("../multiboot.zig");
-    const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
+    const multiboot = @import("../../multiboot.zig");
+    const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS)) |t| {
         var iter = multiboot.section_hdr_it{ .base = t };
         tty.printk("{s: <32} {s: <8} {s: <8} {s: <8} {s: <8}\n", .{
@@ -277,7 +278,7 @@ pub fn show_palette() void {
 }
 
 pub fn fuzz(allocator: ft.mem.Allocator, nb: usize, max_size: usize) !void {
-    const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(1000);
+    const Fuzzer = @import("../../memory/fuzzer.zig").Fuzzer(1000);
 
     var fuzzer: Fuzzer = Fuzzer.init(allocator, &Fuzzer.converging);
     defer fuzzer.deinit();

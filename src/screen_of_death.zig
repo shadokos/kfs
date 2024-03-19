@@ -1,5 +1,5 @@
 const tty = @import("tty/tty.zig");
-const utils = @import("shell/utils.zig");
+const utils = @import("shell/default/utils.zig");
 
 const logo =
     "    +   .                                   \n" ++
