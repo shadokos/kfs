@@ -1,6 +1,6 @@
 const ft = @import("../ft/ft.zig");
 const token = @import("token.zig");
-const utils = @import("default/utils.zig");
+const colors = @import("colors");
 const allocator = @import("../memory.zig").physicalMemory.allocator();
 
 pub const CmdError = error{ CommandNotFound, InvalidNumberOfArguments, InvalidParameter, OtherError };
@@ -117,8 +117,8 @@ pub fn Shell(comptime _builtins: anytype) type {
         }
 
         pub fn print_error(self: *Self, comptime fmt: []const u8, args: anytype) void {
-            const red = if (self.config.colors) utils.red else "";
-            const reset = if (self.config.colors) utils.reset else "";
+            const red = if (self.config.colors) colors.red else "";
+            const reset = if (self.config.colors) colors.reset else "";
             self.writer.print("{s}Error{s}: " ++ fmt ++ "\n", .{ red, reset } ++ args) catch {};
         }
 

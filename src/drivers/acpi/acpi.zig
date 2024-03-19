@@ -1,9 +1,9 @@
 const ft = @import("../../ft/ft.zig");
 const tty = @import("../../tty/tty.zig");
-const utils = @import("../../shell/default/utils.zig");
 const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
 const cpu = @import("../../cpu.zig");
+const colors = @import("colors");
 
 const acpi_logger = @import("../../ft/ft.zig").log.scoped(.driver_acpi);
 
@@ -110,25 +110,25 @@ fn _validate(comptime T: type, comptime name: []const u8, entry: anytype) ACPI_e
 
     return if (_checksum(entry, len)) b: {
         acpi_logger.debug("{s}: checksum:\t{s}OK{s}\t({s}0x{x:0>8}{s})\t{s}{d}{s} bytes", .{
-            utils.magenta ++ name ++ utils.reset,
-            utils.green,
-            utils.reset,
-            utils.blue,
+            colors.magenta ++ name ++ colors.reset,
+            colors.green,
+            colors.reset,
+            colors.blue,
             @intFromPtr(entry),
-            utils.reset,
-            utils.yellow,
+            colors.reset,
+            colors.yellow,
             len,
-            utils.reset,
+            colors.reset,
         });
         break :b @as(PTR(T), @ptrFromInt(@intFromPtr(entry)));
     } else b: {
         acpi_logger.err("{s} checksum:\t{s}KO{s}\t({s}0x{x:0>8}{s})", .{
-            utils.magenta ++ name ++ utils.reset,
-            utils.red,
-            utils.reset,
-            utils.blue,
+            colors.magenta ++ name ++ colors.reset,
+            colors.red,
+            colors.reset,
+            colors.blue,
             @intFromPtr(entry),
-            utils.reset,
+            colors.reset,
         });
         break :b ACPI_error.entry_invalid;
     };
@@ -143,12 +143,12 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry
 
         if (ft.mem.eql(u8, &header.signature, name)) {
             acpi_logger.debug("{s}: Search:\t{s}OK{s}\t({s}0x{x:0>8}{s})", .{
-                utils.magenta ++ name ++ utils.reset,
-                utils.green,
-                utils.reset,
-                utils.blue,
+                colors.magenta ++ name ++ colors.reset,
+                colors.green,
+                colors.reset,
+                colors.blue,
                 @intFromPtr(header),
-                utils.reset,
+                colors.reset,
             });
             return _validate(_entry_type(name), name, @as(PTR(_entry_type(name)), @ptrCast(header)));
         } else unmap(header, header.length) catch acpi_logger.warn(
@@ -158,7 +158,7 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry
     }
     acpi_logger.err(
         "{s}: Search:\t{s}KO{s}",
-        .{ utils.magenta ++ name ++ utils.reset, utils.red, utils.reset },
+        .{ colors.magenta ++ name ++ colors.reset, colors.red, colors.reset },
     );
     return ACPI_error.entry_not_found;
 }
@@ -166,7 +166,7 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry
 fn _get_rsdp() ACPI_error!PTR(RSDP) {
     var rsdp: PTR(RSDP) = undefined;
 
-    acpi_logger.debug("{s}RSDP{s}: Retrieving from mutliboot2 header", .{ utils.magenta, utils.reset });
+    acpi_logger.debug("{s}RSDP{s}: Retrieving from mutliboot2 header", .{ colors.magenta, colors.reset });
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD)) |tag| {
         acpi_logger.debug("\t- Found ACPI_OLD tag", .{});
         rsdp = &tag.rsdp;
@@ -202,25 +202,25 @@ fn _get_s5(dsdt: PTR(DSDT)) ACPI_error!PTR(S5Object) {
             acpi_logger.debug(
                 "{s}:\tSearch\t\t{s}OK{s}\t({s}0x{x:0>8}{s})",
                 .{
-                    utils.magenta ++ "_S5" ++ utils.reset,
-                    utils.green,
-                    utils.reset,
-                    utils.blue,
+                    colors.magenta ++ "_S5" ++ colors.reset,
+                    colors.green,
+                    colors.reset,
+                    colors.blue,
                     @intFromPtr(data) + i,
-                    utils.reset,
+                    colors.reset,
                 },
             );
             const s5: PTR(S5Object) = @ptrFromInt(@as(usize, @intFromPtr(&dsdt.data)) + i + 4);
             acpi_logger.debug(
                 "{s}:\t0x{x:0>14}",
-                .{ utils.magenta ++ "_S5" ++ utils.reset, @as(u56, @bitCast(s5.*)) },
+                .{ colors.magenta ++ "_S5" ++ colors.reset, @as(u56, @bitCast(s5.*)) },
             );
             return s5;
         }
     }
     acpi_logger.err(
         "{s}:\tSearch\t\t{s}KO{s}",
-        .{ utils.magenta ++ "_S5" ++ utils.reset, utils.red, utils.reset },
+        .{ colors.magenta ++ "_S5" ++ colors.reset, colors.red, colors.reset },
     );
     return ACPI_error.entry_not_found;
 }
@@ -282,7 +282,7 @@ pub fn init() void {
 
     acpi_logger.debug("\t- (SLP_TYPa | SLP_EN): 0x{x}", .{acpi.SLP_TYPa | acpi.SLP_EN});
     acpi_logger.debug("\t- (PM1a_CNT): 0x{x}", .{acpi.fadt.pm1a_control_block});
-    acpi_logger.debug("Initialization:\t" ++ utils.green ++ "OK" ++ utils.reset, .{});
+    acpi_logger.debug("Initialization:\t" ++ colors.green ++ "OK" ++ colors.reset, .{});
 
     enable() catch |err| @panic(acpi_strerror("", err));
     acpi_logger.info("Enabled", .{});
