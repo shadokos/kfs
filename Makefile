@@ -48,6 +48,7 @@ SRC = linker.ld \
 	memory/slab.zig \
 	memory/cache.zig \
 	memory/fuzzer.zig \
+	misc/colors.zig \
 	kernel.zig \
 	multiboot.zig \
 	tty/tty.zig \

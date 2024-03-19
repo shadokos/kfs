@@ -1,13 +1,13 @@
 const tty = @import("../../tty/tty.zig");
-const u = @import("utils.zig");
+const c = @import("colors");
 
 const Help = struct { name: [:0]const u8, description: [:0]const u8, usage: ?[:0]const u8 = null };
 
 fn print_helper(h: Help) void {
-    tty.printk(u.blue ++ "Command" ++ u.reset ++ ": {s}\n", .{h.name});
-    tty.printk(u.blue ++ "Description" ++ u.reset ++ ": {s}\n", .{h.description});
+    tty.printk(c.blue ++ "Command" ++ c.reset ++ ": {s}\n", .{h.name});
+    tty.printk(c.blue ++ "Description" ++ c.reset ++ ": {s}\n", .{h.description});
     if (h.usage) |usage| {
-        tty.printk(u.blue ++ "Usage" ++ u.reset ++ ": {s}\n", .{usage});
+        tty.printk(c.blue ++ "Usage" ++ c.reset ++ ": {s}\n", .{usage});
     }
 }
 

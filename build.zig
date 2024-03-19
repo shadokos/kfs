@@ -36,6 +36,9 @@ pub fn build(b: *Builder) void {
     build_options.addOption(std.builtin.OptimizeMode, "optimize", kernel.optimize);
     kernel.addOptions("build_options", build_options);
 
+    const colors_module = b.createModule(.{ .source_file = .{ .path = "./src/misc/colors.zig" } });
+    kernel.addModule("colors", colors_module);
+
     kernel.addIncludePath(std.Build.LazyPath{ .path = "./src/c_headers/" });
 
     kernel.setLinkerScriptPath(.{ .path = "src/linker.ld" });
