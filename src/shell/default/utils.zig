@@ -22,9 +22,12 @@ pub fn print_error(shell: anytype, comptime msg: []const u8, args: anytype) void
 
 pub fn print_prompt(shell: *const Shell) void {
     ensure_newline(shell.writer);
-    ft.fmt.format(shell.writer, "{s}{s}" ++ c.reset ++ " ", .{ // print the prompt:
-        if (shell.err) c.red else c.cyan, // prompt collor depending on the last command status
-        prompt, // prompt
+
+    // print the prompt:
+    // prompt collor depending on the last command status
+    ft.fmt.format(shell.writer, "{s}{s}" ++ c.reset ++ " ", .{
+        if (shell.err != null) c.red else c.cyan,
+        prompt,
     }) catch {};
 }
 
