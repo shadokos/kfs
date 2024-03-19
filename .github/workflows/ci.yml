@@ -6,44 +6,18 @@ on:
     branches: ['main', 'dev/**']
 
 env:
+  # These environment variables will override the Makefile variables
   NAME: kfs
-  BOOTDIR: zig-cache
-  BIN: zig-cache/kfs.elf
+  BOOTDIR: /tmp/zig/zig-cache
+  BIN: /tmp/zig/zig-cache/kfs.elf
   ZIG_VERSION: 0.11.0
-  ZIG_CACHE: zig-cache
+  ZIG_CACHE: /tmp/zig/zig-cache
   ZIG_PATH: /tmp/zig
   ZIG: /tmp/zig/zig
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
-
-      - name: Cache zig installation
-        id: cache-zig-installation
-        uses: actions/cache@v3
-        with:
-          path: /tmp/zig
-          key: ${{ runner.os }}-zig
-          restore-keys: |
-            ${{ runner.os }}-zig
-
-      - if: steps.cache-zig-installation.outputs.cache-hit != 'true'
-        name: Install zig
-        run: |
-          wget https://ziglang.org/download/0.11.0/zig-linux-x86_64-${ZIG_VERSION}.tar.xz -qO /tmp/zig.tar.xz
-          sudo mkdir -p ${ZIG_PATH} && echo "Zig folder created"
-          sudo tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
-
-      - name: Build kernel sources
-        run: make ${BIN}
-
   format:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -66,3 +40,29 @@ jobs:
 
       - name: Check format
         run: bash .github/pre-commit
+
+  build:
+    needs: format
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Cache zig installation
+        id: cache-zig-installation
+        uses: actions/cache@v3
+        with:
+          path: /tmp/zig
+          key: ${{ runner.os }}-zig
+          restore-keys: |
+            ${{ runner.os }}-zig
+
+      - if: steps.cache-zig-installation.outputs.cache-hit != 'true'
+        name: Install zig
+        run: |
+          wget https://ziglang.org/download/0.11.0/zig-linux-x86_64-${ZIG_VERSION}.tar.xz -qO /tmp/zig.tar.xz
+          sudo mkdir -p ${ZIG_PATH} && echo "Zig folder created"
+          sudo tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
+
+      - name: Build kernel sources
+        run: make ZIG_ARGS="--global-cache-dir /tmp/zig/.global_cache" ${BIN}
