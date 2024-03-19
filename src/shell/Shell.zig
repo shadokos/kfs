@@ -16,6 +16,7 @@ pub fn Shell(comptime _builtins: anytype) type {
         const Self = @This();
 
         const Hook: type = ?*const fn (*Self) void;
+
         const Hooks: type = struct {
             on_init: Hook = null,
             on_error: Hook = defaultErrorHook,
