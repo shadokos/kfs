@@ -16,16 +16,24 @@ pub fn Shell(comptime _builtins: anytype) type {
         const Self = @This();
 
         const Hook: type = ?*const fn (*Self) void;
-
         const Hooks: type = struct {
-            pre_process: Hook = null,
-            post_process: Hook = null,
+            on_init: Hook = null,
+            on_error: Hook = defaultErrorHook,
+            pre_prompt: Hook = null,
             pre_cmd: Hook = null,
-            on_error: Hook = null,
+            post_cmd: Hook = null,
+        };
+
+        const ExecutionContext = struct {
+            args: [][]u8,
+            err: ?anyerror,
         };
 
         config: Config = Config{},
-        err: ?anyerror = null,
+        execution_context: ExecutionContext = ExecutionContext{
+            .args = undefined,
+            .err = null,
+        },
         reader: ft.io.AnyReader = undefined,
         writer: ft.io.AnyWriter = undefined,
         hooks: Hooks = Hooks{},
@@ -35,23 +43,24 @@ pub fn Shell(comptime _builtins: anytype) type {
             writer: ft.io.AnyWriter,
             config: Config,
             hooks: struct {
-                pre_process: ?*const anyopaque = null,
-                post_process: ?*const anyopaque = null,
-                pre_cmd: ?*const anyopaque = null,
+                on_init: ?*const anyopaque = null,
                 on_error: ?*const anyopaque = null,
+                pre_prompt: ?*const anyopaque = null,
+                pre_cmd: ?*const anyopaque = null,
+                post_cmd: ?*const anyopaque = null,
             },
         ) Self {
-            const ret = Self{
+            var ret = Self{
                 .reader = reader,
                 .writer = writer,
                 .config = config,
-                .hooks = .{
-                    .pre_process = if (hooks.pre_process) |h| @alignCast(@ptrCast(h)) else null,
-                    .post_process = if (hooks.post_process) |h| @alignCast(@ptrCast(h)) else null,
-                    .pre_cmd = if (hooks.pre_cmd) |h| @alignCast(@ptrCast(h)) else null,
-                    .on_error = if (hooks.on_error) |h| @alignCast(@ptrCast(h)) else null,
-                },
             };
+            if (hooks.on_init) |h| ret.hooks.on_init = @alignCast(@ptrCast(h));
+            if (hooks.on_error) |h| ret.hooks.on_error = @alignCast(@ptrCast(h));
+            if (hooks.pre_prompt) |h| ret.hooks.pre_prompt = @alignCast(@ptrCast(h));
+            if (hooks.pre_cmd) |h| ret.hooks.pre_cmd = @alignCast(@ptrCast(h));
+            if (hooks.post_cmd) |h| ret.hooks.post_cmd = @alignCast(@ptrCast(h));
+            if (ret.hooks.on_init) |hook| hook(@constCast(&ret));
             return ret;
         }
 
@@ -66,49 +75,35 @@ pub fn Shell(comptime _builtins: anytype) type {
         }
 
         pub fn process_line(self: *Self) void {
-            if (self.hooks.pre_process) |hook| hook(self);
+            self.execution_context.args = &.{};
+            if (self.hooks.pre_prompt) |hook| hook(self);
 
             // Read a line from the reader
             var slice = self.reader.readUntilDelimiterAlloc(allocator, '\n', max_line_size) catch |e| {
-                self.err = e;
+                if (e == error.EndOfStream) return;
+                self.execution_context.err = e;
                 if (self.hooks.on_error) |hook| hook(self);
-                if (e == error.StreamTooLong) {
-                    self.print_error("Line is too long", .{});
-                    _ = self.reader.skipUntilDelimiterOrEof('\n') catch {};
-                }
                 return;
             };
             defer allocator.free(slice);
 
             // Tokenize the line
-            const args = token.tokenize(slice) catch |e| {
-                self.err = e;
+            self.execution_context.args = token.tokenize(slice) catch |e| {
+                self.execution_context.err = e;
                 if (self.hooks.on_error) |hook| hook(self);
-                switch (e) {
-                    error.InvalidQuote => self.print_error("invalid quotes", .{}),
-                    error.MaxTokensReached => self.print_error(
-                        "too many tokens (max: {d})",
-                        .{token.max_tokens},
-                    ),
-                }
                 return;
             };
-            if (args.len == 0) return;
+            if (self.execution_context.args.len == 0) return;
 
             if (self.hooks.pre_cmd) |hook| hook(self);
 
-            self.err = null;
-            self.exec_cmd(args) catch |e| {
-                self.err = e;
+            self.execution_context.err = null;
+            self.exec_cmd(self.execution_context.args) catch |e| {
+                self.execution_context.err = e;
                 if (self.hooks.on_error) |hook| hook(self);
-                switch (e) {
-                    CmdError.CommandNotFound => self.print_error("{s}: command not found", .{args[0]}),
-                    CmdError.InvalidNumberOfArguments => self.print_error("Invalid number of arguments", .{}),
-                    CmdError.InvalidParameter => self.print_error("Invalid parameter", .{}),
-                    CmdError.OtherError => {}, // specific errors are handled by the command itself
-                }
+                return;
             };
-            if (self.hooks.post_process) |hook| hook(self);
+            if (self.hooks.post_cmd) |hook| hook(self);
         }
 
         pub fn print(self: *Self, comptime fmt: []const u8, args: anytype) void {
@@ -130,6 +125,29 @@ pub fn Shell(comptime _builtins: anytype) type {
                 error.InvalidQuote => return "Invalid quote",
                 error.MaxTokensReached => return "Max tokens reached",
                 else => return "Unknown error",
+            }
+        }
+
+        pub fn defaultErrorHook(shell: *Self) void {
+            const err = shell.execution_context.err orelse return;
+            const args = shell.execution_context.args;
+
+            switch (err) {
+                error.OtherError => {}, // specific errors are handled by the command itself
+                error.StreamTooLong => {
+                    shell.print_error("Line is too long", .{});
+                    _ = shell.reader.skipUntilDelimiterOrEof('\n') catch {};
+                },
+                error.CommandNotFound => shell.print_error("{s}: {s}", .{ args[0], shell.strerror(err) }),
+                error.MaxTokensReached => shell.print_error(
+                    "too many tokens (max: {d})",
+                    .{token.max_tokens},
+                ),
+                error.InvalidNumberOfArguments,
+                error.InvalidParameter,
+                error.InvalidQuote,
+                => shell.print_error("{s}", .{shell.strerror(err)}),
+                else => shell.print_error("Unknown error", .{}),
             }
         }
     };
