@@ -65,4 +65,4 @@ jobs:
           tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
 
       - name: Build kernel sources
-        run: make ZIG_ARGS="--global-cache-dir /tmp/zig/.global_cache" ${BIN}
+        run: BUILD_ARGS="--global-cache-dir /tmp/zig/.global_cache" make ${BIN}
