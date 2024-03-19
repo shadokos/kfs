@@ -70,7 +70,7 @@ pub fn Shell(comptime _builtins: anytype) type {
             if (self.hooks.pre_process) |hook| hook(self);
 
             // Read a line from the reader
-            var slice = self.reader.readUntilDelimiterAlloc(allocator, '\n', 4096) catch |e| {
+            var slice = self.reader.readUntilDelimiterAlloc(allocator, '\n', max_line_size) catch |e| {
                 self.err = true;
                 if (self.hooks.on_error) |hook| hook(self, e);
                 if (e == error.StreamTooLong) {
