@@ -90,6 +90,8 @@ pub const Ports = enum(u16) {
     pic_master_data = 0x0021,
     pic_slave_command = 0x00a0,
     pic_slave_data = 0x00a1,
+    com_port_1 = 0x03f8,
+    com_port_2 = 0x02f8,
 };
 
 inline fn _get_port(port: anytype) u16 {

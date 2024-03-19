@@ -19,6 +19,9 @@ pub var multiboot_info: *multiboot.info_header = undefined;
 
 pub const ft_options: @import("ft/ft.zig").Options = .{
     .logFn = @import("logger.zig").kernel_log,
+    .log_scope_levels = &.{
+        .{ .scope = .serial, .level = .debug },
+    },
 };
 
 export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
@@ -74,7 +77,11 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("./drivers/acpi/acpi.zig").init();
 
-    kernel.main();
+    if (!@import("build_options").ci) {
+        kernel.main();
+    } else {
+        @import("ci.zig").main();
+    }
 }
 
 pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {

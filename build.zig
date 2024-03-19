@@ -22,6 +22,7 @@ pub const BuildContext = struct {
     iso_source_dir: []const u8 = undefined,
     name: []const u8 = undefined,
     posix: bool = false,
+    ci: bool = false,
 };
 
 pub fn build(b: *Builder) !void {
@@ -44,6 +45,8 @@ pub fn build(b: *Builder) !void {
         "posix",
         "Enable this flag if strict POSIX conformance is wanted",
     ) orelse false;
+
+    context.ci = b.option(bool, "ci", "Build the kernel for CI") orelse false;
 
     context.optimize = context.builder.standardOptimizeOption(.{});
 
