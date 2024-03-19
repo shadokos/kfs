@@ -1,7 +1,12 @@
 BUILD_ARGS ?= --summary all --verbose
 
 # get the last optimize option
-OPTIMIZE ?= $(shell echo $$(ls .optimize-* 2>/dev/null || echo Debug) | cut -d'-' -f2)
+OPTIMIZE ?= $(shell echo $$(ls ".optimize-*" 2>/dev/null || echo Debug) | cut -d'-' -f2)
+CI ?= false
+
+ifeq ($(CI),true)
+    BUILD_ARGS := -Dci=true -Diso_dir=.github/iso_CI $(BUILD_ARGS)
+endif
 
 .PHONY: all
 all: build

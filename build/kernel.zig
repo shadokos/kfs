@@ -29,6 +29,7 @@ pub fn build_executable(context: *BuildContext) void {
     context.build_options = context.builder.addOptions();
     context.build_options.addOption(bool, "posix", context.posix);
     context.build_options.addOption(std.builtin.OptimizeMode, "optimize", context.kernel.optimize);
+    context.build_options.addOption(bool, "ci", context.ci);
     context.kernel.addOptions("build_options", context.build_options);
 
     const colors_module = context.builder.createModule(.{ .source_file = .{ .path = "./src/misc/colors.zig" } });
