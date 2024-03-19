@@ -1,8 +1,19 @@
 const utils = @import("utils.zig");
 pub const Shell = @import("../Shell.zig").Shell(@import("builtins.zig"));
+const colors = @import("colors");
+
+pub fn on_init(shell: *Shell) void {
+    shell.writer.print("tty {d}, Hello {s}{d}{s}\n", .{
+        @import("../../tty/tty.zig").current_tty,
+        colors.green,
+        42,
+        colors.reset,
+    }) catch {};
+}
 
 pub fn on_error(shell: *Shell) void {
-    @import("utils.zig").ensure_newline(shell.writer);
+    utils.ensure_newline(shell.writer);
+    shell.defaultErrorHook();
 }
 
 pub fn pre_process(shell: *Shell) void {
