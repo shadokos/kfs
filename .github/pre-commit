@@ -1,6 +1,13 @@
 #!/usr/bin/sh
 
-zig fmt --check src build.zig
+result=$(${ZIG:=zig} fmt --check src build.zig)
+if [ $? -ne 0 ]; then
+  if [ -n "$result" ]; then
+    echo "$result" 1>&2
+    echo "Error: Code is not formatted." 1>&2
+  fi
+  exit 1
+fi
 
 result=$(grep -REn '.{120,}' src build.zig | sed -E 's/^(.{80}).*/\1(...)/g')
 if [ -n "$result" ]; then
