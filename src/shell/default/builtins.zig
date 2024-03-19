@@ -3,6 +3,7 @@ const tty = @import("../../tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("utils.zig");
 const CmdError = @import("../Shell.zig").CmdError;
+const colors = @import("colors");
 
 // TODO Replace printk with format(shell.writer, format, args)...
 // As this builtin definitions are only used with graphic mode, it's ok to use printk for now
@@ -18,7 +19,7 @@ pub fn stack(shell: anytype, _: anytype) CmdError!void {
 }
 
 fn _help_available_commands() void {
-    printk(utils.blue ++ "Available commands:\n" ++ utils.reset, .{});
+    printk(colors.blue ++ "Available commands:\n" ++ colors.reset, .{});
     inline for (@typeInfo(@This()).Struct.decls) |decl| {
         printk("  - {s}\n", .{decl.name});
     }
