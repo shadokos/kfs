@@ -1,10 +1,13 @@
 const tty = @import("./tty/tty.zig");
-const Shell = @import("./shell.zig").Shell(@import("shell/builtins.zig"));
+const DefaultShell = @import("shell/default/shell.zig");
 const printk = tty.printk;
 
 pub fn main() void {
     printk("hello, \x1b[32m{d}\x1b[0m\n", .{42});
 
-    var shell = Shell.init(tty.get_reader(), tty.get_writer());
-    while (true) _ = shell.routine();
+    var shell = DefaultShell.Shell.init(tty.get_reader(), tty.get_writer(), .{}, .{
+        .pre_process = DefaultShell.pre_process,
+        .on_error = DefaultShell.on_error,
+    });
+    while (true) _ = shell.process_line();
 }
