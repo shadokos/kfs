@@ -1,6 +1,6 @@
 const log = @import("ft/ft.zig").log;
 const tty = @import("tty/tty.zig");
-const utils = @import("shell/utils.zig");
+const utils = @import("shell/default/utils.zig");
 const screen_of_death = @import("screen_of_death.zig").screen_of_death;
 
 pub fn kernel_log(

@@ -66,7 +66,7 @@ SRC = linker.ld \
 	ft/ft.zig \
 	ft/io/fixed_buffer_stream.zig \
 	ft/io/Reader.zig \
-	ft/io/writer.zig \
+	ft/io/Writer.zig \
 	ft/io.zig \
 	ft/log.zig \
 	ft/math.zig \
@@ -76,10 +76,11 @@ SRC = linker.ld \
 	ft/Random/Xoroshiro128.zig \
 	ft/meta.zig \
 	shell/token.zig \
-	shell/builtins.zig \
-	shell/helpers.zig \
-	shell/utils.zig \
-	shell.zig \
+	shell/default/builtins.zig \
+	shell/default/helpers.zig \
+	shell/default/utils.zig \
+	shell/default/shell.zig \
+	shell/Shell.zig \
 	$(THEME_INDEX)
 
 THEME_LIST = themes
