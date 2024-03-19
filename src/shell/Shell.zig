@@ -148,7 +148,7 @@ pub fn Shell(comptime _builtins: anytype) type {
                 error.InvalidParameter,
                 error.InvalidQuote,
                 => shell.print_error("{s}", .{shell.strerror(err)}),
-                else => shell.print_error("Unknown error", .{}),
+                else => shell.print_error("Unknown error: {s}", .{@errorName(err)}),
             }
         }
     };

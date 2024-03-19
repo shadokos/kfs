@@ -135,7 +135,7 @@ fn get_id(obj: anytype) u8 {
 }
 
 pub fn set_trap_gate(id: anytype, handler: Handler) void {
-    idt[id] = InterruptDescriptor.init(
+    idt[get_id(id)] = InterruptDescriptor.init(
         handler,
         .Trap,
         cpu.PrivilegeLevel.Supervisor,
