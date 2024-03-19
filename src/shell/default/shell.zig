@@ -1,7 +1,7 @@
 const utils = @import("utils.zig");
 pub const Shell = @import("../Shell.zig").Shell(@import("builtins.zig"));
 
-pub fn on_error(shell: *Shell, _: anyerror) void {
+pub fn on_error(shell: *Shell) void {
     @import("utils.zig").ensure_newline(shell.writer);
 }
 

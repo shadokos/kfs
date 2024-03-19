@@ -16,17 +16,16 @@ pub fn Shell(comptime _builtins: anytype) type {
         const Self = @This();
 
         const Hook: type = ?*const fn (*Self) void;
-        const ErrorHook: type = ?*const fn (*Self, err: anyerror) void;
 
         const Hooks: type = struct {
             pre_process: Hook = null,
             post_process: Hook = null,
             pre_cmd: Hook = null,
-            on_error: ErrorHook = null,
+            on_error: Hook = null,
         };
 
         config: Config = Config{},
-        err: bool = false,
+        err: ?anyerror = null,
         reader: ft.io.AnyReader = undefined,
         writer: ft.io.AnyWriter = undefined,
         hooks: Hooks = Hooks{},
@@ -71,8 +70,8 @@ pub fn Shell(comptime _builtins: anytype) type {
 
             // Read a line from the reader
             var slice = self.reader.readUntilDelimiterAlloc(allocator, '\n', max_line_size) catch |e| {
-                self.err = true;
-                if (self.hooks.on_error) |hook| hook(self, e);
+                self.err = e;
+                if (self.hooks.on_error) |hook| hook(self);
                 if (e == error.StreamTooLong) {
                     self.print_error("Line is too long", .{});
                     _ = self.reader.skipUntilDelimiterOrEof('\n') catch {};
@@ -83,8 +82,8 @@ pub fn Shell(comptime _builtins: anytype) type {
 
             // Tokenize the line
             const args = token.tokenize(slice) catch |e| {
-                self.err = true;
-                if (self.hooks.on_error) |hook| hook(self, e);
+                self.err = e;
+                if (self.hooks.on_error) |hook| hook(self);
                 switch (e) {
                     error.InvalidQuote => self.print_error("invalid quotes", .{}),
                     error.MaxTokensReached => self.print_error(
@@ -98,10 +97,10 @@ pub fn Shell(comptime _builtins: anytype) type {
 
             if (self.hooks.pre_cmd) |hook| hook(self);
 
-            self.err = false;
+            self.err = null;
             self.exec_cmd(args) catch |e| {
-                self.err = true;
-                if (self.hooks.on_error) |hook| hook(self, e);
+                self.err = e;
+                if (self.hooks.on_error) |hook| hook(self);
                 switch (e) {
                     CmdError.CommandNotFound => self.print_error("{s}: command not found", .{args[0]}),
                     CmdError.InvalidNumberOfArguments => self.print_error("Invalid number of arguments", .{}),
