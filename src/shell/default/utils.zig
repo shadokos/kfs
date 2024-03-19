@@ -26,7 +26,7 @@ pub fn print_prompt(shell: *const Shell) void {
     // print the prompt:
     // prompt collor depending on the last command status
     ft.fmt.format(shell.writer, "{s}{s}" ++ c.reset ++ " ", .{
-        if (shell.err != null) c.red else c.cyan,
+        if (shell.execution_context.err != null) c.red else c.cyan,
         prompt,
     }) catch {};
 }
