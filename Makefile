@@ -134,7 +134,9 @@ $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 		-Doptimize=ReleaseSafe \
 		--cache-dir $(ZIG_CACHE) \
 		--summary all \
-		--verbose
+		--verbose \
+		$(ZIG_ARGS)
+
 
 debug: all $(SYMBOL_FILE)
 	( qemu-system-$(ARCH) -cdrom $(ISO) -s -S 1>/dev/null 2>/dev/null \
