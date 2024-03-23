@@ -1,4 +1,4 @@
-name: CI
+name: Build + Format
 on:
   push:
     branches: ['main', 'dev/**']

@@ -9,7 +9,7 @@ OPTIMIZE=ReleaseSafe
 ifeq ($(CI), 1)
     ISODIR=.github/iso_CI
     OPTIMIZE=Debug
-    QEMU_ARGS=-serial pty
+    QEMU_ARGS=-serial tcp::4444,server,nowait
     BUILD_ARGS+=-Dci=true
 else
     CI=0
@@ -173,6 +173,16 @@ debug: all $(SYMBOL_FILE)
 	( qemu-system-$(ARCH) -cdrom $(ISO) -s -S 1>/dev/null 2>/dev/null \
 	|	gdb  -ex "file $(BIN)" -ex "target remote localhost:1234" <&3 ) 3<&0
 
+ifeq ($(MAKELEVEL), 0)
+ci:
+	$(MAKE) DOCKER=1 CI=1 ci
+else
+ci: all
+	bash .github/ci_assets/run_ci.sh
+endif
+
+
+
 $(SYMBOL_DIR):
 	mkdir -p $(SYMBOL_DIR)
 
@@ -208,5 +218,4 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: run all clean fclean re debug run_kernel
-.PHONY: run all clean fclean re debug run_kernel docker_volume
+.PHONY: run all clean fclean re debug run_kernel docker_volume ci
