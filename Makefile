@@ -7,7 +7,7 @@ ISODIR?=iso
 OPTIMIZE=ReleaseSafe
 
 ifeq ($(CI), 1)
-    ISODIR=.github/iso_CI
+    ISODIR=CI/iso
     OPTIMIZE=Debug
     QEMU_ARGS=-serial tcp::4444,server,nowait
     BUILD_ARGS+=-Dci=true
@@ -182,7 +182,7 @@ ci:
 	$(MAKE) DOCKER=1 CI=1 ci
 else
 ci: all
-	bash .github/ci_assets/run_ci.sh
+	bash CI/run_ci.sh
 endif
 
 
