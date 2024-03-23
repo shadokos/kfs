@@ -5,7 +5,7 @@ OPTIMIZE ?= $(shell echo $$(ls ".optimize-*" 2>/dev/null || echo Debug) | cut -d
 CI ?= false
 
 ifeq ($(CI),true)
-    BUILD_ARGS := -Dci=true -Diso_dir=.github/iso_CI $(BUILD_ARGS)
+    BUILD_ARGS := -Dci=true -Diso_dir=./CI/iso $(BUILD_ARGS)
 endif
 
 .PHONY: all
