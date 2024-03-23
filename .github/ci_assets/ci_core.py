@@ -1,20 +1,11 @@
 from typing import Union, List
 import socket
 import json
-import sys
 import os
 
 import logging
-from logging import DEBUG, INFO, WARNING, ERROR, CRITICAL
 
 class Logger(logging.Logger):
-    instance: logging.Logger = None
-
-    def __new__(cls, *args, **kwargs):
-        if cls.instance is None:
-            cls.instance = super().__new__(cls)
-        return cls.instance
-
     def __init__(self, *args, filename=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.level = kwargs.get("level", logging.INFO)
@@ -42,6 +33,7 @@ class Buffer:
     def __init__(self, socket: socket):
         self.buffer = b''
         self.socket = socket
+        self.socket.settimeout(60)
 
     def read_delimiter(self, delimiter: bytes | str = b'\n') -> bytes | None:
         while delimiter not in self.buffer:
@@ -110,19 +102,19 @@ class Tests:
                 if isinstance(data, dict) and data.get('type', None) is not None:
                     match data['type']:
                         case "Error":
-                            self.logger.error(f"Test KO: {data['err']} (data: {data['data']})")
+                            cmd_logger.error(f"Test KO: {data['err']} (data: {data['data']})")
                             return False
                         case "Success":
-                            self.logger.info("Test OK")
+                            cmd_logger.info("Test OK")
                             return True
                         case "Info":
-                            self.logger.info(data['data'])
+                            cmd_logger.info(data['data'])
                 else:
-                    self.logger.info(raw_data.decode())
+                    cmd_logger.info(raw_data.decode())
             except (socket.error, os.error, EOFError) as e:
-                self.logger.error(f"Failed to receive data, exiting...")
+                cmd_logger.error(f"Failed to receive data, exiting...")
                 return False
             except ValueError:
-                self.logger.info(raw_data.decode('UTF-8'))
+                cmd_logger.info(raw_data.decode('UTF-8'))
 
 
