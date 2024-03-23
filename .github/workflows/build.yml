@@ -1,19 +1,9 @@
-name: Build + Format
+name: BUILD
 on:
   push:
-    branches: ['main', 'dev/**']
+    branches: ['main', 'dev/**', 'ri/driver/debug']
   pull_request:
-    branches: ['main', 'dev/**']
-
-env:
-  # These environment variables will override the Makefile variables
-  NAME: kfs
-  BOOTDIR: /tmp/zig/zig-cache
-  BIN: /tmp/zig/zig-cache/kfs.elf
-  ZIG_VERSION: 0.11.0
-  ZIG_CACHE: /tmp/zig/zig-cache
-  ZIG_PATH: /tmp/zig
-  ZIG: /tmp/zig/zig
+    branches: ['main', 'dev/**', 'ri/driver/debug']
 
 jobs:
   format:
@@ -21,48 +11,13 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-
-      - name: Cache zig installation
-        id: cache-zig-installation
-        uses: actions/cache@v3
-        with:
-          path: /tmp/zig
-          key: ${{ runner.os }}-zig
-          restore-keys: |
-            ${{ runner.os }}-zig
-
-      - if: steps.cache-zig-installation.outputs.cache-hit != 'true'
-        name: Install zig
-        run: |
-          wget https://ziglang.org/download/0.11.0/zig-linux-x86_64-${ZIG_VERSION}.tar.xz -qO /tmp/zig.tar.xz
-          mkdir -p ${ZIG_PATH} && echo "Zig folder created"
-          tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
-
       - name: Check format
-        run: bash .github/pre-commit
+        run: make DOCKER=1 format
 
   build:
-    needs: format
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-
-      - name: Cache zig installation
-        id: cache-zig-installation
-        uses: actions/cache@v3
-        with:
-          path: /tmp/zig
-          key: ${{ runner.os }}-zig
-          restore-keys: |
-            ${{ runner.os }}-zig
-
-      - if: steps.cache-zig-installation.outputs.cache-hit != 'true'
-        name: Install zig
-        run: |
-          wget https://ziglang.org/download/0.11.0/zig-linux-x86_64-${ZIG_VERSION}.tar.xz -qO /tmp/zig.tar.xz
-          mkdir -p ${ZIG_PATH} && echo "Zig folder created"
-          tar -xf /tmp/zig.tar.xz -C ${ZIG_PATH} --strip-components=1 && echo "Zig extracted"
-
       - name: Build kernel sources
-        run: BUILD_ARGS="--global-cache-dir /tmp/zig/.global_cache" make ${BIN}
+        run: make DOCKER=1

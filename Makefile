@@ -133,9 +133,11 @@ ZIG = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw zig zig
 $(ISO): $(DOCKER_STAMP)
 GRUB_MKRESCUE = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw zig grub-mkrescue
 
+format: $(DOCKER_STAMP)
+
 endif
 
-$(ISO): $(BIN) $(GRUB_CONF) $(CI_STAMP).$(CI)
+$(ISO): $(BIN) $(GRUB_CONF) | $(CI_STAMP).$(CI)
 	$(GRUB_MKRESCUE) --compress=xz -o $@ $(ISODIR)
 
 run: $(ISO)
@@ -156,6 +158,8 @@ $(CI_STAMP).$(CI):
 	rm -rf $(CI_STAMP).*
 	touch $@
 
+format:
+	ZIG="$(ZIG)" .github/pre-commit
 
 $(BIN): $(addprefix $(SRCDIR)/,$(SRC))
 	$(ZIG) build \
@@ -218,4 +222,4 @@ fclean: clean
 
 re: fclean all
 
-.PHONY: run all clean fclean re debug run_kernel docker_volume ci
+.PHONY: run all clean fclean re debug run_kernel docker_volume ci format
