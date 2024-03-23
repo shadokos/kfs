@@ -24,7 +24,7 @@ pub fn on_init(shell: *Shell) void {
 pub fn on_error(shell: *Shell) void {
     const err = shell.execution_context.err orelse unreachable;
 
-    var packet = Packet(void).init(shell);
+    var packet = Packet(void).init(shell.writer);
     packet.err = err;
     packet.send();
 }
