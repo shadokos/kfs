@@ -93,6 +93,8 @@ SRC = linker.ld \
 	ft/meta.zig \
 	shell/token.zig \
 	shell/ci/builtins.zig \
+	shell/ci/packet.zig \
+	shell/ci/shell.zig \
 	shell/default/builtins.zig \
 	shell/default/helpers.zig \
 	shell/default/utils.zig \
@@ -126,10 +128,10 @@ GRUB_MKRESCUE = grub-mkrescue
 else
 
 $(BIN): $(DOCKER_STAMP)
-ZIG = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw -ti zig zig
+ZIG = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw zig zig
 
 $(ISO): $(DOCKER_STAMP)
-GRUB_MKRESCUE = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw -ti zig grub-mkrescue
+GRUB_MKRESCUE = $(DOCKER_CMD) run --rm -w /build -v $(NAME):/build:rw zig grub-mkrescue
 
 endif
 
@@ -142,10 +144,13 @@ run: $(ISO)
 run_kernel: $(BIN)
 	qemu-system-$(ARCH) -kernel $<
 
-$(DOCKER_STAMP): dockerfile
-	$(DOCKER_CMD) build -t zig .
-	$(DOCKER_CMD) volume create --name $(NAME) --driver=local --opt type=none --opt device=$(PWD) --opt o=bind,uid=$(shell id -u)
+$(DOCKER_STAMP): dockerfile | docker_volume
+	$(DOCKER_CMD) build -t zig . -f dockerfile
 	> $(DOCKER_STAMP)
+
+docker_volume:
+	$(DOCKER_CMD) volume rm $(NAME) || true
+	$(DOCKER_CMD) volume create --name $(NAME) --driver=local --opt type=none --opt device=$(PWD) --opt o=bind,uid=$(shell id -u)
 
 $(CI_STAMP).$(CI):
 	rm -rf $(CI_STAMP).*
@@ -204,3 +209,4 @@ fclean: clean
 re: fclean all
 
 .PHONY: run all clean fclean re debug run_kernel
+.PHONY: run all clean fclean re debug run_kernel docker_volume
