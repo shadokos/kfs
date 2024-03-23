@@ -1,9 +1,9 @@
 name: KFS UNIT TESTS
 on:
   push:
-    branches: ['main', 'dev/**', 'ri/driver/debug']
+    branches: ['main', 'dev/**']
   pull_request:
-    branches: ['main', 'dev/**', 'ri/driver/debug']
+    branches: ['main', 'dev/**']
 
 jobs:
   unit_tests:

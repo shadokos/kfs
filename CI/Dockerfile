@@ -6,4 +6,4 @@ RUN apk update
 RUN apk add qemu-img qemu-system-i386
 
 EXPOSE 4444
-CMD ["qemu-system-i386"]
+ENTRYPOINT ["qemu-system-i386"]
