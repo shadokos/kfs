@@ -10,14 +10,23 @@ pub fn Packet(comptime T: type) type {
         type: enum { Error, Info, Success } = .Info,
         data: T = undefined,
 
-        pub fn init(shell: *Shell) Self {
-            return .{ .writer = shell.writer };
+        pub fn init(writer: ft.io.AnyWriter) Self {
+            return .{ .writer = writer };
         }
 
         pub fn send(self: *Self) void {
             if (self.err) |_| self.type = .Error;
             printValue(self, self.*);
             _ = self.writer.write("\n") catch {};
+        }
+
+        pub fn sendf(self: *Self, comptime fmt: []const u8, args: anytype) void {
+            if (self.err) |_| self.type = .Error;
+            self.writer.print("{{ \"err\": ", .{}) catch {};
+            self.printValue(self.err);
+            self.writer.print(", \"type\": ", .{}) catch {};
+            self.printValue(self.type);
+            self.writer.print(", \"data\": \"" ++ fmt ++ "\" }\n", args) catch {};
         }
 
         // TODO: Maybe implements this part in ft.fmt ??
