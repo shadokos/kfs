@@ -25,7 +25,16 @@ pub fn kernel_log(
         args,
     );
     if (message_level == .err and scope == .default) {
-        if (@import("build_options").optimize != .Debug) {
+        if (@import("build_options").ci) {
+            var com_port = @import("shell/ci/shell.zig").com_port_1;
+            var packet = @import("shell/ci/packet.zig").Packet(void).init(com_port.get_writer().any());
+
+            packet.err = error.KernelPanic;
+            _ = com_port.write("\n") catch {}; // Ensure starting a new packet if we panicked in the middle of one
+            packet.sendf(format, args);
+
+            @import("drivers/acpi/acpi.zig").power_off();
+        } else if (@import("build_options").optimize != .Debug) {
             screen_of_death(format, args);
             while (true) @import("cpu.zig").halt();
         } else {
