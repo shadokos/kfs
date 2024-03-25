@@ -1,7 +1,6 @@
-const tty = @import("../../tty/tty.zig");
-const ft = @import("../../ft/ft.zig");
+const tty = @import("../tty/tty.zig");
+const ft = @import("../ft/ft.zig");
 const StackIterator = ft.debug.StackIterator;
-const Shell = @import("shell.zig").Shell;
 
 const c = @import("colors");
 
@@ -20,7 +19,7 @@ pub fn print_error(shell: anytype, comptime msg: []const u8, args: anytype) void
     ft.fmt.format(shell.writer, c.red ++ "Error" ++ c.reset ++ ": " ++ msg ++ "\n", args) catch {};
 }
 
-pub fn print_prompt(shell: *const Shell) void {
+pub fn print_prompt(shell: anytype) void {
     ensure_newline(shell.writer);
 
     // print the prompt:
@@ -191,8 +190,8 @@ pub inline fn dump_stack() void {
 }
 
 pub fn print_mmap() void {
-    const multiboot = @import("../../multiboot.zig");
-    const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
+    const multiboot = @import("../multiboot.zig");
+    const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
 
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_BASIC_MEMINFO)) |basic_meminfo| {
         tty.printk("mem lower: 0x{x:0>8} Kb\n", .{basic_meminfo.mem_lower});
@@ -233,8 +232,8 @@ pub fn print_mmap() void {
 }
 
 pub fn print_elf() void {
-    const multiboot = @import("../../multiboot.zig");
-    const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
+    const multiboot = @import("../multiboot.zig");
+    const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS)) |t| {
         var iter = multiboot.section_hdr_it{ .base = t };
         tty.printk("{s: <32} {s: <8} {s: <8} {s: <8} {s: <8}\n", .{
@@ -265,11 +264,11 @@ pub fn show_palette() void {
     }
 }
 
-pub fn fuzz(allocator: ft.mem.Allocator, nb: usize, max_size: usize) !void {
-    const Fuzzer = @import("../../memory/fuzzer.zig").Fuzzer(1000);
+pub fn fuzz(allocator: ft.mem.Allocator, writer: ft.io.AnyWriter, nb: usize, max_size: usize, quiet: bool) !void {
+    const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(1000);
 
-    var fuzzer: Fuzzer = Fuzzer.init(allocator, &Fuzzer.converging);
+    var fuzzer: Fuzzer = Fuzzer.init(allocator, writer, &Fuzzer.converging);
     defer fuzzer.deinit();
 
-    return fuzzer.fuzz(nb, max_size);
+    return fuzzer.fuzz(nb, max_size, quiet);
 }

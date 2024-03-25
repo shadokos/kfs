@@ -2,14 +2,9 @@ from ci_core import Tests, Test, Client
 
 client = Client('localhost', 4444)
 
-tests = Tests(client, "Tests")
-tests.add(Test("Test_1", "shadok"))
-tests.add(Test("Test_2", "cmd_test"))
+test_allocations = Tests(client, "Allocations")
 
-tests.run()
+test_allocations.add(Test("Physical memory allocator", "kfuzz 100000 32000",))
+test_allocations.add(Test("Virtual memory allocator", "vfuzz 100000 64000"))
 
-tests_2 = Tests(client, "Tests 2")
-tests_2.add(Test("Test_1", "cmd_test"))
-tests_2.add(Test("Test_2", "ultimate_answer"))
-
-tests_2.run()
+test_allocations.run()
