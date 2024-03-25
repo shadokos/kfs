@@ -27,7 +27,7 @@ pub fn kernel_log(
     if (message_level == .err and scope == .default) {
         if (@import("build_options").ci) {
             var com_port = @import("shell/ci/shell.zig").com_port_1;
-            var packet = @import("shell/ci/packet.zig").Packet(void).init(com_port.get_writer().any());
+            var packet = @import("shell/ci/packet.zig").Packet([]u8).init(com_port.get_writer().any());
 
             packet.err = error.KernelPanic;
             _ = com_port.write("\n") catch {}; // Ensure starting a new packet if we panicked in the middle of one
