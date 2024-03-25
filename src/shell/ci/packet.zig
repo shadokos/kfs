@@ -1,6 +1,8 @@
 const ft = @import("../../ft/ft.zig");
 const Shell = @import("shell.zig").Shell;
 
+const allocator = @import("../../memory.zig").physicalMemory.allocator();
+
 pub fn Packet(comptime T: type) type {
     return struct {
         const Self = @This();
@@ -22,11 +24,12 @@ pub fn Packet(comptime T: type) type {
 
         pub fn sendf(self: *Self, comptime fmt: []const u8, args: anytype) void {
             if (self.err) |_| self.type = .Error;
-            self.writer.print("{{ \"err\": ", .{}) catch {};
-            self.printValue(self.err);
-            self.writer.print(", \"type\": ", .{}) catch {};
-            self.printValue(self.type);
-            self.writer.print(", \"data\": \"" ++ fmt ++ "\" }\n", args) catch {};
+            var buffer = ft.ArrayList(u8).init(allocator);
+            ft.fmt.format(buffer.writer(), fmt, args) catch {};
+            self.data = buffer.slice;
+            defer buffer.deinit();
+            printValue(self, self.*);
+            _ = self.writer.write("\n") catch {};
         }
 
         // TODO: Maybe implements this part in ft.fmt ??
