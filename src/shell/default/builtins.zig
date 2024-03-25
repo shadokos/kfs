@@ -1,7 +1,7 @@
 const ft = @import("../../ft/ft.zig");
 const tty = @import("../../tty/tty.zig");
 const helpers = @import("helpers.zig");
-const utils = @import("utils.zig");
+const utils = @import("../utils.zig");
 const CmdError = @import("../Shell.zig").CmdError;
 const colors = @import("colors");
 
@@ -236,7 +236,7 @@ pub fn shrink(_: anytype, _: [][]u8) CmdError!void {
     while (node) |n| : (node = n.next) n.shrink();
 }
 
-pub fn kfuzz(_: anytype, args: [][]u8) CmdError!void {
+pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
     const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
@@ -248,12 +248,14 @@ pub fn kfuzz(_: anytype, args: [][]u8) CmdError!void {
 
     return utils.fuzz(
         @import("../../memory.zig").physicalMemory.allocator(),
+        shell.writer,
         nb,
         max_size,
+        false,
     ) catch CmdError.OtherError;
 }
 
-pub fn vfuzz(_: anytype, args: [][]u8) CmdError!void {
+pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
     const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
@@ -265,7 +267,9 @@ pub fn vfuzz(_: anytype, args: [][]u8) CmdError!void {
 
     return utils.fuzz(
         @import("../../memory.zig").virtualMemory.allocator(),
+        shell.writer,
         nb,
         max_size,
+        false,
     ) catch CmdError.OtherError;
 }

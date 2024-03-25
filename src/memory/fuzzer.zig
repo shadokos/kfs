@@ -18,6 +18,8 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
         rand: ft.Random = undefined,
         /// the strategy used for this fuzzing
         strategy: Strategy,
+        /// writer used for output
+        writer: ft.io.AnyWriter,
 
         /// global instance of the xoroshiro algorithm
         var xoro = ft.Random.Xoroshiro128.init(42);
@@ -40,11 +42,16 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
         const Self = @This();
 
         /// init a fuzzer object
-        pub fn init(_allocator: ft.mem.Allocator, _strategy: ?Strategy) Self {
+        pub fn init(
+            _allocator: ft.mem.Allocator,
+            _writer: ft.io.AnyWriter,
+            _strategy: ?Strategy,
+        ) Self {
             return Self{
                 .allocator = _allocator,
                 .rand = xoro.random(),
                 .strategy = _strategy orelse default_strategy,
+                .writer = _writer,
             };
         }
 
@@ -62,7 +69,7 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
 
         /// main function, iterations is the number of actions that will be made,
         /// max_size is the maximum size of an allocation
-        pub fn fuzz(self: *Self, iterations: usize, max_size: usize) !void {
+        pub fn fuzz(self: *Self, iterations: usize, max_size: usize, quiet: bool) !void {
             var action: Action = .Allocate;
             for (0..iterations) |_| {
                 action = self.strategy(self, action);
@@ -70,13 +77,13 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
                     .Allocate => {
                         const size = self.rand.intRangeAtMost(usize, 1, max_size);
                         const ptr = self.allocator.alloc(u8, size) catch |e| {
-                            printk("\x1b[31mUnable to allocate: {s}\x1b[0m\n", .{@errorName(e)});
+                            self.writer.print("\x1b[31mUnable to allocate: {s}\x1b[0m\n", .{@errorName(e)}) catch {};
                             return error.FuzzingFailure;
                         };
                         self.n_alloc +|= 1;
                         @memset(ptr, @as(u8, checksum(@intFromPtr(ptr.ptr))));
                         self.add_chunk(ptr);
-                        printk(
+                        if (!quiet) self.writer.print(
                             "\x1b[37malloc(\x1b[34m{d: " ++
                                 "<5}\x1b[37m)\x1b[31m => " ++
                                 "\x1b[34m0x{x:0>8}\x1b[0m checksum: \x1b[35m{x:0>2}\x1b[0m\n",
@@ -85,22 +92,25 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
                                 @intFromPtr(ptr.ptr),
                                 checksum(@intFromPtr(ptr.ptr)),
                             },
-                        );
+                        ) catch {};
                     },
                     .Free => if (self.size != 0) {
                         const chunk = self.rand.intRangeLessThan(usize, 0, self.size);
                         const slice = self.chunks[chunk];
                         const ptr = slice.ptr;
-                        printk("\x1b[37mfree(\x1b[34m0x{x:0>8}\x1b[37m)\x1b[0m\n", .{@intFromPtr(ptr)});
+                        if (!quiet) self.writer.print(
+                            "\x1b[37mfree(\x1b[34m0x{x:0>8}\x1b[37m)\x1b[0m\n",
+                            .{@intFromPtr(ptr)},
+                        ) catch {};
                         const sum = checksum(@intFromPtr(ptr));
                         for (self.chunks[chunk], 0..) |c, i| {
                             if (c != sum) {
-                                printk(
+                                self.writer.print(
                                     "\x1b[31mInvalid checksum, expected \x1b[35m{x:0>2}\x1b[31m, " ++
                                         "got [\x1b[35m{x:0>2}\x1b[31m]\x1b[31m " ++
                                         "at \x1b[34m{d}\x1b[0m\n",
                                     .{ sum, c, i },
-                                );
+                                ) catch {};
                                 return error.FuzzingFailure;
                             }
                         }
@@ -110,7 +120,7 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
                     },
                 }
             }
-            printk("\n\x1b[32mSuccess!\x1b[0m\n", .{});
+            self.writer.print("\n\x1b[32mSuccess!\x1b[0m\n", .{}) catch {};
             self.status();
         }
 
@@ -158,10 +168,10 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
 
         /// print the current status of the fuzzer
         pub fn status(self: *Self) void {
-            printk("Status:\n", .{self.n_alloc});
-            printk("\x1b[31m{d: <6}\x1b[0m allocations\n", .{self.n_alloc});
-            printk("\x1b[31m{d: <6}\x1b[0m free\n", .{self.n_free});
-            printk("\x1b[31m{d: <6}\x1b[0m active\n", .{self.size});
+            self.writer.print("Status:\n", .{self.n_alloc}) catch {};
+            self.writer.print("\x1b[31m{d: <6}\x1b[0m allocations\n", .{self.n_alloc}) catch {};
+            self.writer.print("\x1b[31m{d: <6}\x1b[0m free\n", .{self.n_free}) catch {};
+            self.writer.print("\x1b[31m{d: <6}\x1b[0m active\n", .{self.size}) catch {};
         }
     };
 }
