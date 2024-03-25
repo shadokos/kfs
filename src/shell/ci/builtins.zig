@@ -1,39 +1,49 @@
+const CmdError = @import("../Shell.zig").CmdError;
 const Packet = @import("packet.zig").Packet;
+const ft = @import("../../ft/ft.zig");
+const utils = @import("../utils.zig");
 
-pub fn cmd_test(shell: anytype, _: anytype) void {
+pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 2) return CmdError.InvalidNumberOfArguments;
+
+    const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const max_size = if (args.len == 3) ft.fmt.parseInt(
+        usize,
+        args[2],
+        0,
+    ) catch return CmdError.InvalidParameter else 10000;
+
     var packet = Packet(void).init(shell.writer);
-    shell.writer.print("This is a test... 0x{x:0>4}\n", .{0x42}) catch {};
     packet.type = .Success;
+    packet.err = if (utils.fuzz(
+        @import("../../memory.zig").physicalMemory.allocator(),
+        shell.writer,
+        nb,
+        max_size,
+        true,
+    )) |_| null else |e| e;
     packet.send();
 }
 
-pub fn ultimate_answer(shell: anytype, _: anytype) void {
-    var packet = Packet(void).init(shell.writer);
-    shell.writer.print("Calculating Ultimate Answer..\n", .{0x42}) catch {};
-    for (0..250_000_000) |_| asm volatile ("nop");
-    shell.writer.print("Calculating Trajectories\n", .{}) catch {};
-    for (0..250_000_000) |_| asm volatile ("nop");
-    shell.writer.print("Overlaying Grid onto Bezier Curves\n", .{}) catch {};
-    for (0..250_000_000) |_| asm volatile ("nop");
-    shell.writer.print("Patching Conics\n", .{}) catch {};
-    for (0..250_000_000) |_| asm volatile ("nop");
-    shell.writer.print("Biding Time\n", .{}) catch {};
-    for (0..250_000_000) |_| asm volatile ("nop");
-    shell.writer.print("Untangling Space Tape\n", .{}) catch {};
-    for (0..250_000_000) |_| asm volatile ("nop");
-    shell.writer.print("Recalibrating Density Scale\n", .{}) catch {};
-    for (0..250_000_000) |_| asm volatile ("nop");
-    shell.writer.print("The Ultimate Answer is ...\n", .{}) catch {};
-    for (0..750_000_000) |_| asm volatile ("nop");
-    shell.writer.print("{d}\n", .{42}) catch {};
-    packet.type = .Success;
-    packet.send();
-}
+pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
-pub fn shadok(shell: anytype, _: anytype) void {
+    const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const max_size = if (args.len == 3) ft.fmt.parseInt(
+        usize,
+        args[2],
+        0,
+    ) catch return CmdError.InvalidParameter else 10000;
+
     var packet = Packet(void).init(shell.writer);
-    shell.writer.print("Ga Bu Zo Meu (ѷ)\n", .{}) catch {};
     packet.type = .Success;
+    packet.err = if (utils.fuzz(
+        @import("../../memory.zig").virtualMemory.allocator(),
+        shell.writer,
+        nb,
+        max_size,
+        true,
+    )) |_| null else |e| e;
     packet.send();
 }
 
