@@ -60,8 +60,6 @@ class Client:
 
     def receive(self) -> Union[bytes, None]:
         data = self.buffer.read_delimiter(self.delimiter)
-        #if data is not None:
-        #    print(f'Received {data}')
         return data
 
 class Test:

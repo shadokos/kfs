@@ -72,7 +72,7 @@ fn FixedBufferStream(comptime Buffer: type) type {
             return ret;
         }
 
-        pub fn writer(self: *Self) Self.Writer {
+        pub fn writer(self: *Self) Writer {
             return Self.Writer{ .context = self };
         }
     };

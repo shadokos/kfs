@@ -18,7 +18,7 @@ pub fn Packet(comptime T: type) type {
 
         pub fn send(self: *Self) void {
             if (self.err) |_| self.type = .Error;
-            printValue(self, self.*);
+            self.printValue(self.*);
             _ = self.writer.write("\n") catch {};
         }
 
@@ -28,7 +28,7 @@ pub fn Packet(comptime T: type) type {
             ft.fmt.format(buffer.writer(), fmt, args) catch {};
             self.data = buffer.slice;
             defer buffer.deinit();
-            printValue(self, self.*);
+            self.printValue(self.*);
             _ = self.writer.write("\n") catch {};
         }
 
@@ -83,7 +83,7 @@ pub fn Packet(comptime T: type) type {
                     self.writer.print("null", .{}) catch {};
                 },
                 else => {
-                    @compileLog(@typeInfo(@TypeOf(data)));
+                    @compileError("unsupported type: " ++ @typeName(@TypeOf(data)));
                 },
             }
         }
