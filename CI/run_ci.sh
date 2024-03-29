@@ -1,7 +1,6 @@
 #!/bin/bash
 
-cd -- $(dirname $0)/..
-working_dir=$(pwd)
+cd $(dirname $0)/..
 
 docker build CI -t qemu
 docker run --rm --name qemu -p 4444:4444 -w /build -v ./:/build:rw -d \
