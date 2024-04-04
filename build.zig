@@ -1,48 +1,46 @@
 const std = @import("std");
-const Builder = @import("std").Build;
-const Target = @import("std").Target;
-const Feature = @import("std").Target.Cpu.Feature;
-const CrossTarget = @import("std").zig.CrossTarget;
+const Step = @import("std").build.Step;
+const Builder = @import("std").build.Builder;
 
-pub fn build(b: *Builder) void {
-    const name = b.option([]const u8, "name", "Specify a name for output binary") orelse "kernel.elf";
-    const posix = b.option(bool, "posix", "Enable this flag if strict POSIX conformance is wanted") orelse false;
-    const optimize = b.standardOptimizeOption(.{});
+pub const BuildContext = struct {
+    builder: *Builder,
+    build_options: *Step.Options = undefined,
 
-    var cpu_features_sub: Feature.Set = Feature.Set.empty;
+    // Steps
+    kernel: *Step.Compile = undefined,
+    grub: *Step.Run = undefined,
+    qemu: *Step.Run = undefined,
+    run: *Step = undefined,
 
-    const features = Target.x86.Feature;
-    cpu_features_sub.addFeature(@intFromEnum(features.mmx));
-    cpu_features_sub.addFeature(@intFromEnum(features.sse));
-    cpu_features_sub.addFeature(@intFromEnum(features.sse2));
-    cpu_features_sub.addFeature(@intFromEnum(features.avx));
-    cpu_features_sub.addFeature(@intFromEnum(features.avx2));
+    // Installed files
+    install_iso_folder: *Step.InstallDir = undefined,
+    install_disk_image: *Step.InstallFile = undefined,
+    install_kernel: *Step.InstallArtifact = undefined,
+};
 
-    const target = b.resolveTargetQuery(CrossTarget{
-        .cpu_arch = Target.Cpu.Arch.x86,
-        .os_tag = Target.Os.Tag.freestanding,
-        .abi = Target.Abi.none,
-        .cpu_features_sub = cpu_features_sub,
-    });
+pub fn build(b: *Builder) !void {
+    var context = BuildContext{ .builder = b };
 
-    const kernel = b.addExecutable(.{
-        .name = name,
-        .root_source_file = .{ .path = "src/boot.zig" },
-        .target = target,
-        .optimize = optimize,
-    });
+    const iso_source_dir = context.builder.option(
+        []const u8,
+        "iso_dir",
+        "Specify the iso directory source",
+    ) orelse "iso";
 
-    const build_options = b.addOptions();
-    build_options.addOption(bool, "posix", posix);
-    build_options.addOption(std.builtin.OptimizeMode, "optimize", optimize);
-    kernel.root_module.addOptions("build_options", build_options);
+    const name = context.builder.option(
+        []const u8,
+        "name",
+        "Specify a name for output binary",
+    ) orelse "kfs.elf";
 
-    const colors_module = b.createModule(.{ .source_file = .{ .path = "./src/misc/colors.zig" } });
-    kernel.addModule("colors", colors_module);
+    const posix = context.builder.option(
+        bool,
+        "posix",
+        "Enable this flag if strict POSIX conformance is wanted",
+    ) orelse false;
 
-    kernel.addIncludePath(std.Build.LazyPath{ .path = "./src/c_headers/" });
-    kernel.entry = .{ .symbol_name = "_entry" };
-
-    kernel.setLinkerScriptPath(.{ .path = "src/linker.ld" });
-    b.installArtifact(kernel);
+    @import("build/disk_image.zig").install_iso_folder(&context, iso_source_dir);
+    @import("build/kernel.zig").build_executable(&context, name, posix);
+    @import("build/disk_image.zig").build_disk_image(&context);
+    @import("build/qemu.zig").add_step_run(&context);
 }
