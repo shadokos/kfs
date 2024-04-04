@@ -1,6 +1,6 @@
 #!/usr/bin/sh
 
-result=$(${ZIG:=zig} fmt --check src build.zig)
+result=$(${ZIG:=zig} fmt --check src build.zig build)
 if [ $? -ne 0 ]; then
   if [ -n "$result" ]; then
     echo "$result" 1>&2
@@ -9,7 +9,7 @@ if [ $? -ne 0 ]; then
   exit 1
 fi
 
-result=$(grep -REn '.{120,}' src build.zig | sed -E 's/^(.{80}).*/\1(...)/g')
+result=$(grep -REn '.{120,}' src build.zig build/**.zig | sed -E 's/^(.{80}).*/\1(...)/g')
 if [ -n "$result" ]; then
   echo "Error: Found lines longer than 120 characters." 1>&2
   echo "$result" 1>&2
