@@ -272,7 +272,7 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
             const dr: i32 = if (n.avl[@intFromEnum(field)].r) |r| self.check_node(r, field) else 0;
             if (dl - dr != n.avl[@intFromEnum(field)].balance_factor or
                 n.avl[@intFromEnum(field)].balance_factor > 1 or
-                .avl[@intFromEnum(field)].balance_factor < -1)
+                n.avl[@intFromEnum(field)].balance_factor < -1)
             {
                 self.print();
                 @panic("invalid tree in " ++ @typeName(Self));
