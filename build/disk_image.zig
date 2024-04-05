@@ -1,11 +1,11 @@
 const std = @import("std");
 
 const BuildContext = @import("../build.zig").BuildContext;
-const addDirectoryDependency = @import("DirectoryDependency.zig").addDirectoryDependency;
+const addDirectoryDependency = @import("Step/DirectoryDependency.zig").addDirectoryDependency;
 
-pub fn install_iso_folder(context: *BuildContext, iso_source_dir: []const u8) void {
+pub fn install_iso_folder(context: *BuildContext) void {
     context.install_iso_folder = context.builder.addInstallDirectory(.{
-        .source_dir = .{ .path = iso_source_dir },
+        .source_dir = .{ .path = context.iso_source_dir },
         .install_dir = .prefix,
         .install_subdir = "iso",
     });

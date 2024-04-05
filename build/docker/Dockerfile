@@ -4,4 +4,4 @@ RUN echo 'https://dl-cdn.alpinelinux.org/alpine/edge/testing' >> /etc/apk/reposi
 
 RUN apk update
 
-RUN apk add zig make grub mtools xorriso grub-bios grub-dev grub-efi xz
+RUN apk add zig make grub mtools xorriso grub-bios grub-dev grub-efi xz wget
