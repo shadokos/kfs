@@ -1,10 +1,16 @@
 const std = @import("std");
 
 const BuildContext = @import("../build.zig").BuildContext;
-const addDirectoryDependency = @import("DirectoryDependency.zig").addDirectoryDependency;
+const addDirectoryDependency = @import("Step/DirectoryDependency.zig").addDirectoryDependency;
 
 pub fn install_themes(context: *BuildContext) void {
-    const themes = context.builder.addSystemCommand(&.{ "make", "-f", "build/Themes.mk", "install_themes" });
+    const themes = context.builder.addSystemCommand(&.{
+        "make",
+        "-f",
+        "build/Makefiles/Themes.mk",
+        "install_themes",
+        "--no-print-directory",
+    });
 
     themes.setName("retrieve themes");
     context.kernel.step.dependOn(&themes.step);
