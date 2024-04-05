@@ -6,7 +6,7 @@ const Step = @import("std").build.Step;
 const Target = @import("std").Target;
 const BuildContext = @import("../build.zig").BuildContext;
 
-pub fn build_executable(context: *BuildContext, name: []const u8, posix: bool) void {
+pub fn build_executable(context: *BuildContext) void {
     var cpu_features_sub: Feature.Set = Feature.Set.empty;
     cpu_features_sub.addFeature(@intFromEnum(Target.x86.Feature.mmx));
     cpu_features_sub.addFeature(@intFromEnum(Target.x86.Feature.sse));
@@ -15,7 +15,7 @@ pub fn build_executable(context: *BuildContext, name: []const u8, posix: bool) v
     cpu_features_sub.addFeature(@intFromEnum(Target.x86.Feature.avx2));
 
     context.kernel = context.builder.addExecutable(.{
-        .name = name,
+        .name = context.name,
         .root_source_file = .{ .path = "src/boot.zig" },
         .target = CrossTarget{
             .cpu_arch = Target.Cpu.Arch.x86,
@@ -23,11 +23,11 @@ pub fn build_executable(context: *BuildContext, name: []const u8, posix: bool) v
             .abi = Target.Abi.none,
             .cpu_features_sub = cpu_features_sub,
         },
-        .optimize = context.builder.standardOptimizeOption(.{}),
+        .optimize = context.optimize,
     });
 
     context.build_options = context.builder.addOptions();
-    context.build_options.addOption(bool, "posix", posix);
+    context.build_options.addOption(bool, "posix", context.posix);
     context.build_options.addOption(std.builtin.OptimizeMode, "optimize", context.kernel.optimize);
     context.kernel.addOptions("build_options", context.build_options);
 

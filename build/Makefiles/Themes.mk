@@ -27,6 +27,4 @@ $(THEME_FILES): | ${SRCDIR}/$(THEME_DIR)
 
 ${SRCDIR}/$(THEME_INDEX): $(THEME_FILES) | ${SRCDIR}/$(THEME_DIR)
 	cat ${THEME_LIST} | tr ' ' '_' | paste -d\| ${THEME_LIST} - | grep -vE '^[[:space:]]*\|[[:space:]]*$$' | sed -E "s/(.*)\|(.*)/pub const @\"\1\" = @import(\"\2.zig\");/g" > ${SRCDIR}/$(THEME_INDEX)
-
-$(THEME_LIST):
-	@
+	zig fmt ${SRCDIR}/$(THEME_DIR) 1>/dev/null
