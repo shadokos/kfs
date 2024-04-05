@@ -8,12 +8,13 @@ $(DOCKER_STAMP): $(DOCKERFILE_DIR)/Dockerfile
 		> $(DOCKER_STAMP)
 
 VOLUME_NAME=kfs
-ZIG = $(DOCKER_CMD) run --rm -w /build -v $(VOLUME_NAME):/build:rw -ti zig zig
+ZIG = $(DOCKER_CMD) run --rm -w /build -v $(VOLUME_NAME):/build:rw zig zig
 
 build: $(DOCKER_STAMP)
 debug: $(DOCKER_STAMP)
 release: $(DOCKER_STAMP)
 fast: $(DOCKER_STAMP)
+format: $(DOCKER_STAMP)
 
 .PHONY: run
 run: build
