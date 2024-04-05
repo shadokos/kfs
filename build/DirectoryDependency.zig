@@ -10,7 +10,7 @@ const AddDirectoryStep = struct {
         const b = step.owner;
 
         const dir_path = self.dir_path.getPath(b);
-        var dir = std.fs.cwd().openIterableDir(dir_path, .{}) catch @panic("grr");
+        var dir = std.fs.cwd().openIterableDir(dir_path, .{}) catch return;
         defer dir.close();
 
         var iter = try dir.walk(b.allocator);

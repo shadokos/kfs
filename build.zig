@@ -7,6 +7,7 @@ pub const BuildContext = struct {
     build_options: *Step.Options = undefined,
 
     // Steps
+    //themes: *Step.Run = undefined,
     kernel: *Step.Compile = undefined,
     grub: *Step.Run = undefined,
     qemu: *Step.Run = undefined,
@@ -41,6 +42,7 @@ pub fn build(b: *Builder) !void {
 
     @import("build/disk_image.zig").install_iso_folder(&context, iso_source_dir);
     @import("build/kernel.zig").build_executable(&context, name, posix);
+    @import("build/themes.zig").install_themes(&context);
     @import("build/disk_image.zig").build_disk_image(&context);
     @import("build/qemu.zig").add_step_run(&context);
 }
