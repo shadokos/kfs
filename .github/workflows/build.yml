@@ -1,0 +1,23 @@
+name: BUILD
+on:
+  push:
+    branches: ['main', 'dev/**']
+  pull_request:
+    branches: ['main', 'dev/**']
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - name: Check format
+        run: make DOCKER=1 format
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - name: Build kernel sources
+        run: make DOCKER=1
