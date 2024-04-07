@@ -1,25 +1,18 @@
 BUILD_ARGS ?= --summary all --verbose
+ZIG ?= zig
 
 # get the last optimize option
 OPTIMIZE ?= $(shell echo $$(ls ".optimize-*" 2>/dev/null || echo Debug) | cut -d'-' -f2)
-CI ?= false
-
-ifeq ($(CI),true)
-    BUILD_ARGS := -Dci=true -Diso_dir=./CI/iso $(BUILD_ARGS)
-endif
 
 .PHONY: all
 all: build
 
-ifndef DOCKER
-    ZIG ?= zig
+-include build/Makefiles/Docker.mk
+-include build/Makefiles/CI.mk
 
-    .PHONY: run
-    run:
-		$(ZIG) build -Doptimize=$(OPTIMIZE) run $(BUILD_ARGS)
-else
-    -include build/Makefiles/Docker.mk
-endif
+.PHONY: run
+run: build
+	qemu-system-i386 -cdrom kfs.iso
 
 .PHONY: build
 build:
