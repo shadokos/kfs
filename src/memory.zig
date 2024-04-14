@@ -1,194 +1,198 @@
-const cpu = @import("cpu.zig");
 const boot = @import("boot.zig");
 const interrupts = @import("interrupts.zig");
 const ft = @import("ft/ft.zig");
 const tty = @import("./tty/tty.zig");
 const printk = @import("./tty/tty.zig").printk;
 const PageFrameAllocator = @import("memory/page_frame_allocator.zig").PageFrameAllocator;
+const DirectPageAllocator = @import("memory/direct_page_allocator.zig").DirectPageAllocator;
 const paging = @import("memory/paging.zig");
 const multiboot = @import("multiboot.zig");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const mapping = @import("memory/mapping.zig");
-const VirtualPageAllocator = @import("memory/virtual_page_allocator.zig").VirtualPageAllocator;
-const VirtualMemory = @import("memory/virtual_memory.zig").VirtualMemory;
-const PhysicalMemory = @import("memory/physical_memory.zig").PhysicalMemory;
 const logger = @import("ft/ft.zig").log.scoped(.memory);
+const VirtualSpace = @import("memory/virtual_space.zig").VirtualSpace;
 
-pub const VirtualPageAllocatorType = VirtualPageAllocator(PageFrameAllocator);
-pub var virtualPageAllocator: VirtualPageAllocatorType = .{};
+const StaticAllocator = @import("memory/object_allocators/static_allocator.zig").StaticAllocator;
+const PageGrainedAllocator = @import("memory/object_allocators/page_grained_allocator.zig").PageGrainedAllocator;
+const MultipoolAllocator = @import("memory/object_allocators/multipool_allocator.zig").MultipoolAllocator;
 
-pub var pageFrameAllocator: PageFrameAllocator = .{};
+const PageFrameAllocatorType = PageFrameAllocator(enum {
+    Medium,
+    Direct,
+});
 
-pub const VirtualMemoryType = VirtualMemory(VirtualPageAllocatorType);
-pub var virtualMemory: VirtualMemoryType = undefined;
+pub var pageFrameAllocator: PageFrameAllocatorType = .{};
 
-pub var globalCache: @import("memory/cache.zig").GlobalCache = undefined;
+pub var kernel_virtual_space: VirtualSpace = undefined;
 
-pub var physicalMemory: PhysicalMemory = .{};
+pub var globalCache: @import("memory/object_allocators/slab/cache.zig").GlobalCache = undefined;
 
-pub fn map_kernel() void {
+// ======= page allocators =======
+pub var directPageAllocator: DirectPageAllocator = undefined;
+pub var physically_contiguous_page_allocator = kernel_virtual_space.generate_page_allocator(.{
+    .immediate_mapping = true,
+    .physically_contiguous = true,
+});
+pub var virtually_contiguous_page_allocator = kernel_virtual_space.generate_page_allocator(.{
+    .immediate_mapping = true,
+    .physically_contiguous = false,
+});
+//  =================================
 
-    // create space for all the tables of the kernel space
-    const tables: *align(4096) [256][paging.page_table_size]paging.page_table_entry = @ptrCast(
-        (virtualPageAllocator.alloc_pages_opt(
-            256,
-            .{ .type = .KernelSpace },
-        ) catch @panic("not enought space to map kernel")),
-    );
-    // at the end of this functions the page tables are only unmapped but not freed
-    defer virtualPageAllocator.unmap_object(@ptrCast(tables), 256 * paging.page_size) catch unreachable;
+// ======= object allocators =======
+pub var boot_allocator: StaticAllocator(
+    PageFrameAllocatorType.UnderlyingAllocator.size_for(paging.direct_zone_size / paging.page_size),
+) = .{};
+pub var virtualMemory: PageGrainedAllocator = undefined;
+pub var physicalMemory: MultipoolAllocator = undefined;
+//  =================================
 
-    // init all the page tables of the kernelspace
-    for (0..(paging.kernel_virtual_space_size >> 22)) |i| {
-        if (paging.page_table_table_ptr[768 + i].present) {
-            @memcpy(tables[i][0..], mapping.get_table_ptr(@intCast(768 + i))[0..]);
-            paging.page_dir_ptr[768 + i].address_fragment = @truncate((mapping.get_physical_ptr(
-                @ptrCast(&tables[i]),
-            ) catch unreachable) >> 12);
-        } else {
-            @memset(tables[i][0..], paging.page_table_entry{});
-            paging.page_dir_ptr[768 + i].address_fragment = @truncate((mapping.get_physical_ptr(
-                @ptrCast(&tables[i]),
-            ) catch unreachable) >> 12);
-            paging.page_table_table_ptr[768 + i].present = true;
-        }
-    }
+const InterruptFrame = @import("interrupts.zig").InterruptFrame;
 
-    // set kernelspace to supervisor only mapping
-    for (0..256) |i| {
-        paging.page_table_table_ptr[768 + i].owner = .Supervisor;
-    }
-
-    // set read only kernel sections to non writable mapping for extra safety
-    if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS)) |t| {
-        var iter = multiboot.section_hdr_it{ .base = t };
-        while (iter.next()) |e| {
-            if (e.sh_addr >= paging.low_half) {
-                if (!e.sh_flags.SHF_WRITE) {
-                    virtualPageAllocator.mapper.set_rights(
-                        @ptrFromInt(e.sh_addr),
-                        ft.math.divCeil(
-                            u32,
-                            e.sh_size,
-                            paging.page_size,
-                        ) catch unreachable,
-                        false,
-                    ) catch unreachable;
-                }
-            }
-        }
-    }
-
-    // free the spaces taken by the early page tables
-    for (&@import("trampoline.zig").page_tables) |*table| {
-        pageFrameAllocator.free_pages(@intFromPtr(table), 1) catch unreachable;
-        const mapped = virtualPageAllocator.map_object_anywhere(
-            @intFromPtr(table),
-            paging.page_size,
-            .KernelSpace,
-        ) catch @panic("cannot init memory");
-        @memset(@as(paging.VirtualPagePtr, @ptrCast(@alignCast(mapped))), 0);
-        virtualPageAllocator.unmap_object(mapped, paging.page_size) catch unreachable;
-    }
-
-    // shrink the kernel executable space to its actual size
-    const kernel_aligned_begin = ft.mem.alignForward(
-        usize,
-        @intFromPtr(boot.kernel_end) + paging.low_half,
-        paging.page_size,
-    );
-    const kernel_aligned_end = ft.mem.alignForward(
-        usize,
-        @import("trampoline.zig").kernel_size + paging.low_half,
-        paging.page_size,
-    );
-    virtualPageAllocator.unmap_object(
-        @ptrFromInt(kernel_aligned_begin),
-        kernel_aligned_end - kernel_aligned_begin,
-    ) catch @panic("can't shrink kernel");
-}
-
-fn page_fault_handler(arg: u32) callconv(.Interrupt) void {
-    const ErrorType = packed struct(u32) { present: bool, type: enum(u1) {
-        Read = 0,
-        Write = 1,
-    }, mode: enum(u1) {
-        Supervisor = 0,
-        User = 1,
-    }, unused: u29 = undefined };
-    const error_object: ErrorType = @bitCast(arg);
-    @import("ft/ft.zig").log.err(
-        "PAGE FAULT!\n\taddress 0x{x:0>8} is not mapped\n\taction type: {s}\n\tmode: {s}\n\terror: {s}",
-        .{
-            cpu.get_cr2(),
-            @tagName(error_object.type),
-            @tagName(error_object.mode),
-            if (error_object.present) "page-level protection violation" else "page not present",
-        },
-    );
+fn GPE_handler(_: *InterruptFrame, arg: u32) callconv(.Interrupt) void {
+    logger.err("general protection fault 0b{b:0>32}", .{arg});
 }
 
 pub fn init() void {
     logger.debug("Initializing memory", .{});
 
-    interrupts.set_trap_gate(interrupts.Exceptions.PageFault, interrupts.Handler{ .err = &page_fault_handler });
-
     var total_space: u64 = get_max_mem();
-
     logger.debug("\ttotal_space: {x}", .{total_space});
 
+    const direct_begin: paging.PhysicalPtr = ft.mem.alignForward(
+        paging.PhysicalPtr,
+        @intFromPtr(boot.kernel_end),
+        paging.page_size,
+    );
+    const direct_end: paging.PhysicalUsize = @max(direct_begin, ft.mem.alignBackward(
+        paging.PhysicalPtr,
+        @min(
+            total_space,
+            direct_begin + paging.direct_zone_size,
+        ),
+        paging.page_size,
+    ));
+    const direct_size: paging.PhysicalUsize = direct_end - direct_begin;
+
+    const medium_begin: paging.PhysicalPtr = ft.mem.alignForward(paging.PhysicalPtr, direct_end, paging.page_size);
+    const medium_end: paging.PhysicalPtr = @max(medium_begin, ft.mem.alignBackward(
+        paging.PhysicalPtr,
+        @min(
+            total_space,
+            paging.kernel_virtual_space_top,
+        ),
+        paging.page_size,
+    ));
+    const medium_size: paging.PhysicalUsize = medium_end - medium_begin;
+
     logger.debug("\tInitializing page frame allocator...", .{});
-    pageFrameAllocator = PageFrameAllocator.init(total_space);
+    pageFrameAllocator = PageFrameAllocatorType.init(total_space);
+    pageFrameAllocator.init_zone(
+        .Direct,
+        direct_begin,
+        direct_size,
+        boot_allocator.allocator(),
+    );
     logger.debug("\tPage frame allocator initialized", .{});
 
     logger.debug("\tCheck ram availability", .{});
-    check_mem_availability();
+    check_mem_availability(direct_begin, direct_end); // todo
 
-    logger.debug("\tInitializing virtual page allocator...", .{});
-    virtualPageAllocator.init(&pageFrameAllocator) catch |e| {
-        logger.err("error: {s}", .{@errorName(e)});
-        @panic("cannot init virtualPageAllocator");
-    };
-    logger.debug("\tVirtual page allocator initialized", .{});
-
-    logger.debug("\tRemapping kernel...", .{});
-    map_kernel();
-    logger.debug("\tKernel remapped", .{});
+    logger.debug("\tInitializing direct page allocator...", .{});
+    directPageAllocator = DirectPageAllocator.init(paging.high_half);
 
     logger.debug("\tInitializing slab allocator's global cache...", .{});
-    const GlobalCache = @import("memory/cache.zig").GlobalCache;
-    globalCache = GlobalCache.init(&virtualPageAllocator) catch @panic("cannot init globalCache");
+    const GlobalCache = @import("memory/object_allocators/slab/cache.zig").GlobalCache;
+    globalCache = GlobalCache.init(directPageAllocator.page_allocator()) catch @panic("cannot init globalCache");
     logger.debug("\tGlobal cache initialized", .{});
 
     logger.debug("\tInitializing physical memory allocator...", .{});
-    PhysicalMemory.cache_init() catch @panic("cannot cache_init PhysicalMemory");
+    MultipoolAllocator.cache_init("kmalloc", directPageAllocator.page_allocator()) catch {
+        @panic("cannot cache_init MultipoolAllocator");
+    };
     logger.debug("\tPhysical memory allocator initialized", .{});
 
+    logger.debug("\tInitializing kernel virtual space...", .{});
+    VirtualSpace.global_init() catch @panic("unable to init VirtualSpace");
+    kernel_virtual_space.init() catch @panic("unable to init kernel virtual space");
+    const vm_begin = ft.mem.alignForward(usize, paging.high_half + @intFromPtr(boot.kernel_end), paging.page_size);
+    const vm_end = paging.page_tables;
+    kernel_virtual_space.add_space(
+        vm_begin / paging.page_size,
+        @intCast(vm_end / paging.page_size - vm_begin / paging.page_size),
+    ) catch @panic("unable to init kernel virtual space");
+    kernel_virtual_space.add_space(
+        (paging.kernel_page_tables) / paging.page_size,
+        256,
+    ) catch @panic("unable to init kernel virtual space");
+    logger.debug("\tKernel virtual space initialized", .{});
+
+    logger.debug("\tEnabling interrupts...", .{});
+    VirtualSpace.set_handler();
+    interrupts.set_intr_gate(interrupts.Exceptions.GeneralProtectionFault, interrupts.Handler{ .err = &GPE_handler });
+    logger.debug("\tInterrupts enabled...", .{});
+
+    logger.debug("\tActivating kernel virtual space...", .{});
+    kernel_virtual_space.transfer();
+    kernel_virtual_space.fill_page_tables(paging.kernel_page_tables / paging.page_size, 256, true) catch {
+        @panic("not enough space to boot");
+    };
+    logger.debug("\tKernel virtual space activated", .{});
+
+    // logger.debug("\tRemapping kernel...", .{});
+    // map_kernel(); // todo shrink kernel
+    // logger.debug("\tKernel remapped", .{});
+
     logger.debug("\tInitializing virtual memory allocator...", .{});
-    virtualMemory = VirtualMemoryType.init(&virtualPageAllocator);
+    virtualMemory = PageGrainedAllocator.init(virtually_contiguous_page_allocator.page_allocator());
     logger.debug("\tVirtual memory allocator initialized", .{});
+
+    if (medium_size != 0) {
+        logger.debug("\tInitializing medium physical memory (from 0x{x:0>8} to 0x{x:0>8})...", .{
+            medium_begin,
+            medium_end,
+        });
+        pageFrameAllocator.init_zone(
+            .Medium,
+            medium_begin,
+            medium_size,
+            virtualMemory.allocator(),
+        );
+        check_mem_availability(medium_begin, medium_end); // todo
+        logger.debug("\tMedium physical memory initialized...", .{});
+    }
 
     logger.info("Memory initialized", .{});
 }
 
-fn check_mem_availability() void {
+fn check_mem_availability(min: paging.PhysicalPtr, max: paging.PhysicalPtr) void {
     const page_size = @sizeOf(paging.page);
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP)) |t| {
         var iter = multiboot.mmap_it{ .base = t };
         while (iter.next()) |e| {
             if (e.type != multiboot2_h.MULTIBOOT_MEMORY_AVAILABLE)
                 continue;
-            var area_begin: u64 = @intCast(ft.mem.alignForward(u64, e.base, page_size));
-            var area_end: u64 = @intCast(ft.mem.alignBackward(u64, e.base + e.length, page_size));
-            if (area_end > pageFrameAllocator.total_space)
-                area_end = @intCast(
-                    ft.mem.alignBackward(u64, pageFrameAllocator.total_space, page_size),
-                );
+            var area_begin: paging.PhysicalPtr = @intCast(
+                ft.mem.alignForward(
+                    paging.PhysicalPtr,
+                    @as(paging.PhysicalPtr, @truncate(@min(e.base, (1 << 32) - 1))),
+                    page_size,
+                ),
+            );
+            var area_end: paging.PhysicalPtr = @intCast(
+                ft.mem.alignBackward(
+                    paging.PhysicalPtr,
+                    @as(paging.PhysicalPtr, @truncate(@min(e.base + e.length, (1 << 32) - 1))),
+                    page_size,
+                ),
+            );
+            if (area_begin < min)
+                area_begin = ft.mem.alignForward(paging.PhysicalPtr, min, page_size);
+            if (area_end > max)
+                area_end = ft.mem.alignBackward(paging.PhysicalPtr, max, page_size);
             if (area_begin >= area_end) // smaller than a page
                 continue;
             while (area_begin < area_end) : (area_begin += page_size) {
-                if (area_begin < @intFromPtr(boot.kernel_end)) // area is before kernel end
-                    continue;
                 pageFrameAllocator.free_pages(
                     @truncate(area_begin),
                     1,

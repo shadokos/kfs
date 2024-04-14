@@ -53,7 +53,7 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
     @import("cpu.zig").disable_interrupts();
 
     if (eax == multiboot2_h.MULTIBOOT2_BOOTLOADER_MAGIC) {
-        multiboot_info = @ptrFromInt(paging.low_half + ebx); // TODO!
+        multiboot_info = @ptrFromInt(paging.high_half + ebx); // TODO!
     } else @panic("No multiboot2 magic number");
 
     @import("trampoline.zig").clean();
@@ -66,8 +66,6 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
     @import("interrupts.zig").init();
 
     @import("memory.zig").init();
-
-    multiboot_info = multiboot.map(ebx);
 
     @import("drivers/ps2/ps2.zig").init();
 
