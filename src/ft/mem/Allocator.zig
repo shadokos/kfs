@@ -22,13 +22,13 @@ pub fn alignedAlloc(
     const _alignment = alignment orelse @alignOf(T);
     return @as(
         [*]align(_alignment) T,
-        @ptrCast(
+        @ptrCast(@alignCast(
             self.rawAlloc(
                 n * @sizeOf(T),
                 @truncate(ft.math.log2(_alignment)),
                 @returnAddress(),
             ) orelse return Error.OutOfMemory,
-        ),
+        )),
     )[0..n];
 }
 
@@ -63,16 +63,16 @@ pub fn alloc(self: Allocator, comptime T: type, n: usize) Error![]T {
 //     return_address: usize,
 // ) Error!AllocWithOptionsPayload(Elem, optional_alignment, optional_sentinel) {}
 
-fn create(self: Allocator, comptime T: type) Error!*T {
+pub fn create(self: Allocator, comptime T: type) Error!*T {
     return &(try self.alloc(T, 1))[0];
 }
 
-fn destroy(self: Allocator, ptr: anytype) void {
+pub fn destroy(self: Allocator, ptr: anytype) void {
     const T = @typeInfo(@TypeOf(ptr)).Pointer.child;
     return self.free(@as([*]T, @ptrCast(@alignCast(ptr)))[0..1]);
 }
 
-fn dupe(allocator: Allocator, comptime T: type, m: []const T) Error![]T {
+pub fn dupe(allocator: Allocator, comptime T: type, m: []const T) Error![]T {
     var ret = try allocator.alloc(T, m.len);
     @memcpy(ret[0..], m[0..]);
     return ret;

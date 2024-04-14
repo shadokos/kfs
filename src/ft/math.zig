@@ -21,9 +21,9 @@ pub fn IntFittingRange(comptime from: comptime_int, comptime to: comptime_int) t
     }
 
     var absolute_max = if (-from > to) -from else to;
-    comptime var bits = @max(log2(absolute_max), 1);
-    const signedness: @import("std").builtin.Signedness = if (from < 0) .signed else .unsigned;
-    return ft.meta.Int(signedness, bits);
+    comptime var bits = @max(log2(absolute_max), 1) + 1; // todo
+    const signedness: @import("std").builtin.Signedness = if (from < 0 or to < 0) .signed else .unsigned;
+    return ft.meta.Int(signedness, bits + (if (signedness == .signed) 1 else 0));
 }
 
 pub fn abs(comptime T: type, n: T) T {

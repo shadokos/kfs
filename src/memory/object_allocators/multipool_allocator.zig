@@ -1,15 +1,16 @@
-const ft = @import("../ft/ft.zig");
-const Slab = @import("slab.zig").Slab;
-const Cache = @import("cache.zig").Cache;
-const globalCache = &@import("../memory.zig").globalCache;
+const ft = @import("../../ft/ft.zig");
+const Slab = @import("slab/slab.zig").Slab;
+const Cache = @import("slab/cache.zig").Cache;
+const PageAllocator = @import("../page_allocator.zig");
+const globalCache = &@import("../../memory.zig").globalCache;
 const logger = ft.log.scoped(.physical_memory);
 
-pub const PhysicalMemory = struct {
+pub const MultipoolAllocator = struct {
     const Self = @This();
 
     var caches: [14]*Cache = undefined;
 
-    pub fn cache_init() !void {
+    pub fn cache_init(comptime name: []const u8, page_allocator: PageAllocator) !void {
         const CacheDescription = struct {
             name: []const u8,
             size: usize,
@@ -17,25 +18,26 @@ pub const PhysicalMemory = struct {
         };
 
         const cache_descriptions: [14]CacheDescription = .{
-            .{ .name = "kmalloc_4", .size = 4, .order = 0 },
-            .{ .name = "kmalloc_8", .size = 8, .order = 0 },
-            .{ .name = "kmalloc_16", .size = 16, .order = 0 },
-            .{ .name = "kmalloc_32", .size = 32, .order = 0 },
-            .{ .name = "kmalloc_64", .size = 64, .order = 0 },
-            .{ .name = "kmalloc_128", .size = 128, .order = 0 },
-            .{ .name = "kmalloc_256", .size = 256, .order = 1 },
-            .{ .name = "kmalloc_512", .size = 512, .order = 2 },
-            .{ .name = "kmalloc_1k", .size = 1024, .order = 3 },
-            .{ .name = "kmalloc_2k", .size = 2048, .order = 3 },
-            .{ .name = "kmalloc_4k", .size = 4096, .order = 3 },
-            .{ .name = "kmalloc_8k", .size = 8192, .order = 4 },
-            .{ .name = "kmalloc_16k", .size = 16384, .order = 5 },
-            .{ .name = "kmalloc_32k", .size = 32768, .order = 5 },
+            .{ .name = "4", .size = 4, .order = 0 },
+            .{ .name = "8", .size = 8, .order = 0 },
+            .{ .name = "16", .size = 16, .order = 0 },
+            .{ .name = "32", .size = 32, .order = 0 },
+            .{ .name = "64", .size = 64, .order = 0 },
+            .{ .name = "128", .size = 128, .order = 0 },
+            .{ .name = "256", .size = 256, .order = 1 },
+            .{ .name = "512", .size = 512, .order = 2 },
+            .{ .name = "1k", .size = 1024, .order = 3 },
+            .{ .name = "2k", .size = 2048, .order = 3 },
+            .{ .name = "4k", .size = 4096, .order = 3 },
+            .{ .name = "8k", .size = 8192, .order = 4 },
+            .{ .name = "16k", .size = 16384, .order = 5 },
+            .{ .name = "32k", .size = 32768, .order = 5 },
         };
 
         inline for (0..cache_descriptions.len) |i| {
             caches[i] = try globalCache.create(
-                cache_descriptions[i].name,
+                name ++ "_" ++ cache_descriptions[i].name,
+                page_allocator,
                 cache_descriptions[i].size,
                 cache_descriptions[i].order,
             );
@@ -109,7 +111,10 @@ pub const PhysicalMemory = struct {
         _ = ctx;
         _ = ptr_align;
         _ = ret_addr;
-        return @as([*]u8, @ptrFromInt(@intFromPtr(_kmalloc(len) catch return null)));
+        return @as([*]u8, @ptrFromInt(@intFromPtr(_kmalloc(len) catch |e| {
+            logger.debug("{s}", .{@errorName(e)});
+            return null;
+        })));
     }
 
     fn vtable_resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {

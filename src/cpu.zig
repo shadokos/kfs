@@ -46,6 +46,13 @@ pub inline fn get_cr2() u32 {
     );
 }
 
+pub inline fn get_cr3() u32 {
+    return asm (
+        \\ mov %cr3, %eax
+        : [_] "={eax}" (-> u32),
+    );
+}
+
 pub inline fn set_cr3(value: u32) void {
     asm volatile (
         \\ mov %eax, %cr3

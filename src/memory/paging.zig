@@ -1,4 +1,5 @@
 const ft = @import("../ft/ft.zig");
+const Monostate = @import("../misc/monostate.zig").Monostate;
 
 /// page index type
 pub const idx_t = usize;
@@ -31,6 +32,9 @@ pub const page_bits = ft.math.log2(page_size);
 pub const page = [page_size]u8;
 
 pub const PhysicalPtr = u32;
+pub const PhysicalUsize = u32;
+pub const PhysicalPtrDiff = ft.meta.Int(.signed, @typeInfo(PhysicalPtr).Int.bits + 1);
+
 pub const VirtualPtr = *allowzero void;
 pub const VirtualPagePtr = *allowzero align(4096) page;
 
@@ -84,21 +88,50 @@ pub const page_table_entry = packed struct(u32) {
     address_fragment: u20 = 0,
 };
 
+pub const present_table_entry = packed struct(u32) {
+    present: Monostate(u1, 1) = .{},
+    writable: bool = false,
+    owner: enum(u1) {
+        Supervisor = 0,
+        User = 1,
+    } = .Supervisor,
+    _reserved_1: Monostate(u2, 0) = .{},
+    accessed: bool = false,
+    dirty: bool = false,
+    _reserved_2: Monostate(u2, 0) = .{},
+    unused: u3 = 0,
+    address_fragment: u20 = 0,
+};
+
+pub const TableEntry = packed union {
+    present: present_table_entry,
+    not_present: *align(2) void,
+    not_mapped: Monostate(u32, 0),
+    pub fn is_present(self: TableEntry) bool {
+        return @as(u32, @bitCast(self)) & 1 == 1;
+    }
+    pub fn is_mapped(self: TableEntry) bool {
+        return @as(u32, @bitCast(self)) != 0;
+    }
+};
+
 pub const virtual_size = 0xffffffff + 1;
 pub const page_dir = virtual_size - page_size;
 pub const page_table_table = page_dir;
 pub const page_tables = virtual_size - page_size * page_directory_size;
-pub const temporary_page = page_tables - page_size;
+pub const kernel_page_tables = virtual_size - 256 * page_size;
 // pub const kernel_tables = 0xffefd000;
 
-pub const low_half = 0xC0000000;
-pub const kernel_virtual_space_top = temporary_page;
-pub const kernel_virtual_space_size = kernel_virtual_space_top - low_half;
+pub const high_half = 0xC0000000;
+pub const kernel_virtual_space_top = page_tables;
+pub const kernel_virtual_space_size = kernel_virtual_space_top - high_half;
 
-pub const page_dir_ptr: *align(4096) [page_directory_size]page_directory_entry = @ptrFromInt(page_dir);
-pub const page_table_table_ptr: *align(4096) [page_table_size]page_table_entry = @ptrFromInt(page_table_table);
+pub const direct_zone_size = 128 * (1 << 20);
+
+pub const page_dir_ptr: *align(4096) volatile [page_directory_size]TableEntry = @ptrFromInt(page_dir);
+pub const page_table_table_ptr: *align(4096) volatile [page_table_size]TableEntry = @ptrFromInt(page_table_table);
 // pub const kernel_tables_ptr : *[256][page_table_size]page_table_entry = @ptrFromInt(kernel_tables);
 
 pub fn is_user_space(p: VirtualPagePtr) bool {
-    return @intFromPtr(p) < low_half;
+    return @intFromPtr(p) < high_half;
 }

@@ -1,80 +1,124 @@
-const LinearAllocator = @import("linear_allocator.zig").LinearAllocator;
-const StaticAllocator = @import("static_allocator.zig").StaticAllocator;
 const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 const paging = @import("paging.zig");
+const builtin = @import("builtin");
+const logger = @import("../ft/ft.zig").log.scoped(.PFA);
+const ft = @import("../ft/ft.zig");
 
 const max_order = 10;
 
-pub var linearAllocator: StaticAllocator(
-    BuddyAllocator(void, max_order).size_for(paging.virtual_size / paging.page_size),
-) = .{};
+pub fn PageFrameAllocator(comptime _Zones: type) type {
+    switch (@typeInfo(_Zones)) {
+        .Enum => {},
+        else => @compileError("zones must be an enum"),
+    }
+    const nzones = @typeInfo(_Zones).Enum.fields.len;
+    return struct {
+        total_space: u64 = undefined,
 
-pub const PageFrameAllocator = struct {
-    total_space: u64 = undefined,
-    addressable_space_allocator: UnderlyingAllocator = .{},
-    non_addressable_space_allocator: UnderlyingAllocator = .{},
+        zones: [nzones]?Zone = [1]?Zone{null} ** nzones,
 
-    pub const UnderlyingAllocator = BuddyAllocator(@TypeOf(linearAllocator), max_order);
+        pub const Zone = struct {
+            allocator: UnderlyingAllocator,
+            begin: paging.PhysicalPtr,
+            size: paging.PhysicalUsize,
+        };
 
-    pub const Error = UnderlyingAllocator.Error;
+        pub const Zones = _Zones;
 
-    const Self = @This();
+        pub const UnderlyingAllocator = BuddyAllocator(max_order);
 
-    pub fn init(_total_space: u64) Self {
-        var self = Self{ .total_space = _total_space };
-        self.total_space = @min(self.total_space, paging.physical_memory_max);
+        pub const Error = UnderlyingAllocator.Error;
 
-        if (self.total_space > UnderlyingAllocator.max_possible_space(u64, &linearAllocator))
-            @panic("Not enough space in page frame allocator!");
+        const Self = @This();
 
-        self.addressable_space_allocator = UnderlyingAllocator.init(
-            @truncate(@min(self.total_space, paging.physical_memory_max) / @sizeOf(paging.page)),
-            &linearAllocator,
-        );
-
-        if (self.total_space > paging.physical_memory_max) {
-            const high_memory_space = self.total_space - paging.physical_memory_max;
-            self.non_addressable_space_allocator = UnderlyingAllocator.init(
-                @truncate(high_memory_space / @sizeOf(paging.page)),
-                &linearAllocator,
-            );
+        pub fn init(_total_space: u64) Self {
+            return Self{ .total_space = _total_space };
         }
-        return self;
-    }
 
-    pub fn alloc_pages(self: *Self, n: usize) Error!paging.PhysicalPtr {
-        return if (self.non_addressable_space_allocator.alloc_pages(n)) |v|
-            v * @sizeOf(paging.page) + paging.physical_memory_max
-        else |_| if (self.addressable_space_allocator.alloc_pages(n)) |v|
-            v * @sizeOf(paging.page)
-        else |err|
-            err;
-    }
+        pub fn init_zone(
+            self: *Self,
+            zone: Zones,
+            begin: paging.PhysicalPtr,
+            size: paging.PhysicalUsize,
+            allocator: ft.mem.Allocator,
+        ) void {
+            self.zones[@intFromEnum(zone)] = .{
+                .allocator = UnderlyingAllocator.init(
+                    @truncate(@min(self.total_space -| begin, size) / @sizeOf(paging.page)),
+                    allocator,
+                ),
+                .begin = begin,
+                .size = size,
+            };
+        }
 
-    pub fn alloc_pages_hint(self: *Self, hint: paging.PhysicalPtr, n: usize) Error!paging.PhysicalPtr {
-        return if (self.non_addressable_space_allocator.alloc_pages_hint(hint / @sizeOf(paging.page), n)) |v|
-            v * @sizeOf(paging.page) + paging.physical_memory_max
-        else |_| if (self.addressable_space_allocator.alloc_pages_hint(hint / @sizeOf(paging.page), n)) |v|
-            v * @sizeOf(paging.page)
-        else |err|
-            err;
-    }
+        pub fn alloc_pages_zone(self: *Self, zone: Zones, n: usize) Error!paging.PhysicalPtr {
+            inline for (0..nzones) |z| {
+                if (self.zones[z]) |*unwrapped| {
+                    if (z >= @intFromEnum(zone)) {
+                        if (unwrapped.allocator.alloc_pages(n)) |v| {
+                            return v * paging.page_size + unwrapped.begin;
+                        } else |_| {}
+                    }
+                }
+            }
+            return Error.NotEnoughSpace;
+        }
 
-    pub fn free_pages(self: *Self, ptr: paging.PhysicalPtr, n: usize) !void {
-        return if (ptr < paging.physical_memory_max)
-            self.addressable_space_allocator.free_pages(@truncate(ptr / @sizeOf(paging.page)), n)
-        else
-            self.non_addressable_space_allocator.free_pages(@truncate(ptr / @sizeOf(paging.page)), n);
-    }
+        pub fn alloc_pages(self: *Self, n: usize) Error!paging.PhysicalPtr {
+            return self.alloc_pages_zone(@enumFromInt(0), n);
+        }
 
-    pub fn get_page_frame_descriptor(self: *Self, ptr: paging.PhysicalPtr) *paging.page_frame_descriptor {
-        return if (ptr < paging.physical_memory_max)
-            self.addressable_space_allocator.frame_from_idx(@truncate(ptr / @sizeOf(paging.page)))
-        else
-            self.non_addressable_space_allocator.frame_from_idx(@truncate(ptr / @sizeOf(paging.page)));
-    }
+        pub fn alloc_pages_hint(self: *Self, zone: Zones, n: usize) Error!paging.PhysicalPtr {
+            inline for (0..nzones) |z| {
+                if (self.zones[z]) |*unwrapped| {
+                    if (z >= @intFromEnum(zone)) {
+                        if (unwrapped.allocator.alloc_pages_hint(n)) |v| {
+                            return v * paging.page_size + unwrapped.begin;
+                        }
+                    }
+                }
+            }
+            return Error.NotEnoughSpace;
+        }
 
-    pub fn print(self: *Self) void {
-        self.addressable_space_allocator.print();
-    }
-};
+        pub fn free_pages(self: *Self, ptr: paging.PhysicalPtr, n: usize) !void {
+            inline for (0..nzones) |z| {
+                if (self.zones[z]) |*unwrapped| {
+                    if (ptr >= unwrapped.begin and ptr < unwrapped.begin + unwrapped.size) {
+                        if (ptr + n * paging.page_size > unwrapped.begin + unwrapped.size) {
+                            @panic("cross zone free_pages");
+                        }
+                        return unwrapped.allocator.free_pages(
+                            @truncate((ptr - unwrapped.begin) / @sizeOf(paging.page)),
+                            n,
+                        );
+                    }
+                }
+            }
+            return Error.OutOfBounds;
+        }
+
+        pub fn get_page_frame_descriptor(self: *Self, ptr: paging.PhysicalPtr) !*paging.page_frame_descriptor {
+            inline for (0..nzones) |z| {
+                if (self.zones[z]) |*unwrapped| {
+                    if (ptr >= unwrapped.begin and ptr < unwrapped.begin + unwrapped.size) {
+                        return unwrapped.allocator.frame_from_idx(
+                            @truncate((ptr - unwrapped.begin) / @sizeOf(paging.page)),
+                        );
+                    }
+                }
+            }
+            return Error.OutOfBounds;
+        }
+
+        pub fn print(self: *Self) void {
+            inline for (0..nzones) |z| {
+                if (self.zones[z]) |*unwrapped| {
+                    @import("../tty/tty.zig").printk("{s}:\n", .{@tagName(@as(Zones, @enumFromInt(z)))});
+                    unwrapped.allocator.print();
+                }
+            }
+        }
+    };
+}
