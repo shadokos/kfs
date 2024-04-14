@@ -76,7 +76,7 @@ pub fn alignBackward(comptime T: type, addr: T, alignment: T) T {
 }
 
 pub fn alignForward(comptime T: type, addr: T, alignment: T) T {
-    return alignBackward(T, addr + (alignment - 1), alignment);
+    return alignBackward(T, addr +| (alignment - 1), alignment);
 }
 
 pub fn isAligned(addr: usize, alighment: usize) bool {

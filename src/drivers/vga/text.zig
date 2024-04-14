@@ -30,7 +30,7 @@ pub const Palette = [16]Color;
 var cursor_enabled: bool = false;
 
 /// address of the mmio vga buffer
-var mmio_buffer: [*]u16 = @ptrFromInt(0xC00B8000); // todo
+const mmio_buffer: [*]u16 = @ptrFromInt(@import("../../memory/paging.zig").high_half + 0xB8000);
 
 pub fn put_char(line: usize, col: usize, char: u16) void {
     mmio_buffer[line * width + col] = char;

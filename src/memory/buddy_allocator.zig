@@ -1,7 +1,7 @@
 const ft = @import("../ft/ft.zig");
 const tty = @import("../tty/tty.zig");
 const paging = @import("paging.zig");
-const bitmap = @import("bitmap.zig");
+const bitmap = @import("../misc/bitmap.zig");
 const printk = @import("../tty/tty.zig").printk;
 const multiboot_h = @cImport({
     @cInclude("multiboot.h");
@@ -14,12 +14,12 @@ const page = paging.page;
 
 /// Page allocator using the buddy allocator algorithm, it need an allocator
 /// to allocate its data structures and a max order (see https://wiki.osdev.org/Page_Frame_Allocation)
-pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t) type {
+pub fn BuddyAllocator(comptime max_order: order_t) type {
     if (max_order == 0)
         @compileError("max order can't be 0");
     return struct {
         /// the allocator used to allocates data structures for the BuddyAllocator
-        allocator: ?*AllocatorType = null,
+        allocator: ?ft.mem.Allocator = null,
 
         /// store information about pages (like flags) (mem_map[0] store information for page mem[0])
         mem_map: []page_frame_descriptor = ([0]page_frame_descriptor{})[0..],
@@ -33,6 +33,8 @@ pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t)
         /// the total number of pages
         total_pages: usize = 0,
 
+        allocated_pages: usize = 0,
+
         /// represent a bit in the bit map
         const Bit = bitmap.Bit;
 
@@ -42,10 +44,7 @@ pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t)
         const Self = @This();
 
         /// init an instance (if the underlying allocator is set)self.bit_map
-        pub fn init(_total_pages: idx_t, _allocator: *AllocatorType) Self {
-            if (_total_pages == 0)
-                @panic("not enough space to boot");
-
+        pub fn init(_total_pages: idx_t, _allocator: ft.mem.Allocator) Self {
             var self = Self{ .total_pages = _total_pages, .allocator = _allocator };
 
             self.mem_map = _allocator.alloc(
@@ -66,6 +65,7 @@ pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t)
                 ) catch @panic("not enough space to allocate bitmap")), bit_map_size);
                 for (0..bit_map_size) |i| self.bit_maps[o].set(i, .Taken) catch unreachable;
             }
+            self.allocated_pages = self.total_pages;
 
             return self;
         }
@@ -181,6 +181,7 @@ pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t)
                 self.set_bit(page_idx, order, .Free);
                 self.lst_add(order, page_idx);
             }
+            self.allocated_pages -= 1;
         }
 
         /// alloc n physical pages and return the idx of the first page
@@ -194,6 +195,7 @@ pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t)
 
             try self.break_for(order);
             if (self.free_lists[order]) |p| {
+                self.allocated_pages += @as(usize, 1) << order;
                 const idx = self.idx_from_frame(p);
                 self.lst_remove(order, idx);
                 self.set_bit(idx, order, .Taken);
@@ -225,29 +227,25 @@ pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t)
         }
 
         /// set the underlying allocator
-        pub fn set_allocator(self: *Self, allocator: *AllocatorType) void {
+        pub fn set_allocator(self: *Self, allocator: ft.mem.Allocator) void {
             self.allocator = allocator;
         }
 
         /// return the size in bits of the bitmap needed to describe pages page frames
         fn bitmap_size(pages: usize) usize {
-            // const average_page_cost : f32 = @as(f32, @floatFromInt((@as(usize, 1) << (max_order + 1)) - 1)) /
-            //      @as(f32, @floatFromInt(@as(usize, 1) << (max_order)));
-            const average_page_cost: usize = 2;
-
-            const ret: usize = ft.mem.alignForward(usize, pages, @as(usize, 1) << (max_order + 1)) * average_page_cost;
-            // var ret : usize = @intFromFloat(@as(f32, @floatFromInt(pages -
-            //      (pages % (@as(usize, 1) << (max_order + 1))))) * average_page_cost);
-
-            // for (0..(pages % (@as(usize, 1) << (max_order + 1)))) |i| {
-            // 	ret += @min(@clz(i) + 1, max_order + 1);
-            // }
+            var ret: usize = 0;
+            for (0..max_order + 1) |o| {
+                ret += ft.math.divCeil(
+                    usize,
+                    pages,
+                    @as(usize, 1) << @truncate(o),
+                ) catch unreachable;
+            }
             return ret;
         }
 
         /// return the max possible space descriptible with the space available in the undelying allocator
-        pub fn max_possible_space(comptime T: type, allocator: *AllocatorType) T {
-            const available_space = allocator.remaining_space();
+        pub fn max_possible_space(comptime T: type, available_space: usize) T {
             const average_page_cost: usize = @bitSizeOf(page_frame_descriptor) + 2;
 
             var ret: usize = ft.math.divCeil(
@@ -267,11 +265,7 @@ pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t)
 
         /// return the size needed for a page frame allocator on `pages` pages
         pub fn size_for(pages: usize) usize {
-            return (ft.math.divCeil(
-                usize,
-                bitmap_size(pages),
-                8,
-            ) catch unreachable) + pages * @sizeOf(page_frame_descriptor);
+            return bitmap_size(pages) + pages * @sizeOf(page_frame_descriptor);
         }
 
         /// print the bitmap from from to to in the main tty
@@ -298,9 +292,7 @@ pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t)
 
         /// print the free lists using printk
         pub fn print(self: *Self) void {
-            for (self.free_lists, 0..) |l, i| {
-                printk("free list {d}: {*}\n", .{ i, l });
-            }
+            printk("allocated pages : {}/{}\n", .{ self.allocated_pages, self.total_pages });
         }
     };
 }

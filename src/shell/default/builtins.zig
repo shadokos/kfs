@@ -118,15 +118,11 @@ pub fn reboot(shell: anytype, _: [][]u8) CmdError!void {
     return CmdError.OtherError;
 }
 
-pub fn vm(_: anytype, _: [][]u8) CmdError!void {
-    @import("../../memory.zig").virtualPageAllocator.print();
-}
-
 pub fn pm(_: anytype, _: [][]u8) CmdError!void {
     @import("../../memory.zig").pageFrameAllocator.print();
 }
 
-const vpa = &@import("../../memory.zig").virtualPageAllocator;
+const vpa = &@import("../../memory.zig").kernel_virtual_space;
 
 pub fn alloc_page(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
@@ -198,6 +194,10 @@ pub fn slabinfo(_: anytype, _: [][]u8) CmdError!void {
     (&@import("../../memory.zig").globalCache).print();
 }
 
+pub fn pfa(_: anytype, _: [][]u8) CmdError!void {
+    (&@import("../../memory.zig").pageFrameAllocator).print();
+}
+
 pub fn multiboot_info(_: anytype, _: [][]u8) CmdError!void {
     printk("{*}\n", .{@import("../../boot.zig").multiboot_info});
     @import("../../multiboot.zig").list_tags();
@@ -211,7 +211,13 @@ pub fn cache_create(_: anytype, args: [][]u8) CmdError!void {
     const name = args[1];
     const size = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
     const order = ft.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
-    const new_cache = globalCache.create(name, size, @truncate(order)) catch {
+    const new_cache = globalCache.create(
+        name,
+        @import("../../memory.zig").directPageAllocator.page_allocator(),
+
+        size,
+        @truncate(order),
+    ) catch {
         printk("Failed to create cache\n", .{});
         return CmdError.OtherError;
     };
@@ -232,7 +238,8 @@ pub fn cache_destroy(_: anytype, args: [][]u8) CmdError!void {
 // TODO: Remove this builtin
 // ... For debugging purposes only
 pub fn shrink(_: anytype, _: [][]u8) CmdError!void {
-    var node: ?*@import("../../memory/cache.zig").Cache = &@import("../../memory.zig").globalCache.cache;
+    const Cache = @import("../../memory/object_allocators/slab/cache.zig").Cache;
+    var node: ?*Cache = &@import("../../memory.zig").globalCache.cache;
     while (node) |n| : (node = n.next) n.shrink();
 }
 
