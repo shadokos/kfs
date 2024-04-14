@@ -4,10 +4,18 @@ const pic = @import("drivers/pic/pic.zig");
 const interrupt_logger = @import("ft/ft.zig").log.scoped(.interrupts);
 const logger = @import("ft/ft.zig").log.scoped(.idt);
 
+pub const InterruptFrame = extern struct {
+    ip: u32,
+    cs: u32,
+    flags: u32,
+    sp: u32,
+    ss: u32,
+};
+
 pub const Handler = extern union {
     ptr: usize,
-    err: *const fn (u32) callconv(.Interrupt) void,
-    noerr: *const fn () callconv(.Interrupt) void,
+    err: *const fn (frame: *InterruptFrame, u32) callconv(.Interrupt) void,
+    noerr: *const fn (frame: *InterruptFrame) callconv(.Interrupt) void,
 };
 
 pub const IDTR = packed struct {
@@ -171,14 +179,14 @@ pub fn default_handler(
     comptime t: enum { err, noerr, except },
 ) Handler {
     const handlers = struct {
-        pub fn exception() callconv(.Interrupt) void {
+        pub fn exception(_: *InterruptFrame) callconv(.Interrupt) void {
             interrupt_logger.err("exception {d}, {s}", .{ id, name });
             @import("drivers/pic/pic.zig").ack();
         }
-        pub fn noerr() callconv(.Interrupt) void {
+        pub fn noerr(_: *InterruptFrame) callconv(.Interrupt) void {
             @import("ft/ft.zig").log.err("irq {d}, {s}", .{ id, name });
         }
-        pub fn err(code: u32) callconv(.Interrupt) void {
+        pub fn err(_: *InterruptFrame, code: u32) callconv(.Interrupt) void {
             @import("ft/ft.zig").log.err("irq {d}, {s}, 0x{x}", .{ id, name, code });
         }
     };

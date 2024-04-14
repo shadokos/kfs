@@ -2,7 +2,7 @@ const paging = @import("memory/paging.zig");
 const ft = @import("ft/ft.zig");
 const cpu = @import("cpu.zig");
 
-pub const kernel_size = 0x10_000_000;
+pub const kernel_size = 0x10_000_000 + paging.direct_zone_size;
 
 const page_count = ft.math.divCeil(
     comptime_int,
@@ -56,5 +56,5 @@ export fn trampoline_jump() linksection(".bootstrap_code") callconv(.C) void {
 
 /// remove identity paging of the kernel
 pub fn clean() void {
-    @memset(paging.page_dir_ptr[0..(paging.low_half >> 22)], paging.page_directory_entry{});
+    @memset(paging.page_dir_ptr[0..(paging.high_half >> 22)], paging.TableEntry{ .not_mapped = .{} });
 }

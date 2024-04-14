@@ -145,8 +145,6 @@ test "parseInt" { // stolen from zig's ft lib
         parseInt(i32, "-", 10),
     );
 
-    // autodectect the base todo
-
     try std.testing.expect((try parseInt(i32, "111", 0)) == 111);
     try std.testing.expect((try parseInt(i32, "1_1_1", 0)) == 111);
     try std.testing.expect((try parseInt(i32, "1_1_1", 0)) == 111);
