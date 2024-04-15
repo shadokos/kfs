@@ -236,7 +236,7 @@ pub const VirtualSpace = struct {
         const region = self.find_region(@ptrCast(address)) orelse return Error.InvalidPointer;
         const page: usize = @intFromPtr(address) / paging.page_size;
         if (region.begin + region.len < page + npages) {
-            @panic("todo invalid region 4");
+            return Error.InvalidPointer;
         }
         switch (region.value) {
             .physically_contiguous_allocation => {

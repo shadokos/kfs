@@ -42,7 +42,7 @@ pub var virtually_contiguous_page_allocator = kernel_virtual_space.generate_page
 // ======= object allocators =======
 pub var boot_allocator: StaticAllocator(
     PageFrameAllocatorType.UnderlyingAllocator.size_for(paging.direct_zone_size / paging.page_size),
-) = .{}; // todo
+) = .{};
 pub var virtualMemory: PageGrainedAllocator = undefined;
 pub var physicalMemory: MultipoolAllocator = undefined;
 //  =================================
@@ -68,7 +68,7 @@ pub fn init() void {
         paging.PhysicalPtr,
         @min(
             total_space,
-            direct_begin + paging.direct_zone_size, // todo move to paging
+            direct_begin + paging.direct_zone_size,
         ),
         paging.page_size,
     ));

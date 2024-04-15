@@ -123,10 +123,7 @@ fn make_break(scancode: u16) ?u16 {
 }
 
 pub fn kb_read() void {
-    simulate_keyboard_interrupt(); // remove when we have interrupts
     while (incount != 0) {
-        simulate_keyboard_interrupt(); // remove when we have interrupts
-        simulate_keyboard_interrupt(); // remove when we have interrupts
         const scancode: u16 = inbuf[intail];
 
         intail = (intail + 1) % KEYBOARD_INPUT_SIZE;
@@ -169,41 +166,10 @@ pub fn handler(_: *InterruptFrame) callconv(.Interrupt) void {
     pic.ack();
 }
 
-pub fn handler2() void {
-    const scan_code: u8 = ps2.get_data();
-    const index: u8 = scan_code & SCANCODE_MASK_INDEX;
-    const released: u16 = scan_code & SCANCODE_MASK_RELEASED;
-
-    scan_mode = switch (scan_mode) {
-        .Extended => b: {
-            if (index < scanmap_special.len and scanmap_special[index] != .NONE)
-                send_to_buffer(@intFromEnum(scanmap_special[index]) | (released << 8));
-            break :b .Normal;
-        },
-        .Pause => .Normal, // Skip the byte, it's a pause and i personnaly don't care yet
-        .Normal => switch (scan_code) {
-            0xE0 => .Extended,
-            0xE1 => .Pause,
-            else => b: {
-                if (index < scanmap_normal.len and scanmap_normal[index] != .NONE)
-                    send_to_buffer(@intFromEnum(scanmap_normal[index]) | (released << 8));
-                break :b .Normal;
-            },
-        },
-    };
-    pic.ack();
-}
-
 fn is_key_available() bool {
     return ps2.get_status().output_buffer == 1;
 }
 
-/// Is designed to crudely simulate the keyboard interrupt handler
-pub fn simulate_keyboard_interrupt() void {
-    if (is_key_available()) {
-        handler2();
-    }
-}
 pub fn init() void {
     const interrupts = @import("../interrupts.zig");
     ps2.set_first_port_interrupts(true);
