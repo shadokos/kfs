@@ -120,7 +120,6 @@ pub const page_dir = virtual_size - page_size;
 pub const page_table_table = page_dir;
 pub const page_tables = virtual_size - page_size * page_directory_size;
 pub const kernel_page_tables = virtual_size - 256 * page_size;
-// pub const kernel_tables = 0xffefd000;
 
 pub const high_half = 0xC0000000;
 pub const kernel_virtual_space_top = page_tables;

@@ -233,18 +233,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
 
         /// return the size in bits of the bitmap needed to describe pages page frames
         fn bitmap_size(pages: usize) usize {
-            // const average_page_cost : f32 = @as(f32, @floatFromInt((@as(usize, 1) << (max_order + 1)) - 1)) /
-            //      @as(f32, @floatFromInt(@as(usize, 1) << (max_order)));
-            const average_page_cost: usize = 2;
-
-            var ret: usize = ft.mem.alignForward(usize, pages, @as(usize, 1) << (max_order + 1)) * average_page_cost;
-            // var ret : usize = @intFromFloat(@as(f32, @floatFromInt(pages -
-            //      (pages % (@as(usize, 1) << (max_order + 1))))) * average_page_cost);
-
-            // for (0..(pages % (@as(usize, 1) << (max_order + 1)))) |i| {
-            // 	ret += @min(@clz(i) + 1, max_order + 1);
-            // }
-            ret = 0;
+            var ret: usize = 0;
             for (0..max_order + 1) |o| {
                 ret += ft.math.divCeil(
                     usize,
@@ -304,9 +293,6 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
         /// print the free lists using printk
         pub fn print(self: *Self) void {
             printk("allocated pages : {}/{}\n", .{ self.allocated_pages, self.total_pages });
-            // for (self.free_lists, 0..) |l, i| {
-            //     printk("free list {d}: {*}\n", .{ i, l });
-            // }
         }
     };
 }

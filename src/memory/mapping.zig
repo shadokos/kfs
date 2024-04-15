@@ -15,8 +15,8 @@ pub const Directory: type = extern struct {
     }
 };
 
-/// return the physical address of a virtual ptr // todo: type to VirtualPtr
-pub fn get_physical_ptr(virtual: paging.VirtualPtr) error{NotMapped}!paging.PhysicalPtr { // todo error
+/// return the physical address of a virtual ptr
+pub fn get_physical_ptr(virtual: paging.VirtualPtr) error{ NotMapped, NotPresent }!paging.PhysicalPtr {
     const virtualStruct: paging.VirtualPtrStruct = @bitCast(@as(u32, @intFromPtr(virtual)));
     if (!is_page_mapped(paging.page_dir_ptr[virtualStruct.dir_index])) {
         return error.NotMapped;
@@ -25,10 +25,8 @@ pub fn get_physical_ptr(virtual: paging.VirtualPtr) error{NotMapped}!paging.Phys
     if (!is_page_mapped(table[virtualStruct.table_index])) {
         return error.NotMapped;
     }
-    if (!is_page_present(table[virtualStruct.table_index])) { // todo
-        @as(*u8, @ptrCast(@alignCast(virtual))).* = 0; // todo
-        const ret = get_physical_ptr(virtual);
-        return ret;
+    if (!is_page_present(table[virtualStruct.table_index])) {
+        return error.NotPresent;
     }
     const page: paging.PhysicalPtr = @as(
         paging.PhysicalPtr,
@@ -56,7 +54,6 @@ pub fn get_table_ptr(table: paging.dir_idx) *[paging.page_table_size]paging.Tabl
 
 /// return the page frame descriptor of the page pointed by `address`
 pub fn get_page_frame_descriptor(address: paging.VirtualPagePtr) !*paging.page_frame_descriptor {
-    // todo
     const physical = try get_physical_ptr(@ptrCast(address));
     return @import("../memory.zig").pageFrameAllocator.get_page_frame_descriptor(physical);
 }
@@ -81,5 +78,5 @@ pub fn get_entry(virtual: paging.VirtualPagePtr) paging.TableEntry {
 }
 
 pub fn transfer(new: *align(4096) Directory) void {
-    cpu.set_cr3(get_physical_ptr(@ptrCast(new)) catch @panic("todo"));
+    cpu.set_cr3(get_physical_ptr(@ptrCast(new)) catch unreachable);
 }

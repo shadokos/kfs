@@ -66,7 +66,6 @@ pub fn make_present(address: paging.VirtualPagePtr) !void {
     const region: *Region = @ptrFromInt(@intFromPtr(entry.not_present));
     switch (region.value) {
         .virtually_contiguous_allocation => {
-            // ===== TODO =====
             const physical = try pageFrameAllocator.alloc_pages(1);
             const present_entry: paging.present_table_entry = .{
                 .writable = true,
@@ -74,10 +73,9 @@ pub fn make_present(address: paging.VirtualPagePtr) !void {
             };
             mapping.set_entry(address, .{ .present = present_entry });
             cpu.reload_cr3();
-            // ================
+            @memset(address, 0);
         },
         .physically_contiguous_allocation => |m| {
-            // logger.debug("address: {x:0>8}, offset: {x:0>8}", .{ @intFromPtr(address), m.offset });
             const present_entry: paging.present_table_entry = .{
                 .writable = true,
                 .address_fragment = @truncate(
@@ -86,9 +84,9 @@ pub fn make_present(address: paging.VirtualPagePtr) !void {
             };
             mapping.set_entry(address, .{ .present = present_entry });
             cpu.reload_cr3();
+            @memset(address, 0);
         },
         .physical_mapping => |m| {
-            // logger.debug("address: {x:0>8}, offset: {x:0>8}", .{ @intFromPtr(address), m.offset });
             const present_entry: paging.present_table_entry = .{
                 .writable = true,
                 .address_fragment = @truncate(
