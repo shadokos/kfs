@@ -48,10 +48,20 @@ pub fn enable_irq(irq: IRQS) void {
     cpu.outb(port_id.port, mask & ~(@as(u8, 1) << @truncate(port_id.id)));
 }
 
+pub fn enable_all_irqs() void {
+    cpu.outb(cpu.Ports.pic_master_data, 0x00);
+    cpu.outb(cpu.Ports.pic_slave_data, 0x00);
+}
+
 pub fn disable_irq(irq: IRQS) void {
     const port_id = get_irq_port_id(irq);
     const mask = cpu.inb(port_id.port);
     cpu.outb(port_id.port, mask | (@as(u8, 1) << @truncate(port_id.id)));
+}
+
+pub fn disable_all_irqs() void {
+    cpu.outb(cpu.Ports.pic_master_data, 0xff);
+    cpu.outb(cpu.Ports.pic_slave_data, 0xff);
 }
 
 pub fn remap(offset1: u8, offset2: u8) void {
