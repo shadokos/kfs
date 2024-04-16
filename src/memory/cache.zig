@@ -7,7 +7,7 @@ const Slab = @import("slab.zig").Slab;
 const SlabState = @import("slab.zig").SlabState;
 const BitMap = @import("bitmap.zig").BitMap;
 
-const CACHE_NAME_LEN = 15;
+const CACHE_NAME_LEN = 20;
 
 pub const Cache = struct {
     const Self = @This();
@@ -229,7 +229,7 @@ pub const GlobalCache = struct {
     }
 
     pub fn print(self: *Self) void {
-        printk(" " ** 16, .{});
+        printk(" " ** (CACHE_NAME_LEN + 1), .{});
         printk(" \x1b[36msize\x1b[0m", .{});
         printk("   \x1b[36mo/s\x1b[0m", .{});
         printk("  \x1b[36mact.\x1b[0m", .{});
