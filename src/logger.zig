@@ -25,6 +25,7 @@ pub fn kernel_log(
         args,
     );
     if (message_level == .err and scope == .default) {
+        @import("cpu.zig").disable_interrupts();
         if (@import("build_options").ci) {
             var com_port = @import("shell/ci/shell.zig").com_port_1;
             var packet = @import("shell/ci/packet.zig").Packet([]u8).init(com_port.get_writer().any());
@@ -38,6 +39,9 @@ pub fn kernel_log(
             screen_of_death(format, args);
             while (true) @import("cpu.zig").halt();
         } else {
+            @import("drivers/pic/pic.zig").disable_all_irqs();
+            @import("drivers/pic/pic.zig").enable_irq(.Keyboard);
+            @import("cpu.zig").enable_interrupts();
             tty.get_tty().config.c_lflag.ECHO = false;
             while (true) {
                 @import("cpu.zig").halt();
