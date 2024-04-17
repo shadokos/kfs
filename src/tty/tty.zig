@@ -225,6 +225,17 @@ pub fn TtyN(comptime history_size: u32) type {
             }
         }
 
+        fn echo(self: *Self, c: u8) void {
+            if (self.config.c_lflag.ECHO or (c == '\n' and self.config.c_lflag.ECHONL)) {
+                if (self.config.c_lflag.ECHOCTL and self.is_echoctl(c)) {
+                    self.putchar('^');
+                    self.putchar(c | 0b01000000);
+                } else {
+                    self.putchar(c);
+                }
+            }
+        }
+
         /// perform local processing as defined by POSIX and according to the current termios configuration
         fn local_processing(self: *Self) void {
             if (self.config.c_lflag.ICANON) {
@@ -234,7 +245,7 @@ pub fn TtyN(comptime history_size: u32) type {
 
                     if (self.is_end_of_line(c)) {
                         if (c != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)]) {
-                            self.putchar(c);
+                            self.echo(c);
                         }
                         self.input_buffer[self.current_line_end] = c;
                         self.current_line_end +%= 1;
@@ -251,14 +262,7 @@ pub fn TtyN(comptime history_size: u32) type {
                     } else {
                         self.input_buffer[self.current_line_end] = c;
                         self.current_line_end +%= 1;
-                        if (self.config.c_lflag.ECHO or (c == '\n' and self.config.c_lflag.ECHONL)) {
-                            if (self.config.c_lflag.ECHOCTL and self.is_echoctl(c)) {
-                                self.putchar('^');
-                                self.putchar(c | 0b01000000);
-                            } else {
-                                self.putchar(c);
-                            }
-                        }
+                        self.echo(c);
                     }
                 }
                 self.read_head = self.current_line_end;

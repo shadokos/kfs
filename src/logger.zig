@@ -43,6 +43,7 @@ pub fn kernel_log(
             @import("drivers/pic/pic.zig").enable_irq(.Keyboard);
             @import("cpu.zig").enable_interrupts();
             tty.get_tty().config.c_lflag.ECHO = false;
+            tty.get_tty().config.c_lflag.ECHONL = false;
             while (true) {
                 @import("cpu.zig").halt();
                 @import("tty/keyboard.zig").kb_read();
