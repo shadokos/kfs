@@ -61,12 +61,6 @@ pub fn get_page_frame_descriptor(address: paging.VirtualPagePtr) !*paging.page_f
 pub fn set_entry(virtual: paging.VirtualPagePtr, entry: paging.TableEntry) void {
     const virtualStruct: paging.VirtualPtrStruct = @bitCast(@intFromPtr(virtual));
     const table = get_table_ptr(virtualStruct.dir_index);
-    // logger.debug("table: 0x{x:0>8}, index: {}",.{@intFromPtr(table), virtualStruct.table_index});
-    // logger.debug("set_entry 0x{x:0>8} from 0x{x:0>8} to 0x{x:0>8}", .{
-    //     @intFromPtr(virtual),
-    //     @intFromPtr(table[virtualStruct.table_index].not_present),
-    //     @intFromPtr(entry.not_present),
-    // });
     table[virtualStruct.table_index] = entry;
     cpu.reload_cr3();
 }
