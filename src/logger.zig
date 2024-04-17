@@ -39,6 +39,7 @@ pub fn kernel_log(
             while (true) @import("cpu.zig").halt();
         } else {
             tty.get_tty().config.c_lflag.ECHO = false;
+            tty.get_tty().config.c_lflag.ECHONL = false;
             while (true) {
                 @import("cpu.zig").halt();
                 @import("tty/keyboard.zig").kb_read();
