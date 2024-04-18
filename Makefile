@@ -2,7 +2,7 @@ BUILD_ARGS ?= --summary all --verbose
 ZIG ?= zig
 
 # get the last optimize option
-OPTIMIZE ?= $(shell echo $$(ls ".optimize-*" 2>/dev/null || echo Debug) | cut -d'-' -f2)
+OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo Debug) | cut -d'-' -f2)
 
 .PHONY: all
 all: build
@@ -15,7 +15,7 @@ run: build
 	qemu-system-i386 -cdrom kfs.iso
 
 .PHONY: build
-build:
+build: .optimize-$(OPTIMIZE)
 	$(ZIG) build -Doptimize=$(OPTIMIZE) $(BUILD_ARGS)
 
 .PHONY: debug
