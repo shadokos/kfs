@@ -1,7 +1,6 @@
 const cpu = @import("cpu.zig");
 const gdt = @import("gdt.zig");
 const pic = @import("drivers/pic/pic.zig");
-const interrupt_logger = @import("ft/ft.zig").log.scoped(.interrupts);
 const logger = @import("ft/ft.zig").log.scoped(.idt);
 
 pub const InterruptFrame = extern struct {
@@ -79,15 +78,23 @@ pub const Exceptions = enum(u8) {
     StackSegmentFault = 12,
     GeneralProtectionFault = 13,
     PageFault = 14,
+    Reserved_15 = 15,
     x87FloatingPointException = 16,
     AlignmentCheck = 17,
     MachineCheck = 18,
     SIMDFloatingPointException = 19,
     VirtualizationException = 20,
     ControlProtectionException = 21,
+    Reserved_22 = 22,
+    Reserved_23 = 23,
+    Reserved_24 = 24,
+    Reserved_25 = 25,
+    Reserved_26 = 26,
+    Reserved_27 = 27,
     HypervisorInjectionException = 28,
     VMMCommunicationException = 29,
     SecurityException = 30,
+    Reserved_31 = 31,
 };
 
 var idt: [256]InterruptDescriptor = [_]InterruptDescriptor{.{}} ** 256;
@@ -96,7 +103,8 @@ const default_handlers: [256]Handler = b: {
     comptime var array: [256]Handler = undefined;
     for (array[0..256], 0..) |*entry, i| {
         entry.* = switch (i) {
-            31...255 => |id| default_handler(id, "unhandled", .except),
+            0x20...0x30 => |id| default_handler(id, .irq),
+            0x31...0xff => |id| default_handler(id, .interrupt),
             @intFromEnum(Exceptions.DoubleFault),
             @intFromEnum(Exceptions.InvalidTSS),
             @intFromEnum(Exceptions.SegmentNotPresent),
@@ -105,8 +113,8 @@ const default_handlers: [256]Handler = b: {
             @intFromEnum(Exceptions.PageFault),
             @intFromEnum(Exceptions.AlignmentCheck),
             @intFromEnum(Exceptions.SecurityException),
-            => |id| default_handler(id, "unhandled", .err),
-            else => |id| default_handler(@truncate(id), "unhandled", .noerr),
+            => |id| default_handler(id, .except_err),
+            else => |id| default_handler(@truncate(id), .except),
         };
     }
     break :b array;
@@ -117,7 +125,7 @@ pub fn init() void {
 
     inline for (0..256) |i| set_intr_gate(@as(u8, @intCast(i)), default_handlers[i]);
 
-    pic.remap(0x20, 0x28);
+    pic.remap(pic.offset_master, pic.offset_slave);
 
     idtr.offset = @intFromPtr(&idt);
     cpu.load_idt(&idtr);
@@ -125,7 +133,7 @@ pub fn init() void {
     logger.info("Idt initialized", .{});
 }
 
-/// return the numeric id of an interrupt (which can be an Exception, pic.IRQS or an int)
+/// return the numeric id of an interrupt (which can be an Exception, pic.IRQ or an int)
 fn get_id(obj: anytype) u8 {
     return switch (@typeInfo(@TypeOf(obj))) {
         .Int => |i| if (i.signedness == .unsigned and i.bits <= 8)
@@ -135,7 +143,7 @@ fn get_id(obj: anytype) u8 {
         .ComptimeInt => comptime if (obj >= 0 and obj < 256) obj else @compileError("Invalid interrupt value"),
         .Enum => switch (@TypeOf(obj)) {
             Exceptions => @intFromEnum(obj),
-            pic.IRQS => @as(u8, @intFromEnum(obj)) + 32,
+            pic.IRQ => pic.get_interrupt_id_from_irq(obj),
             else => @compileError("Invalid interrupt type: " ++ @typeName(@TypeOf(obj))),
         },
         else => @compileError("Invalid interrupt type: " ++ @typeName(@TypeOf(obj))),
@@ -175,24 +183,30 @@ pub fn unset_gate(id: u8) void {
 
 pub fn default_handler(
     comptime id: u8,
-    comptime name: []const u8,
-    comptime t: enum { err, noerr, except },
+    comptime t: enum { except, except_err, irq, interrupt },
 ) Handler {
     const handlers = struct {
         pub fn exception(_: *InterruptFrame) callconv(.Interrupt) void {
-            interrupt_logger.err("exception {d}, {s}", .{ id, name });
-            @import("drivers/pic/pic.zig").ack();
+            const e = @as(Exceptions, @enumFromInt(id));
+            @import("ft/ft.zig").log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
         }
-        pub fn noerr(_: *InterruptFrame) callconv(.Interrupt) void {
-            @import("ft/ft.zig").log.err("irq {d}, {s}", .{ id, name });
+        pub fn exception_err(_: *InterruptFrame, code: u32) callconv(.Interrupt) void {
+            const e = @as(Exceptions, @enumFromInt(id));
+            @import("ft/ft.zig").log.err("exception {d} ({s}) unhandled, code: 0x{x}", .{ id, @tagName(e), code });
         }
-        pub fn err(_: *InterruptFrame, code: u32) callconv(.Interrupt) void {
-            @import("ft/ft.zig").log.err("irq {d}, {s}, 0x{x}", .{ id, name, code });
+        pub fn irq(_: *InterruptFrame) callconv(.Interrupt) void {
+            const _id = pic.get_irq_from_interrupt_id(id);
+            pic.ack(_id);
+            @import("ft/ft.zig").log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
+        }
+        pub fn interrupt(_: *InterruptFrame) callconv(.Interrupt) void {
+            @import("ft/ft.zig").log.scoped(.interrupt).err("{d} unhandled", .{id});
         }
     };
     return switch (t) {
-        .err => .{ .err = &handlers.err },
-        .noerr => .{ .noerr = &handlers.noerr },
         .except => .{ .noerr = &handlers.exception },
+        .except_err => .{ .err = &handlers.exception_err },
+        .irq => .{ .noerr = &handlers.irq },
+        .interrupt => .{ .noerr = &handlers.interrupt },
     };
 }

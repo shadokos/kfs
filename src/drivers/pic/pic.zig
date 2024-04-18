@@ -1,5 +1,8 @@
 const cpu = @import("../../cpu.zig");
 
+pub var offset_master: u8 = 0x20;
+pub var offset_slave: u8 = 0x28;
+
 const ICW1_ICW4 = 0x01; // ICW4 needed
 const ICW1_SINGLE = 0x02; // Single (cascade) mode
 const ICW1_INTERVAL4 = 0x04; // Call address interval 4 (8)
@@ -12,7 +15,7 @@ const ICW4_BUF_SLAVE = 0x08; // Buffered mode/slave
 const ICW4_BUF_MASTER = 0x0c; // Buffered mode/master
 const ICW4_SFNM = 0x10; // Special fully nested (not)
 
-pub const IRQS = enum {
+pub const IRQ = enum {
     Timer,
     Keyboard,
     Slave,
@@ -29,9 +32,10 @@ pub const IRQS = enum {
     Coprocessor,
     PrimaryATAHardDisk,
     SecondaryATAHardDisk,
+    Unknown,
 };
 
-fn get_irq_port_id(irq: IRQS) struct { id: u8, port: cpu.Ports } {
+fn get_irq_port_id(irq: IRQ) struct { id: u8, port: cpu.Ports } {
     var id: u8 = @intFromEnum(irq);
     var port = cpu.Ports.pic_master_data;
 
@@ -42,7 +46,7 @@ fn get_irq_port_id(irq: IRQS) struct { id: u8, port: cpu.Ports } {
     return .{ .id = id, .port = port };
 }
 
-pub fn enable_irq(irq: IRQS) void {
+pub fn enable_irq(irq: IRQ) void {
     const port_id = get_irq_port_id(irq);
     const mask = cpu.inb(port_id.port);
     cpu.outb(port_id.port, mask & ~(@as(u8, 1) << @truncate(port_id.id)));
@@ -53,7 +57,7 @@ pub fn enable_all_irqs() void {
     cpu.outb(cpu.Ports.pic_slave_data, 0x00);
 }
 
-pub fn disable_irq(irq: IRQS) void {
+pub fn disable_irq(irq: IRQ) void {
     const port_id = get_irq_port_id(irq);
     const mask = cpu.inb(port_id.port);
     cpu.outb(port_id.port, mask | (@as(u8, 1) << @truncate(port_id.id)));
@@ -89,6 +93,25 @@ pub fn remap(offset1: u8, offset2: u8) void {
     cpu.outb(.pic_slave_data, 0b1111_1111);
 }
 
-pub inline fn ack() void {
-    cpu.outb(0x20, 0x20);
+pub inline fn ack(irq: IRQ) void {
+    if (@intFromEnum(irq) < 8) {
+        cpu.outb(0x20, 0x20);
+    } else {
+        cpu.outb(0xa0, 0x20);
+    }
+}
+
+pub fn get_irq_from_interrupt_id(id: u8) IRQ {
+    if (id >= offset_master and id < offset_master + 8) {
+        return @enumFromInt(id - offset_master);
+    } else if (id >= offset_slave and id < offset_slave + 8) {
+        return @enumFromInt(id - offset_slave);
+    } else {
+        return .Unknown;
+    }
+}
+
+pub fn get_interrupt_id_from_irq(irq: IRQ) u8 {
+    const id = @intFromEnum(irq);
+    return if (id < 8) id + offset_master else id + offset_slave;
 }
