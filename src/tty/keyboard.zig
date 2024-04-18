@@ -163,7 +163,7 @@ pub fn handler(_: *InterruptFrame) callconv(.Interrupt) void {
             },
         },
     };
-    pic.ack();
+    pic.ack(.Keyboard);
 }
 
 fn is_key_available() bool {
@@ -173,6 +173,6 @@ fn is_key_available() bool {
 pub fn init() void {
     const interrupts = @import("../interrupts.zig");
     ps2.set_first_port_interrupts(true);
-    interrupts.set_intr_gate(pic.IRQS.Keyboard, interrupts.Handler{ .noerr = &handler });
-    pic.enable_irq(pic.IRQS.Keyboard);
+    interrupts.set_intr_gate(pic.IRQ.Keyboard, interrupts.Handler{ .noerr = &handler });
+    pic.enable_irq(pic.IRQ.Keyboard);
 }
