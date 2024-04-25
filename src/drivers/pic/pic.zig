@@ -1,7 +1,9 @@
 const cpu = @import("../../cpu.zig");
 
-pub var offset_master: u8 = 0x20;
-pub var offset_slave: u8 = 0x28;
+const logger = @import("../../ft/ft.zig").log.scoped(.driver_pic);
+
+pub const offset_master: u8 = 0x20;
+pub const offset_slave: u8 = 0x28;
 
 const ICW1_ICW4 = 0x01; // ICW4 needed
 const ICW1_SINGLE = 0x02; // Single (cascade) mode
@@ -32,7 +34,6 @@ pub const IRQ = enum {
     Coprocessor,
     PrimaryATAHardDisk,
     SecondaryATAHardDisk,
-    Unknown,
 };
 
 fn get_irq_port_id(irq: IRQ) struct { id: u8, port: cpu.Ports } {
@@ -69,6 +70,7 @@ pub fn disable_all_irqs() void {
 }
 
 pub fn remap(offset1: u8, offset2: u8) void {
+    logger.debug("Remapping PIC with offsets {} and {}", .{ offset1, offset2 });
     cpu.outb(.pic_master_command, ICW1_INIT | ICW1_ICW4);
     cpu.io_wait();
     cpu.outb(.pic_slave_command, ICW1_INIT | ICW1_ICW4);
@@ -101,17 +103,24 @@ pub inline fn ack(irq: IRQ) void {
     }
 }
 
-pub fn get_irq_from_interrupt_id(id: u8) IRQ {
-    if (id >= offset_master and id < offset_master + 8) {
+pub fn get_irq_from_interrupt_id(comptime id: u8) IRQ {
+    if (id >= offset_master and id <= offset_master + 8) {
         return @enumFromInt(id - offset_master);
-    } else if (id >= offset_slave and id < offset_slave + 8) {
+    } else if (id >= offset_slave and id <= offset_slave + 8) {
         return @enumFromInt(id - offset_slave);
     } else {
-        return .Unknown;
+        @compileLog(id);
+        @compileError("Invalid interrupt ID for PIC");
     }
 }
 
-pub fn get_interrupt_id_from_irq(irq: IRQ) u8 {
+pub fn get_interrupt_id_from_irq(irq: IRQ) !u8 {
     const id = @intFromEnum(irq);
-    return if (id < 8) id + offset_master else id + offset_slave;
+    return if (id < 8) id + offset_master else if (id < 16) id + offset_slave else error.InvalidIRQ;
+}
+
+pub fn init() void {
+    logger.debug("Initializing PIC", .{});
+    remap(offset_master, offset_slave);
+    logger.info("PIC initialized", .{});
 }
