@@ -63,6 +63,8 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("gdt.zig").init();
 
+    @import("drivers/pic/pic.zig").init();
+
     @import("interrupts.zig").init();
 
     @import("memory.zig").init();

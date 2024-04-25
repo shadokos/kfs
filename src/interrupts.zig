@@ -1,7 +1,8 @@
 const cpu = @import("cpu.zig");
 const gdt = @import("gdt.zig");
 const pic = @import("drivers/pic/pic.zig");
-const logger = @import("ft/ft.zig").log.scoped(.idt);
+const ft = @import("ft/ft.zig");
+const logger = ft.log.scoped(.intr);
 
 pub const InterruptFrame = extern struct {
     ip: u32,
@@ -125,12 +126,11 @@ pub fn init() void {
 
     inline for (0..256) |i| set_intr_gate(@as(u8, @intCast(i)), default_handlers[i]);
 
-    pic.remap(pic.offset_master, pic.offset_slave);
-
     idtr.offset = @intFromPtr(&idt);
     cpu.load_idt(&idtr);
-    cpu.enable_interrupts();
     logger.info("Idt initialized", .{});
+    cpu.enable_interrupts();
+    logger.info("Interrupts enabled", .{});
 }
 
 /// return the numeric id of an interrupt (which can be an Exception, pic.IRQ or an int)
@@ -143,7 +143,7 @@ fn get_id(obj: anytype) u8 {
         .ComptimeInt => comptime if (obj >= 0 and obj < 256) obj else @compileError("Invalid interrupt value"),
         .Enum => switch (@TypeOf(obj)) {
             Exceptions => @intFromEnum(obj),
-            pic.IRQ => pic.get_interrupt_id_from_irq(obj),
+            pic.IRQ => pic.get_interrupt_id_from_irq(obj) catch unreachable,
             else => @compileError("Invalid interrupt type: " ++ @typeName(@TypeOf(obj))),
         },
         else => @compileError("Invalid interrupt type: " ++ @typeName(@TypeOf(obj))),
@@ -188,19 +188,19 @@ pub fn default_handler(
     const handlers = struct {
         pub fn exception(_: *InterruptFrame) callconv(.Interrupt) void {
             const e = @as(Exceptions, @enumFromInt(id));
-            @import("ft/ft.zig").log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
+            ft.log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
         }
         pub fn exception_err(_: *InterruptFrame, code: u32) callconv(.Interrupt) void {
             const e = @as(Exceptions, @enumFromInt(id));
-            @import("ft/ft.zig").log.err("exception {d} ({s}) unhandled, code: 0x{x}", .{ id, @tagName(e), code });
+            ft.log.err("exception {d} ({s}) unhandled, code: 0x{x}", .{ id, @tagName(e), code });
         }
         pub fn irq(_: *InterruptFrame) callconv(.Interrupt) void {
             const _id = pic.get_irq_from_interrupt_id(id);
             pic.ack(_id);
-            @import("ft/ft.zig").log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
+            ft.log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
         }
         pub fn interrupt(_: *InterruptFrame) callconv(.Interrupt) void {
-            @import("ft/ft.zig").log.scoped(.interrupt).err("{d} unhandled", .{id});
+            ft.log.scoped(.interrupt).err("{d} unhandled", .{id});
         }
     };
     return switch (t) {
