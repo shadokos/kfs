@@ -21,7 +21,7 @@ pub fn kernel_log(
 
     tty.printk(
         "[" ++ color ++ level_str ++ colors.reset ++ "] " ++
-            (" " ** padding) ++ scope_str ++ format ++ "\n",
+            (" " ** padding) ++ colors.white_dim ++ scope_str ++ colors.reset ++ format ++ "\n",
         args,
     );
     if (message_level == .err and scope == .default) {
