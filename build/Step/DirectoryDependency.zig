@@ -6,11 +6,11 @@ const AddDirectoryStep = struct {
     dir_path: std.Build.LazyPath,
 
     fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
-        const self: *AddDirectoryStep = @alignCast(@fieldParentPtr(AddDirectoryStep, "step", step));
+        const self: *AddDirectoryStep = @alignCast(@fieldParentPtr("step", step));
         const b = step.owner;
 
         const dir_path = self.dir_path.getPath(b);
-        var dir = std.fs.cwd().openIterableDir(dir_path, .{}) catch return;
+        var dir = std.fs.cwd().openDir(dir_path, .{ .iterate = true }) catch return;
         defer dir.close();
 
         var iter = try dir.walk(b.allocator);

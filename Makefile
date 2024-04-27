@@ -26,6 +26,10 @@ debug: .optimize-Debug
 release: .optimize-ReleaseSafe
 	$(ZIG) build -Doptimize=ReleaseSafe $(BUILD_ARGS)
 
+.PHONY: small
+small: .optimize-ReleaseSmall
+	$(ZIG) build -Doptimize=ReleaseFast $(BUILD_ARGS)
+
 .PHONY: fast
 fast: .optimize-ReleaseFast
 	$(ZIG) build -Doptimize=ReleaseFast $(BUILD_ARGS)

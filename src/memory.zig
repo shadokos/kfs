@@ -49,14 +49,14 @@ pub var physicalMemory: MultipoolAllocator = undefined;
 
 const InterruptFrame = @import("interrupts.zig").InterruptFrame;
 
-fn GPE_handler(_: *InterruptFrame, arg: u32) callconv(.Interrupt) void {
-    logger.err("general protection fault 0b{b:0>32}", .{arg});
+fn GPE_handler(frame: InterruptFrame) callconv(.C) void {
+    logger.err("general protection fault 0b{b:0>32}", .{frame.code});
 }
 
 pub fn init() void {
     logger.debug("Initializing memory", .{});
 
-    var total_space: u64 = get_max_mem();
+    const total_space: u64 = get_max_mem();
     logger.debug("\ttotal_space: {x}", .{total_space});
 
     const direct_begin: paging.PhysicalPtr = ft.mem.alignForward(
@@ -129,7 +129,10 @@ pub fn init() void {
 
     logger.debug("\tEnabling interrupts...", .{});
     VirtualSpace.set_handler();
-    interrupts.set_intr_gate(interrupts.Exceptions.GeneralProtectionFault, interrupts.Handler{ .err = &GPE_handler });
+    interrupts.set_intr_gate(
+        interrupts.Exceptions.GeneralProtectionFault,
+        interrupts.Handler.create(&GPE_handler, true),
+    );
     logger.debug("\tInterrupts enabled...", .{});
 
     logger.debug("\tActivating kernel virtual space...", .{});

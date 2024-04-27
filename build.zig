@@ -1,6 +1,6 @@
 const std = @import("std");
-const Step = @import("std").build.Step;
-const Builder = @import("std").build.Builder;
+const Step = @import("std").Build.Step;
+const Builder = @import("std").Build;
 
 pub const BuildContext = struct {
     builder: *Builder,

@@ -17,27 +17,28 @@ pub fn build_executable(context: *BuildContext) void {
     context.kernel = context.builder.addExecutable(.{
         .name = context.name,
         .root_source_file = .{ .path = "src/boot.zig" },
-        .target = CrossTarget{
+        .target = context.builder.resolveTargetQuery(CrossTarget{
             .cpu_arch = Target.Cpu.Arch.x86,
             .os_tag = Target.Os.Tag.freestanding,
             .abi = Target.Abi.none,
             .cpu_features_sub = cpu_features_sub,
-        },
+        }),
         .optimize = context.optimize,
     });
 
     context.build_options = context.builder.addOptions();
     context.build_options.addOption(bool, "posix", context.posix);
-    context.build_options.addOption(std.builtin.OptimizeMode, "optimize", context.kernel.optimize);
+    context.build_options.addOption(std.builtin.OptimizeMode, "optimize", context.optimize);
     context.build_options.addOption(bool, "ci", context.ci);
-    context.kernel.addOptions("build_options", context.build_options);
+    context.kernel.root_module.addOptions("build_options", context.build_options);
 
-    const colors_module = context.builder.createModule(.{ .source_file = .{ .path = "./src/misc/colors.zig" } });
-    context.kernel.addModule("colors", colors_module);
+    const colors_module = context.builder.createModule(.{ .root_source_file = .{ .path = "./src/misc/colors.zig" } });
+    context.kernel.root_module.addImport("colors", colors_module);
 
     context.kernel.addIncludePath(std.Build.LazyPath{ .path = "./src/c_headers/" });
 
     context.kernel.setLinkerScriptPath(.{ .path = "src/linker.ld" });
+    context.kernel.entry = .{ .symbol_name = "_entry" };
 
     context.install_kernel = context.builder.addInstallArtifact(context.kernel, .{
         .dest_dir = .{ .override = .{ .custom = "iso/boot/bin" } },

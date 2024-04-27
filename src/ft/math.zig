@@ -4,7 +4,7 @@ pub fn log2(x: anytype) @TypeOf(x) {
     switch (@typeInfo(@TypeOf(x))) {
         .Int, .ComptimeInt => {
             var i: @TypeOf(x) = 0;
-            var absolute = abs(@TypeOf(x), x);
+            const absolute = abs(@TypeOf(x), x);
             while ((absolute >> @intCast(i)) > 1) : (i += 1) {}
             return i;
         },
@@ -20,8 +20,8 @@ pub fn IntFittingRange(comptime from: comptime_int, comptime to: comptime_int) t
         return u0;
     }
 
-    var absolute_max = if (-from > to) -from else to;
-    comptime var bits = @max(log2(absolute_max), 1) + 1; // todo
+    const absolute_max = if (-from > to) -from else to;
+    const bits = @max(log2(absolute_max), 1) + 1; // todo
     const signedness: @import("std").builtin.Signedness = if (from < 0 or to < 0) .signed else .unsigned;
     return ft.meta.Int(signedness, bits + (if (signedness == .signed) 1 else 0));
 }
