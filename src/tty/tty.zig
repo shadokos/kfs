@@ -285,7 +285,7 @@ pub fn TtyN(comptime history_size: u32) type {
                 char |= @as(u16, 0b10000000) << 8;
             }
             if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.reverse)) != 0) {
-                var swap = char;
+                const swap = char;
                 char &= 0x00ff;
                 char |= (swap & 0x0f00) << 4;
                 char |= (swap & 0xf000) >> 4;
@@ -603,7 +603,7 @@ const TtyBufferWriter = BufferWriter(Tty.Writer, Tty.Writer.Error, Tty.Writer.wr
 
 /// Array of BufferWriters, each one wrapping one instance of Tty
 var ttyBufferWriter = init: {
-    comptime var array: [max_tty + 1]TtyBufferWriter = undefined;
+    var array: [max_tty + 1]TtyBufferWriter = undefined;
     for (0..max_tty + 1) |i| {
         array[i] = TtyBufferWriter{ .context = tty_array[i].writer() };
     }

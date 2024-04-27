@@ -162,7 +162,7 @@ pub fn controller_self_test() ControllerError!void {
 
     send_command(0xAA); // Perform controller self-test
     while (true) {
-        var response = get_data();
+        const response = get_data();
         switch (response) {
             0x55 => {
                 ps2_logger.debug("\t\tself-test: OK (0x{x:0>2})", .{response});
@@ -187,7 +187,7 @@ pub fn port_test(port: enum { FirstPort, SecondPort }) ControllerError!bool {
     ps2_logger.debug("\tTesting {s} PS/2 port", .{port_str});
 
     send_command(if (port == .FirstPort) 0xAB else 0xA9);
-    var response = get_data();
+    const response = get_data();
 
     switch (response) {
         0x00 => ps2_logger.debug("\t\ttest: OK (0x{x:0>2})", .{response}),

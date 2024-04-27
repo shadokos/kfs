@@ -15,7 +15,7 @@ pub const BitMap = struct {
     pub const Error = error{OutOfBounds};
 
     pub fn init(addr: [*]usize, nb_obj: usize) BitMap {
-        var len = Self.compute_len(nb_obj);
+        const len = Self.compute_len(nb_obj);
 
         @memset(addr[0..len], 0);
         return BitMap{ .nb_obj = nb_obj, .bits = addr[0..len] };

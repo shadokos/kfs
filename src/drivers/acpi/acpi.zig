@@ -70,7 +70,7 @@ fn _entry_type(comptime name: []const u8) type {
                 data: u8,
             }, // DSDT
         };
-        var ret = extern struct {
+        const ret = extern struct {
             header: ACPISDT_Header,
         };
         var tmp = @typeInfo(ret);

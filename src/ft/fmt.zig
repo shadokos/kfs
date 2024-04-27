@@ -275,12 +275,12 @@ fn get_argument(comptime fmt: *[]const u8) !?Argument {
                 0,
                 ']',
             ) orelse error.UnexpectedChar;
-            comptime var ret = .{ .name = fmt.*[0..end] };
+            const ret = .{ .name = fmt.*[0..end] };
             fmt.* = fmt.*[end..];
             _ = try expect("]", fmt);
             return ret;
         } else if (fmt.*.len > 0 and (fmt.*[0] >= '0' and fmt.*[0] <= '9')) {
-            comptime var end = 0;
+            var end = 0;
             while (end < fmt.*.len and (fmt.*[end] >= '0' and fmt.*[end] <= '9')) {
                 end += 1;
             }
@@ -345,7 +345,7 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
                     current_arg += 1;
                     argument = Argument{ .index = current_arg - 1 };
                 }
-                comptime var specifier: Specifier = try get_specifier(&fmt_copy) orelse Specifier.any;
+                const specifier: Specifier = comptime try get_specifier(&fmt_copy) orelse Specifier.any;
                 comptime var options = FormatOptions{}; // todo
                 if (comptime accept(":", &fmt_copy) catch null) |_| {
                     if (fmt_copy.len >= 2 and (fmt_copy[1] == '<' or fmt_copy[1] == '^' or fmt_copy[1] == '>')) {
@@ -364,7 +364,7 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
                 }
                 _ = comptime expect("}", &fmt_copy) catch @compileError("unexpected char");
 
-                comptime var arg_pos = switch (argument.?) {
+                const arg_pos = switch (argument.?) {
                     .index => |n| n,
                     .name => |n| ft.meta.fieldIndex(@TypeOf(args), n) orelse @compileError("bonjour"),
                 };
@@ -491,13 +491,13 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
 }
 
 pub fn formatBuf(buf: []const u8, options: FormatOptions, writer: anytype) !void {
-    var padding = if (options.width) |w| if (buf.len < w) w - buf.len else null else null;
-    var right_padding = if (padding) |p| switch (options.alignment) {
+    const padding = if (options.width) |w| if (buf.len < w) w - buf.len else null else null;
+    const right_padding = if (padding) |p| switch (options.alignment) {
         .right => 0,
         .center => p / 2,
         .left => p,
     } else null;
-    var left_padding = if (padding) |p| switch (options.alignment) {
+    const left_padding = if (padding) |p| switch (options.alignment) {
         .right => p,
         .center => p / 2 + p % 2,
         .left => 0,

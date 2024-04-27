@@ -109,7 +109,7 @@ pub fn map_kernel() void {
 pub fn init() void {
     logger.debug("Initializing memory", .{});
 
-    var total_space: u64 = get_max_mem();
+    const total_space: u64 = get_max_mem();
 
     logger.debug("\ttotal_space: {x}", .{total_space});
 

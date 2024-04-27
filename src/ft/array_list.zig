@@ -109,12 +109,12 @@ pub fn ArrayListAligned(comptime T: type, comptime alignment: ?u29) type {
         }
 
         pub inline fn appendNTimes(self: *Self, value: T, n: usize) Allocator.Error!void {
-            var array = try self.addManyAsArray(n);
+            const array = try self.addManyAsArray(n);
             @memset(array, value);
         }
 
         pub inline fn appendNTimesAssumeCapacity(self: *Self, value: T, n: usize) void {
-            var array = self.addManyAsArrayAssumeCapacity(n);
+            const array = self.addManyAsArrayAssumeCapacity(n);
             @memset(array, value);
         }
 

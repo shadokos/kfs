@@ -231,7 +231,7 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
             const ref = self.node_ref(n, field);
 
             var l: *Node = @field(n.avl[@intFromEnum(field)], dir) orelse return;
-            var op: ?*Node = n.avl[@intFromEnum(field)].p;
+            const op: ?*Node = n.avl[@intFromEnum(field)].p;
 
             const bn = n.avl[@intFromEnum(field)].balance_factor;
             const bl = l.avl[@intFromEnum(field)].balance_factor;
@@ -268,8 +268,8 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
         /// debug function, used to check that a tree respect the rules of the AVL algorithm,
         /// this function panic if the tree is invalid
         fn check_node(self: *Self, n: *Node, field: AVL_type) i32 {
-            var dl: i32 = if (n.avl[@intFromEnum(field)].l) |l| self.check_node(l, field) else 0;
-            var dr: i32 = if (n.avl[@intFromEnum(field)].r) |r| self.check_node(r, field) else 0;
+            const dl: i32 = if (n.avl[@intFromEnum(field)].l) |l| self.check_node(l, field) else 0;
+            const dr: i32 = if (n.avl[@intFromEnum(field)].r) |r| self.check_node(r, field) else 0;
             if (dl - dr != n.avl[@intFromEnum(field)].balance_factor or
                 n.avl[@intFromEnum(field)].balance_factor > 1 or
                 .avl[@intFromEnum(field)].balance_factor < -1)
@@ -367,7 +367,7 @@ pub fn VirtualSpaceAllocator(comptime PageAllocator: type) type {
 
         /// remove the node `n` from the tree `field`
         fn remove_from_tree(self: *Self, n: *Node, field: AVL_type) void {
-            var ref: *?*Node = self.node_ref(n, field);
+            const ref: *?*Node = self.node_ref(n, field);
 
             if (n.avl[@intFromEnum(field)].l) |l| {
                 if (n.avl[@intFromEnum(field)].r) |_| {

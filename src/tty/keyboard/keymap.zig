@@ -69,7 +69,7 @@ pub fn set_keymap(name: []const u8) error{KeymapNotFound}!void {
 fn get_keymap_list() [@typeInfo(keymaps).Struct.decls.len][]const u8 {
     comptime {
         var ret: [@typeInfo(keymaps).Struct.decls.len][]const u8 = undefined;
-        inline for (@typeInfo(keymaps).Struct.decls, 0..) |decl, i| {
+        for (@typeInfo(keymaps).Struct.decls, 0..) |decl, i| {
             ret[i] = decl.name;
         }
         return ret;
@@ -82,7 +82,7 @@ pub const keymap_list = get_keymap_list();
 pub fn map_key(index: u16) u16 {
     var caps: bool = false;
     var col: u8 = 0;
-    var row: [6]u16 = current_map[index];
+    const row: [6]u16 = current_map[index];
 
     if (row[0] & HASNUM != 0) {
         if (keyboard.locks.num_lock) caps = true;

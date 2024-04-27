@@ -43,8 +43,8 @@ pub fn print_prompt(err: bool) void {
 }
 
 pub fn memory_dump(start_address: usize, end_address: usize) void {
-    var start: usize = @min(start_address, end_address);
-    var end: usize = @max(start_address, end_address);
+    const start: usize = @min(start_address, end_address);
+    const end: usize = @max(start_address, end_address);
 
     var i: usize = 0;
     while (start +| i < end) : ({
@@ -62,8 +62,8 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
             offset += 5;
             offsetPreview += 2;
         }) {
-            var byte1: u8 = @as(*allowzero u8, @ptrFromInt(ptr)).*;
-            var byte2: u8 = @as(*allowzero u8, @ptrFromInt(ptr +| 1)).*;
+            const byte1: u8 = @as(*allowzero u8, @ptrFromInt(ptr)).*;
+            const byte2: u8 = @as(*allowzero u8, @ptrFromInt(ptr +| 1)).*;
 
             _ = ft.fmt.bufPrint(line[10 + offset ..], "{x:0>2}{x:0>2} ", .{ byte1, byte2 }) catch {};
             _ = ft.fmt.bufPrint(line[51 + offsetPreview ..], "{s}{s}", .{
@@ -82,7 +82,7 @@ pub inline fn print_stack() void {
         return;
     }
 
-    var ebp: usize = @frameAddress();
+    const ebp: usize = @frameAddress();
     var esp: usize = 0;
     var si: StackIterator = StackIterator.init(null, ebp);
     var old_fp: usize = 0;
@@ -153,7 +153,7 @@ pub inline fn dump_stack() void {
         return;
     }
 
-    var ebp: usize = @frameAddress();
+    const ebp: usize = @frameAddress();
     var esp: usize = 0;
     var si: StackIterator = StackIterator.init(null, ebp);
     var pc: ?usize = null;
