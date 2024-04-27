@@ -58,8 +58,8 @@ pub const Cache = struct {
 
     pub fn grow(self: *Self, nb_slab: usize) !void {
         for (0..nb_slab) |_| {
-            var obj = try self.page_allocator.alloc_pages(self.pages_per_slab);
-            var slab: *Slab = @ptrCast(@alignCast(obj));
+            const obj = try self.page_allocator.alloc_pages(self.pages_per_slab);
+            const slab: *Slab = @ptrCast(@alignCast(obj));
 
             slab.* = Slab.init(self, @ptrCast(obj));
 
@@ -150,7 +150,7 @@ pub const Cache = struct {
     }
 
     pub fn alloc_one(self: *Self) !*usize {
-        var slab: ?*Slab = if (self.slab_partial) |slab| slab else if (self.slab_empty) |slab| slab else null;
+        const slab: ?*Slab = if (self.slab_partial) |slab| slab else if (self.slab_empty) |slab| slab else null;
         if (slab) |s|
             return try s.alloc_object()
         else {

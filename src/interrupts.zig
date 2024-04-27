@@ -5,17 +5,52 @@ const ft = @import("ft/ft.zig");
 const logger = ft.log.scoped(.intr);
 
 pub const InterruptFrame = extern struct {
+    edi: u32,
+    esi: u32,
+    ebp: u32,
+    edx: u32,
+    ecx: u32,
+    ebx: u32,
+    eax: u32,
+    code: u32,
     ip: u32,
     cs: u32,
     flags: u32,
     sp: u32,
     ss: u32,
-};
 
-pub const Handler = extern union {
-    ptr: usize,
-    err: *const fn (frame: *InterruptFrame, u32) callconv(.Interrupt) void,
-    noerr: *const fn (frame: *InterruptFrame) callconv(.Interrupt) void,
+    pub inline fn debug(self: InterruptFrame) void {
+        logger.warn(
+            \\
+            \\edi: 0x{x:0>8}
+            \\esi: 0x{x:0>8}
+            \\ebp: 0x{x:0>8}
+            \\edx: 0x{x:0>8}
+            \\ecx: 0x{x:0>8}
+            \\ebx: 0x{x:0>8}
+            \\eax: 0x{x:0>8}
+            \\code: 0x{x:0>8}
+            \\ip: 0x{x:0>8}
+            \\cs: 0x{x:0>8}
+            \\flags: 0x{x:0>8}
+            \\sp: 0x{x:0>8}
+            \\ss: 0x{x:0>8}
+        , .{
+            self.edi,
+            self.esi,
+            self.ebp,
+            self.edx,
+            self.ecx,
+            self.ebx,
+            self.eax,
+            self.code,
+            self.ip,
+            self.cs,
+            self.flags,
+            self.sp,
+            self.ss,
+        });
+    }
 };
 
 pub const IDTR = packed struct {
@@ -101,7 +136,7 @@ pub const Exceptions = enum(u8) {
 var idt: [256]InterruptDescriptor = [_]InterruptDescriptor{.{}} ** 256;
 
 const default_handlers: [256]Handler = b: {
-    comptime var array: [256]Handler = undefined;
+    var array: [256]Handler = undefined;
     for (array[0..256], 0..) |*entry, i| {
         entry.* = switch (i) {
             0x20...0x30 => |id| default_handler(id, .irq),
@@ -181,32 +216,82 @@ pub fn unset_gate(id: u8) void {
     idt[get_id(id)] = default_handlers[get_id(id)];
 }
 
+pub const Stub = *const fn () callconv(.Naked) void;
+
+export fn swapGsIfNeeded(frame: InterruptFrame) callconv(.C) void {
+    if (frame.cs != 0x28) {
+        asm volatile ("swapgs");
+    }
+}
+
+pub const Handler = extern union {
+    ptr: usize,
+    raw_handler: Stub,
+
+    const Self = @This();
+
+    pub fn create(comptime f: *const fn (frame: InterruptFrame) callconv(.C) void, comptime has_error: bool) Self {
+        const factory = comptime struct {
+            pub fn raw_stub() callconv(.Naked) void {
+                if (!has_error) asm volatile ("push $0");
+                asm volatile (
+                    \\push %%eax
+                    \\push %%ebx
+                    \\push %%ecx
+                    \\push %%edx
+                    \\push %%ebp
+                    \\push %%esi
+                    \\push %%edi
+                    \\cld
+                );
+                asm volatile ("call *%[f]"
+                    :
+                    : [f] "r" (f),
+                );
+                asm volatile (
+                    \\pop %%edi
+                    \\pop %%esi
+                    \\pop %%ebp
+                    \\pop %%edx
+                    \\pop %%ecx
+                    \\pop %%ebx
+                    \\pop %%eax
+                    \\add $4, %%esp
+                    \\iret
+                );
+            }
+        };
+
+        return Self{ .raw_handler = factory.raw_stub };
+    }
+};
+
 pub fn default_handler(
     comptime id: u8,
     comptime t: enum { except, except_err, irq, interrupt },
 ) Handler {
     const handlers = struct {
-        pub fn exception(_: *InterruptFrame) callconv(.Interrupt) void {
+        pub fn exception(_: InterruptFrame) callconv(.C) void {
             const e = @as(Exceptions, @enumFromInt(id));
             ft.log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
         }
-        pub fn exception_err(_: *InterruptFrame, code: u32) callconv(.Interrupt) void {
+        pub fn exception_err(_: InterruptFrame) callconv(.C) void {
             const e = @as(Exceptions, @enumFromInt(id));
-            ft.log.err("exception {d} ({s}) unhandled, code: 0x{x}", .{ id, @tagName(e), code });
+            ft.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), 0 });
         }
-        pub fn irq(_: *InterruptFrame) callconv(.Interrupt) void {
+        pub fn irq(_: InterruptFrame) callconv(.C) void {
             const _id = pic.get_irq_from_interrupt_id(id);
             pic.ack(_id);
             ft.log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
         }
-        pub fn interrupt(_: *InterruptFrame) callconv(.Interrupt) void {
+        pub fn interrupt(_: InterruptFrame) callconv(.C) void {
             ft.log.scoped(.interrupt).err("{d} unhandled", .{id});
         }
     };
     return switch (t) {
-        .except => .{ .noerr = &handlers.exception },
-        .except_err => .{ .err = &handlers.exception_err },
-        .irq => .{ .noerr = &handlers.irq },
-        .interrupt => .{ .noerr = &handlers.interrupt },
+        .except => Handler.create(&handlers.exception, false),
+        .except_err => Handler.create(&handlers.exception_err, true),
+        .irq => Handler.create(&handlers.irq, false),
+        .interrupt => Handler.create(&handlers.interrupt, false),
     };
 }

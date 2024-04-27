@@ -80,7 +80,7 @@ pub fn Shell(comptime _builtins: anytype) type {
             if (self.hooks.pre_prompt) |hook| hook(self);
 
             // Read a line from the reader
-            var slice = self.reader.readUntilDelimiterAlloc(allocator, '\n', max_line_size) catch |e| {
+            const slice = self.reader.readUntilDelimiterAlloc(allocator, '\n', max_line_size) catch |e| {
                 if (e == error.EndOfStream) return;
                 self.execution_context.err = e;
                 if (self.hooks.on_error) |hook| hook(self);

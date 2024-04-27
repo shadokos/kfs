@@ -141,7 +141,8 @@ pub fn kb_read() void {
 
 const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
 
-pub fn handler(_: *InterruptFrame) callconv(.Interrupt) void {
+pub fn handler(_: InterruptFrame) callconv(.C) void {
+    // frame.debug();
     const scan_code: u8 = ps2.get_data();
     const index: u8 = scan_code & SCANCODE_MASK_INDEX;
     const released: u16 = scan_code & SCANCODE_MASK_RELEASED;
@@ -173,6 +174,6 @@ fn is_key_available() bool {
 pub fn init() void {
     const interrupts = @import("../interrupts.zig");
     ps2.set_first_port_interrupts(true);
-    interrupts.set_intr_gate(pic.IRQ.Keyboard, interrupts.Handler{ .noerr = &handler });
+    interrupts.set_intr_gate(pic.IRQ.Keyboard, interrupts.Handler.create(&handler, false));
     pic.enable_irq(pic.IRQ.Keyboard);
 }

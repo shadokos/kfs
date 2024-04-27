@@ -12,7 +12,7 @@ const RegionSet = @import("region_set.zig").RegionSet;
 
 const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
 
-fn page_fault_handler(frame: *InterruptFrame, arg: u32) callconv(.Interrupt) void {
+fn page_fault_handler(frame: InterruptFrame) callconv(.C) void {
     const ErrorType = packed struct(u32) {
         present: bool,
         type: enum(u1) {
@@ -25,13 +25,12 @@ fn page_fault_handler(frame: *InterruptFrame, arg: u32) callconv(.Interrupt) voi
         },
         unused: u29 = undefined,
     };
-    const error_object: ErrorType = @bitCast(arg);
+    const error_object: ErrorType = @bitCast(frame.code);
     const address: paging.VirtualPtr = @ptrFromInt(cpu.get_cr2());
     const page_address: paging.VirtualPagePtr = @ptrFromInt(
         ft.mem.alignBackward(usize, cpu.get_cr2(), paging.page_size),
     );
     const entry: paging.TableEntry = mapping.get_entry(page_address);
-    _ = frame;
     if (mapping.is_page_present(entry)) {
         @panic("page fault on a present page! (entry is not invalidated)");
     } else if (mapping.is_page_mapped(entry)) {
@@ -77,6 +76,7 @@ pub const VirtualSpace = struct {
             .spaceAllocator = .{},
             .directory = mapping.Directory.init(),
         };
+
         self.directory._kernelspace[255] = .{
             .present = .{
                 .writable = true,
@@ -94,7 +94,10 @@ pub const VirtualSpace = struct {
 
     pub fn set_handler() void {
         const interrupts = @import("../interrupts.zig");
-        interrupts.set_intr_gate(interrupts.Exceptions.PageFault, interrupts.Handler{ .err = &page_fault_handler });
+        interrupts.set_intr_gate(
+            interrupts.Exceptions.PageFault,
+            interrupts.Handler.create(&page_fault_handler, true),
+        );
     }
 
     pub fn add_space(self: *Self, begin: usize, len: usize) !void {
