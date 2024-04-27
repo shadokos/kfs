@@ -90,6 +90,13 @@ pub inline fn unset_flag(flag: Cr0Flag) void {
     );
 }
 
+pub inline fn get_esp() u32 {
+    return asm (
+        \\ mov %esp, %eax
+        : [_] "={eax}" (-> u32),
+    );
+}
+
 pub inline fn set_esp(value: u32) void {
     asm volatile (""
         :

@@ -394,7 +394,7 @@ pub fn TtyN(comptime history_size: u32) type {
             var count: usize = 0;
             for (s) |*c| {
                 while (self.read_tail == self.current_line_begin and self.read_head +% 1 != self.read_tail) {
-                    @import("../cpu.zig").halt();
+                    @import("../task/scheduler.zig").schedule();
                     keyboard.kb_read();
                 }
 
