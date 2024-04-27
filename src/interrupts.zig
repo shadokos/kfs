@@ -181,6 +181,13 @@ fn get_id(obj: anytype) u8 {
             pic.IRQ => pic.get_interrupt_id_from_irq(obj) catch unreachable,
             else => @compileError("Invalid interrupt type: " ++ @typeName(@TypeOf(obj))),
         },
+        .EnumLiteral => b: {
+            if (@hasField(Exceptions, @tagName(obj))) {
+                break :b @intFromEnum(@as(Exceptions, obj));
+            } else if (@hasField(pic.IRQ, @tagName(obj))) {
+                break :b pic.get_interrupt_id_from_irq(@as(pic.IRQ, obj)) catch unreachable;
+            } else @compileError("Invalid interrupt type: Bad enum literal");
+        },
         else => @compileError("Invalid interrupt type: " ++ @typeName(@TypeOf(obj))),
     };
 }

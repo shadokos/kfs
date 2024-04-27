@@ -67,6 +67,8 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("interrupts.zig").init();
 
+    @import("drivers/pit/pit.zig").init();
+
     @import("memory.zig").init();
 
     @import("drivers/ps2/ps2.zig").init();
