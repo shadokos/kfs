@@ -2,6 +2,7 @@ from typing import Union, List
 import socket
 import json
 import os
+import time
 
 import logging
 
@@ -81,8 +82,11 @@ class Tests:
     def run(self):
         for test in self.tests:
             self.logger.info(f'Running {test.name} (command: \"{test.command}\")')
+            start = time.time()
             if not self.run_test(test):
                 self.quit()
+            end = time.time()
+            self.logger.info(f'Done {end - start} s')
             print()
 
     def quit(self):

@@ -18,6 +18,8 @@ jobs:
         run: make DOCKER=true format
       - name: Build Kernel (DEBUG)
         run: make DOCKER=true debug
+      - name: Build Kernel (RELEASE SMALL)
+        run: make DOCKER=true small
       - name: Build Kernel (RELEASE SAFE)
         run: make DOCKER=true release
       - name: Build Kernel (RELEASE FAST)
