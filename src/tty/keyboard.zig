@@ -61,7 +61,7 @@ fn send_to_buffer(scan_code: u16) void {
 
 fn make_break(scancode: u16) ?u16 {
     var c = scancode & 0x7FFF;
-    var make: bool = !(scancode & 0x8000 != 0);
+    const make: bool = !(scancode & 0x8000 != 0);
 
     c = keymap.map_key(c);
     switch (c) {

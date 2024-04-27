@@ -30,10 +30,10 @@ pub const Slab = struct {
     pub fn init(cache: *Cache, page: *usize) Slab {
         var new = Slab{ .header = .{ .cache = cache } };
 
-        var mem: [*]usize = @ptrFromInt(@intFromPtr(page) + @sizeOf(Slab));
+        const mem: [*]usize = @ptrFromInt(@intFromPtr(page) + @sizeOf(Slab));
         new.bitmap = BitMap.init(mem, cache.obj_per_slab);
 
-        var start = @intFromPtr(page) + @sizeOf(Slab) + new.bitmap.get_size();
+        const start = @intFromPtr(page) + @sizeOf(Slab) + new.bitmap.get_size();
         new.data = @as([*]?u16, @ptrFromInt(start))[0 .. cache.obj_per_slab * (cache.size_obj / @sizeOf(usize))];
 
         for (0..cache.obj_per_slab) |i| {

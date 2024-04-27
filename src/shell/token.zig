@@ -19,7 +19,7 @@ pub const TokenizerError = error{
 };
 
 fn _skip_and_fill_whitespaces(data: []u8, i: *usize) void {
-    var start = i.*;
+    const start = i.*;
 
     for (data[i.*..data.len]) |*c| switch (c.*) {
         0, 9...13, 32 => i.* += 1,

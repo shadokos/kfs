@@ -235,7 +235,7 @@ pub fn BuddyAllocator(comptime AllocatorType: type, comptime max_order: order_t)
             //      @as(f32, @floatFromInt(@as(usize, 1) << (max_order)));
             const average_page_cost: usize = 2;
 
-            var ret: usize = ft.mem.alignForward(usize, pages, @as(usize, 1) << (max_order + 1)) * average_page_cost;
+            const ret: usize = ft.mem.alignForward(usize, pages, @as(usize, 1) << (max_order + 1)) * average_page_cost;
             // var ret : usize = @intFromFloat(@as(f32, @floatFromInt(pages -
             //      (pages % (@as(usize, 1) << (max_order + 1))))) * average_page_cost);
 

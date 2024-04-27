@@ -83,9 +83,9 @@ pub const PhysicalMemory = struct {
     }
 
     pub fn obj_size(_: *Self, ptr: anytype) !usize {
-        var pfd = globalCache.cache.get_page_frame_descriptor(@ptrCast(@alignCast(ptr)));
+        const pfd = globalCache.cache.get_page_frame_descriptor(@ptrCast(@alignCast(ptr)));
         if (!pfd.flags.slab) return error.InvalidArgument;
-        var slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
+        const slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
 
         if (slab) |s| {
             return if (s.is_obj_in_slab(@ptrCast(@alignCast(ptr))))

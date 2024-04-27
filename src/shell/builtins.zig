@@ -46,8 +46,8 @@ pub fn hexdump(args: [][]u8) CmdError!void {
     if (args.len != 3) {
         return CmdError.InvalidNumberOfArguments;
     }
-    var begin: usize = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    var len: usize = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+    const begin: usize = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const len: usize = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
     utils.memory_dump(begin, begin +| len);
 }
 

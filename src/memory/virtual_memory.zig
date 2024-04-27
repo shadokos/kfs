@@ -19,7 +19,7 @@ pub fn VirtualMemory(comptime PageAllocator: type) type {
 
         /// init the allocator
         pub fn init(_pageAllocator: *PageAllocator) Self {
-            var self = Self{ .pageAllocator = _pageAllocator };
+            const self = Self{ .pageAllocator = _pageAllocator };
             return self;
         }
 

@@ -231,7 +231,7 @@ fn get_tag_type(comptime n: comptime_int) type {
             load_base_addr: u32,
         },
     };
-    var ret = struct {
+    const ret = struct {
         type: u32,
         size: u32,
     };

@@ -25,7 +25,7 @@ pub fn int(r: Random, comptime T: type) T {
 }
 
 pub fn boolean(r: Random) bool {
-    var ret = int(r, u8);
+    const ret = int(r, u8);
     return (@popCount(ret) % 2) == 1;
 }
 

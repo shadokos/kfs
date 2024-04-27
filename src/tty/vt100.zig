@@ -6,7 +6,7 @@ pub fn vt100(comptime history_size: u32) type {
         /// handle move escape codes
         fn handle_move(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
             const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-            var n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 1;
+            const n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 1;
             switch (buffer[len - 1]) {
                 'A' => {
                     terminal.move_cursor(-n, 0);
@@ -27,7 +27,7 @@ pub fn vt100(comptime history_size: u32) type {
         /// handle set attributes escape codes
         fn handle_set_attribute(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
             const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-            var n: u32 = ft.fmt.parseInt(u32, buffer[1 .. len - 1], 10) catch 0;
+            const n: u32 = ft.fmt.parseInt(u32, buffer[1 .. len - 1], 10) catch 0;
             switch (n) {
                 @intFromEnum(tty.Attribute.reset) => {
                     terminal.attributes = 0;
@@ -81,7 +81,7 @@ pub fn vt100(comptime history_size: u32) type {
         /// handle set clear line escape codes
         fn handle_clearline(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
             const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-            var n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
+            const n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
             switch (n) {
                 0 => {
                     for (terminal.pos.col..tty.width) |i| {
@@ -103,7 +103,7 @@ pub fn vt100(comptime history_size: u32) type {
         /// handle set clear screen escape codes
         fn handle_clearscreen(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
             const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-            var n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
+            const n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
             const screen_bottom = (terminal.head_line + history_size - terminal.scroll_offset) % history_size;
             var screen_top = (screen_bottom + history_size - tty.height + 1) % history_size;
 
@@ -147,18 +147,18 @@ pub fn vt100(comptime history_size: u32) type {
                 v = ft.fmt.parseInt(u32, buffer[1..semicolon_pos], 10) catch 0;
                 h = ft.fmt.parseInt(u32, buffer[semicolon_pos + 1 .. len - 1], 10) catch 0;
             }
-            var off_v: i32 = -@as(i32, @intCast(terminal.pos.line)) +
+            const off_v: i32 = -@as(i32, @intCast(terminal.pos.line)) +
                 @mod(@as(i32, @intCast(terminal.head_line)) -
                 @as(i32, @intCast(terminal.scroll_offset)) -
                 @as(i32, @intCast(tty.height - 1)) +
                 @as(i32, @intCast(v)), history_size);
-            var off_h: i32 = -@as(i32, @intCast(terminal.pos.col)) + @as(i32, @intCast(h));
+            const off_h: i32 = -@as(i32, @intCast(terminal.pos.col)) + @as(i32, @intCast(h));
             terminal.move_cursor(off_v, off_h);
         }
 
         fn handle_get_pos(terminal: *tty.TtyN(history_size), _: [:0]const u8) void {
             var buffer: [100]u8 = [1]u8{0} ** 100;
-            var slice = ft.fmt.bufPrint(&buffer, "\x1b{d};{d}R", .{
+            const slice = ft.fmt.bufPrint(&buffer, "\x1b{d};{d}R", .{
                 terminal.get_state().pos.line,
                 terminal.get_state().pos.col,
             }) catch return;

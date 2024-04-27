@@ -31,7 +31,7 @@ pub fn shell() u8 {
         utils.print_prompt(err);
 
         // Read a line from the tty
-        var slice = reader.readUntilDelimiterAlloc(allocator, '\n', 4096) catch |e| {
+        const slice = reader.readUntilDelimiterAlloc(allocator, '\n', 4096) catch |e| {
             if (e == error.StreamTooLong) {
                 utils.print_error("Line is too long", .{});
                 _ = reader.skipUntilDelimiterOrEof('\n') catch {};

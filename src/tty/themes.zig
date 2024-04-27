@@ -49,7 +49,7 @@ pub fn get_theme(name: []const u8) ?Theme {
 fn get_theme_list() [@typeInfo(themes).Struct.decls.len][]const u8 {
     comptime {
         var ret: [@typeInfo(themes).Struct.decls.len][]const u8 = undefined;
-        inline for (@typeInfo(themes).Struct.decls, 0..) |decl, i| {
+        for (@typeInfo(themes).Struct.decls, 0..) |decl, i| {
             ret[i] = decl.name;
         }
         return ret;
