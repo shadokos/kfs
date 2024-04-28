@@ -3,6 +3,7 @@ const tty = @import("../../tty/tty.zig");
 const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
 const cpu = @import("../../cpu.zig");
+const pit = @import("../pit/pit.zig");
 const colors = @import("colors");
 
 const acpi_logger = @import("../../ft/ft.zig").log.scoped(.driver_acpi);
@@ -248,17 +249,23 @@ pub fn enable() ACPI_error!void {
     cpu.outb(acpi.fadt.smi_command_port, acpi.fadt.acpi_enable);
 
     acpi_logger.debug("\t- waiting for enable", .{});
-    // TODO: use a sleep instead of a busy loop
-    var i: usize = 0;
-    while (i < acpi.TIMEOUT) : (i += 1) if (_is_enabled(.pm1a)) break;
-    if (acpi.fadt.pm1b_control_block != 0)
-        while (i < acpi.TIMEOUT) : (i += 1) if (_is_enabled(.pm1b)) break;
-
-    if (i == acpi.TIMEOUT) {
+    var time: u32 = 0;
+    const interval: u32 = 10; // interval between checks in ms
+    while (time < acpi.TIMEOUT) : (time += interval) {
+        pit.wait_ms(interval);
+        if (_is_enabled(.pm1a)) break;
+    }
+    if (acpi.fadt.pm1b_control_block != 0) {
+        while (time < acpi.TIMEOUT) : (time += interval) {
+            pit.wait_ms(interval);
+            if (_is_enabled(.pm1b)) break;
+        }
+    }
+    if (time == acpi.TIMEOUT) {
         acpi_logger.err("Failed to enable", .{});
         return ACPI_error.enable_failed;
     }
-    acpi_logger.debug("\t- Done", .{});
+    acpi_logger.debug("\t- Done ({d} ms)", .{time});
 }
 
 pub fn init() void {
