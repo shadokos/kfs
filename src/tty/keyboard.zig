@@ -174,6 +174,6 @@ fn is_key_available() bool {
 pub fn init() void {
     const interrupts = @import("../interrupts.zig");
     ps2.set_first_port_interrupts(true);
-    interrupts.set_intr_gate(pic.IRQ.Keyboard, interrupts.Handler.create(&handler, false));
+    interrupts.set_intr_gate(.Keyboard, interrupts.Handler.create(&handler, false));
     pic.enable_irq(pic.IRQ.Keyboard);
 }

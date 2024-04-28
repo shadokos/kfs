@@ -94,10 +94,7 @@ pub const VirtualSpace = struct {
 
     pub fn set_handler() void {
         const interrupts = @import("../interrupts.zig");
-        interrupts.set_intr_gate(
-            interrupts.Exceptions.PageFault,
-            interrupts.Handler.create(&page_fault_handler, true),
-        );
+        interrupts.set_intr_gate(.PageFault, interrupts.Handler.create(&page_fault_handler, true));
     }
 
     pub fn add_space(self: *Self, begin: usize, len: usize) !void {
