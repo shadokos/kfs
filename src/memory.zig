@@ -129,10 +129,7 @@ pub fn init() void {
 
     logger.debug("\tEnabling interrupts...", .{});
     VirtualSpace.set_handler();
-    interrupts.set_intr_gate(
-        interrupts.Exceptions.GeneralProtectionFault,
-        interrupts.Handler.create(&GPE_handler, true),
-    );
+    interrupts.set_intr_gate(.GeneralProtectionFault, interrupts.Handler.create(&GPE_handler, true));
     logger.debug("\tInterrupts enabled...", .{});
 
     logger.debug("\tActivating kernel virtual space...", .{});
