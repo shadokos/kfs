@@ -261,7 +261,7 @@ pub fn enable() ACPI_error!void {
             if (_is_enabled(.pm1b)) break;
         }
     }
-    if (time == acpi.TIMEOUT) {
+    if (time >= acpi.TIMEOUT) {
         acpi_logger.err("Failed to enable", .{});
         return ACPI_error.enable_failed;
     }
