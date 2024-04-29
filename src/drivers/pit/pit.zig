@@ -64,13 +64,13 @@ pub const ReadBackStatus = packed struct {
 };
 
 pub const ReadBackCommand = packed struct {
-    _: MonoState(u1, 0) = MonoState(u1, 0){},
+    _: MonoState(u1, 0) = .{},
     channel_0: bool,
     channel_1: bool,
     channel_2: bool,
     latch_status: u1 = 0, // 0 = latch status, 1 = don't latch status
     latch_count: u1 = 0, // 0 = latch count, 1 = don't latch count
-    cmd: MonoState(u2, 0b11) = MonoState(u2, 0b11){},
+    cmd: MonoState(u2, 0b11) = .{},
 };
 
 pub fn send_command(cmd: ModeCmdRegister) void {
