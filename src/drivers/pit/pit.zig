@@ -148,17 +148,17 @@ pub fn pit_handler(_: interrupts.InterruptFrame) callconv(.C) void {
     pic.ack(.Timer);
 }
 
-pub fn wait_ticks(ticks: u64) void {
+pub fn sleep_n_ticks(ticks: u64) void {
     const start = ch0_ticks;
     while (ch0_ticks - start < ticks) cpu.halt();
 }
 
-pub fn wait_ns(ns: u64) void {
-    wait_ticks(ns / interval_ns);
+pub fn nano_sleep(ns: u64) void {
+    sleep_n_ticks(ns / interval_ns);
 }
 
-pub fn wait_ms(ms: u64) void {
-    wait_ns(ms * 1_000_000);
+pub fn sleep(ms: u64) void {
+    sleep_n_ticks(ms * 1_000_000 / interval_ns);
 }
 
 pub fn init() void {
