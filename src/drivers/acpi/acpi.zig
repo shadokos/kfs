@@ -252,12 +252,12 @@ pub fn enable() ACPI_error!void {
     var time: u32 = 0;
     const interval: u32 = 10; // interval between checks in ms
     while (time < acpi.TIMEOUT) : (time += interval) {
-        pit.wait_ms(interval);
+        pit.sleep(interval);
         if (_is_enabled(.pm1a)) break;
     }
     if (acpi.fadt.pm1b_control_block != 0) {
         while (time < acpi.TIMEOUT) : (time += interval) {
-            pit.wait_ms(interval);
+            pit.sleep(interval);
             if (_is_enabled(.pm1b)) break;
         }
     }

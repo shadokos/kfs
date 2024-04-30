@@ -281,8 +281,8 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
     ) catch CmdError.OtherError;
 }
 
-pub fn wait(_: anytype, args: [][]u8) CmdError!void {
+pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
     const ms = ft.fmt.parseInt(u64, args[1], 0) catch return CmdError.InvalidParameter;
-    @import("../../drivers/pit/pit.zig").wait_ms(ms);
+    @import("../../drivers/pit/pit.zig").sleep(ms);
 }
