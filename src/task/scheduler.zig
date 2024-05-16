@@ -27,6 +27,7 @@ pub fn remove_task(t: *task.TaskDescriptor) void {
 
 pub fn schedule() void {
     if (!initialized) return;
+    @import("../cpu.zig").disable_interrupts();
     const prev = current_task;
     current_task = current_task.next;
     while (current_task.state != .Running and current_task != prev) {
@@ -36,6 +37,7 @@ pub fn schedule() void {
         @panic("no task running");
     }
     task.switch_to_task(prev, current_task);
+    @import("../cpu.zig").enable_interrupts();
 }
 
 pub fn checkpoint() void {
