@@ -5,14 +5,8 @@ const logger = @import("../ft/ft.zig").log.scoped(.mapping);
 
 pub const Directory: type = extern struct {
     userspace: [768]paging.TableEntry = [1]paging.TableEntry{.{ .not_mapped = .{} }} ** 768,
-    _kernelspace: [256]paging.TableEntry = undefined,
-
-    const Self = @This();
-    pub fn init() Self {
-        var ret = Self{};
-        @memcpy(ret._kernelspace[0..], paging.page_dir_ptr[768..]);
-        return ret;
-    }
+    _kernelspace: [255]paging.TableEntry = undefined,
+    directory: paging.TableEntry = undefined,
 };
 
 /// return the physical address of a virtual ptr

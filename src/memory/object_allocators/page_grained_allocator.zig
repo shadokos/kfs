@@ -53,24 +53,35 @@ pub const PageGrainedAllocator = struct {
         const self: *Self = @ptrCast(@alignCast(ctx));
         _ = buf_align; // todo
         _ = ret_addr; // todo
-        const chunk: *ChunkHeader = @ptrFromInt(@as(usize, @intFromPtr(buf.ptr)) - @sizeOf(ChunkHeader));
+        const chunk: *ChunkHeader = @ptrFromInt(ft.mem.alignForward(
+            usize,
+            @intFromPtr(buf.ptr) - paging.page_size,
+            paging.page_size,
+        ));
+        // const chunk: *ChunkHeader = @ptrFromInt(@as(usize, @intFromPtr(buf.ptr)) - @sizeOf(ChunkHeader));
 
         self.pageAllocator.free_pages(@ptrCast(@alignCast(chunk)), chunk.npages);
     }
 
     fn vtable_alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        _ = ptr_align; // todo
         _ = ret_addr; // todo
+        const alignment: usize = @as(usize, 1) << @intCast(ptr_align);
+        if (alignment > paging.page_size)
+            return null;
         const npages = ft.math.divCeil(
             usize,
-            @sizeOf(ChunkHeader) + len,
+            @sizeOf(ChunkHeader) + len + alignment,
             paging.page_size,
         ) catch unreachable;
         const chunk: *ChunkHeader = @ptrCast(@alignCast(self.pageAllocator.alloc_pages(npages) catch return null));
         chunk.npages = npages;
 
-        return @as([*]u8, @ptrFromInt(@intFromPtr(chunk) + @sizeOf(ChunkHeader)));
+        return @as([*]u8, @ptrFromInt(ft.mem.alignForward(
+            usize,
+            @intFromPtr(chunk) + @sizeOf(ChunkHeader),
+            alignment,
+        )));
     }
 
     fn vtable_resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
