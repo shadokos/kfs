@@ -11,9 +11,6 @@ pub const VirtualSpaceAllocator = struct {
     /// roots of the trees
     tree: [2]?*Node = .{ null, null },
 
-    /// list of free node to use
-    free_nodes: ?*Node = null,
-
     /// space currently used (this field is only used for stats)
     used_space: usize = 0,
 
@@ -56,6 +53,44 @@ pub const VirtualSpaceAllocator = struct {
 
     pub fn global_init() !void {
         try Node.init_cache();
+    }
+
+    pub fn clone(self: Self) !Self {
+        var ret = self;
+        if (ret.tree[0]) |t| {
+            ret.tree[0] = try self.clone_node(t.*);
+            ret.tree[1] = null;
+            ret.add_tree(t, @enumFromInt(1));
+        }
+        return ret;
+    }
+
+    fn add_tree(self: *Self, tree: *Node, field: AVL_type) void {
+        self.add_to_tree(tree, field);
+        if (tree.avl[@intFromEnum(field)].l) |l| {
+            self.add_tree(l, field);
+        }
+        if (tree.avl[@intFromEnum(field)].r) |r| {
+            self.add_tree(r, field);
+        }
+    }
+
+    fn clone_node(self: Self, n: Node) !*Node {
+        const ret = try alloc_node();
+        ret.* = n;
+        ret.avl[1].l = null;
+        ret.avl[1].r = null;
+        ret.avl[1].p = null;
+        ret.avl[1].balance_factor = 0;
+        if (ret.avl[0].l) |*l| {
+            l.* = try self.clone_node(l.*.*);
+            l.*.avl[0].p = ret;
+        }
+        if (ret.avl[0].r) |*r| {
+            r.* = try self.clone_node(r.*.*);
+            r.*.avl[0].p = ret;
+        }
+        return ret;
     }
 
     pub fn set_allocator(self: *Self, new_allocator: ft.mem.Allocator) void {
