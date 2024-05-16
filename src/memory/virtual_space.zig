@@ -6,6 +6,7 @@ const pageFrameAllocator = &@import("../memory.zig").pageFrameAllocator;
 const cpu = @import("../cpu.zig");
 const Cache = @import("object_allocators/slab/cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;
+const logger = ft.log.scoped(.virtual_space);
 
 const Region = @import("regions.zig").Region;
 const RegionSet = @import("region_set.zig").RegionSet;
@@ -56,8 +57,9 @@ fn page_fault_handler(frame: InterruptFrame) callconv(.C) void {
 pub const VirtualSpace = struct {
     spaceAllocator: VirtualSpaceAllocator,
     regions: RegionSet = .{},
+    directory_region: ?*Region = null,
     directory: mapping.Directory align(4096),
-    active: bool = false,
+    // active: bool = false,
 
     pub const Error = error{
         InvalidPointer,
@@ -69,27 +71,77 @@ pub const VirtualSpace = struct {
         immediate_mapping: bool = false,
     };
 
+    pub var cache: *Cache = undefined;
     const Self = @This();
 
     pub fn init(self: *Self) !void {
         self.* = Self{
             .spaceAllocator = .{},
-            .directory = mapping.Directory.init(),
+            .directory = .{},
         };
+        self.copy_kernel_space_tables();
+        self.map_directory();
+    }
 
-        self.directory._kernelspace[255] = .{
-            .present = .{
-                .writable = true,
-                .address_fragment = @truncate(
-                    (mapping.get_physical_ptr(@ptrCast(&self.directory)) catch unreachable) >> 12,
-                ),
-            },
-        };
+    pub fn init_cache() !void {
+        cache = try globalCache.create(
+            "VirtualSpace",
+            @import("../memory.zig").virtually_contiguous_page_allocator.page_allocator(),
+            @sizeOf(Self),
+            5,
+        );
     }
 
     pub fn global_init() !void {
+        try init_cache();
         try Region.init_cache();
         try VirtualSpaceAllocator.global_init();
+    }
+
+    pub fn clone(self: *Self) !*Self {
+        // const ret = try cache.allocator().create(Self); todo
+        const memory = @import("../memory.zig");
+        const ret = try memory.virtualMemory.allocator().create(Self);
+        try ret.init();
+        ret.spaceAllocator = try self.spaceAllocator.clone();
+        ret.regions = try self.regions.clone();
+        ret.directory.userspace = self.directory.userspace;
+
+        if (self.directory_region) |dr| {
+            ret.directory_region = ret.regions.find(@ptrFromInt(dr.begin << paging.page_bits));
+        }
+
+        ret.transfer();
+
+        const directory_region = ret.directory_region orelse @panic("todo");
+        try ret.clone_region(directory_region);
+
+        var current = ret.regions.list;
+        while (current) |r| : (current = r.next) {
+            if (r == directory_region) continue;
+            try ret.clone_region(r);
+        }
+        return ret;
+    }
+
+    fn clone_region(self: *Self, region: *Region) !void {
+        _ = self; // todo
+        for (region.begin..region.begin + region.len) |p| {
+            const pagePtr: paging.VirtualPagePtr = @ptrFromInt(p << paging.page_bits);
+            var entry = mapping.get_entry(pagePtr);
+            if (entry.is_present()) {
+                const physical = try pageFrameAllocator.alloc_pages(1);
+                errdefer pageFrameAllocator.free_pages(physical, 1) catch unreachable;
+                const memory = @import("../memory.zig");
+                const virtual = try memory.kernel_virtual_space.map_anywhere(physical, 1);
+                defer memory.kernel_virtual_space.unmap(virtual, 1) catch unreachable;
+                @memcpy(virtual[0..], pagePtr[0..]);
+                entry.present.address_fragment = @intCast(physical >> paging.page_bits);
+            } else {
+                entry.not_present = @ptrCast(region);
+            }
+            mapping.set_entry(pagePtr, entry);
+        }
     }
 
     pub fn set_handler() void {
@@ -268,8 +320,26 @@ pub const VirtualSpace = struct {
         }
     }
 
+    fn copy_kernel_space_tables(self: *Self) void {
+        @memcpy(self.directory._kernelspace[0..], paging.page_dir_ptr[768..1023]);
+    }
+
+    fn map_directory(self: *Self) void {
+        self.directory.directory = .{
+            .present = .{
+                .owner = .Supervisor,
+                .address_fragment = @truncate(
+                    (mapping.get_physical_ptr(@ptrCast(&self.directory)) catch unreachable) >> 12,
+                ),
+            },
+        };
+    }
+
     pub fn fill_page_tables(self: *Self, begin: usize, len: usize, map_now: bool) !void {
         var region = try self.reserve_region(begin, len) orelse unreachable;
+
+        self.directory_region = region;
+
         region.value = .{ .virtually_contiguous_allocation = .{} };
         self.commit(region, false);
         if (map_now) {

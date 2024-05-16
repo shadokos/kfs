@@ -1,6 +1,6 @@
 const memory = @import("../memory.zig");
 const paging = @import("../memory/paging.zig");
-const VirtualSpace = @import("../memory/virtual_space.zig");
+const VirtualSpace = @import("../memory/virtual_space.zig").VirtualSpace;
 const cpu = @import("../cpu.zig");
 const task_set = @import("task_set.zig");
 const signal = @import("signal.zig");
@@ -21,6 +21,8 @@ pub const TaskDescriptor = struct {
     childs: ?*TaskDescriptor = null,
     next_sibling: ?*TaskDescriptor = null,
 
+    vm: ?*VirtualSpace = null,
+
     status_info: ?status_informations.Status = null,
     status_stack: StatusStack = .{},
     status_stack_process_node: StatusStack.Node = .{},
@@ -40,6 +42,9 @@ pub const TaskDescriptor = struct {
     pub const Self = @This();
 
     pub fn deinit(self: *Self) void {
+        if (self.vm) |_| {
+            // todo destroy vm
+        }
         if (self.parent) |p| {
             p.status_stack.remove(&self.status_stack_process_node);
             var n: ?*Self = p.childs;
@@ -71,6 +76,15 @@ pub const TaskDescriptor = struct {
         } else @panic("todo");
     }
 
+    pub fn clone_vm(self: *Self, other: *Self) !void {
+        if (self.vm != null) {
+            @panic("task already has a vm");
+        }
+        if (other.vm) |vm| {
+            self.vm = try vm.clone();
+        }
+    }
+
     pub fn get_status(self: *Self) ?status_informations.Status {
         const ret = self.status_info;
         self.status_info = null;
@@ -96,11 +110,24 @@ pub const TaskDescriptor = struct {
             return descriptor;
         } else return null;
     }
+
+    pub fn spawn(self: *Self, function: *const fn (anytype) u8, data: anytype) !void {
+        const taskUnion: *TaskUnion = @fieldParentPtr("task", self);
+        var is_parent: bool = false;
+        const is_parent_ptr: *volatile bool = &is_parent;
+        scheduler.checkpoint();
+        if (is_parent_ptr.*) {} else {
+            is_parent_ptr.* = true;
+            scheduler.set_current_task(self);
+            cpu.set_esp(@as(usize, @intFromPtr(&taskUnion.stack)) + taskUnion.stack.len);
+            start_task(function, data);
+        }
+    }
 };
 
 pub const TaskUnion = struct {
     task: TaskDescriptor,
-    stack: [2048 - @sizeOf(TaskDescriptor)]u8, // todo
+    stack: [32 * 1024 - @sizeOf(TaskDescriptor)]u8 align(1), // todo
 
     const Self = @This();
 
@@ -111,7 +138,7 @@ pub const TaskUnion = struct {
             "kernel_task",
             memory.directPageAllocator.page_allocator(),
             @sizeOf(TaskUnion),
-            4,
+            6,
         );
     }
 };
@@ -131,7 +158,27 @@ pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor
 }
 
 pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
-    return switch_to_task_opts(prev, next, false);
+    if (next.vm) |vm| {
+        vm.transfer();
+    }
+    switch_to_task_opts(prev, next, false);
+    //todo
+    // const current = scheduler.get_current_task();
+}
+
+pub fn init_vm(t: *TaskDescriptor) !void {
+    if (t.vm) |_| {
+        return;
+    }
+    // t.vm = try VirtualSpace.cache.allocator().create(VirtualSpace); todo
+    t.vm = try memory.virtualMemory.allocator().create(VirtualSpace);
+    if (t.vm) |vm| {
+        try vm.init();
+        try vm.add_space(0, paging.high_half / paging.page_size);
+        try vm.add_space((paging.page_tables) / paging.page_size, 768);
+        vm.transfer();
+        try vm.fill_page_tables(paging.page_tables / paging.page_size, 768, false);
+    } else unreachable;
 }
 
 pub fn getpid() TaskDescriptor.Pid {
@@ -153,21 +200,6 @@ pub fn exit(code: u8) noreturn {
     unreachable;
 }
 
-pub fn start_task(function: *const fn () u8) noreturn {
-    exit(function());
-}
-
-pub fn spawn(function: *const fn () u8) !*TaskDescriptor {
-    const descriptor = try task_set.create_task();
-    const taskUnion: *TaskUnion = @fieldParentPtr("task", descriptor);
-    var is_parent: bool = false;
-    const is_parent_ptr: *volatile bool = &is_parent;
-    scheduler.checkpoint();
-    if (is_parent_ptr.*) {} else {
-        is_parent_ptr.* = true;
-        scheduler.set_current_task(descriptor);
-        cpu.set_esp(@as(usize, @intFromPtr(&taskUnion.stack)) + taskUnion.stack.len);
-        start_task(function);
-    }
-    return descriptor;
+pub fn start_task(function: *const fn (anytype) u8, data: anytype) noreturn {
+    exit(function(data));
 }
