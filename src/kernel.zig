@@ -80,7 +80,8 @@ pub fn main() void {
     _ = task_set.create_task() catch @panic("c'est  la  panique 2");
 
     const new_task = task_set.create_task() catch @panic("c'est  la  panique 4");
-    new_task.spawn(task1, 3) catch @panic("c'est  la  panique 3");
+    new_task.spawn(task.bootstrap, 3) catch @panic("c'est  la  panique 3");
+
     // const c2 = task.spawn(task2, null) catch @panic("c'est  la  panique 4");
     // const c3 = task.spawn(task3, null) catch @panic("c'est  la  panique 5");
 
