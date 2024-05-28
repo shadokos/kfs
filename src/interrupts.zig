@@ -13,11 +13,15 @@ pub const InterruptFrame = extern struct {
     ebx: u32,
     eax: u32,
     code: u32,
-    ip: u32,
-    cs: u32,
-    flags: u32,
-    sp: u32,
-    ss: u32,
+    iret: IretFrame,
+
+    pub const IretFrame = extern struct {
+        ip: u32,
+        cs: u32,
+        flags: u32,
+        sp: u32,
+        ss: u32,
+    };
 
     pub inline fn debug(self: InterruptFrame) void {
         logger.warn(
@@ -44,11 +48,11 @@ pub const InterruptFrame = extern struct {
             self.ebx,
             self.eax,
             self.code,
-            self.ip,
-            self.cs,
-            self.flags,
-            self.sp,
-            self.ss,
+            self.iret.ip,
+            self.iret.cs,
+            self.iret.flags,
+            self.iret.sp,
+            self.iret.ss,
         });
     }
 };
@@ -224,12 +228,6 @@ pub fn unset_gate(id: u8) void {
 }
 
 pub const Stub = *const fn () callconv(.Naked) void;
-
-export fn swapGsIfNeeded(frame: InterruptFrame) callconv(.C) void {
-    if (frame.cs != 0x28) {
-        asm volatile ("swapgs");
-    }
-}
 
 pub const Handler = extern union {
     ptr: usize,

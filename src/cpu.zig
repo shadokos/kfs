@@ -194,6 +194,14 @@ pub inline fn load_gdt(gdtr: *const @import("gdt.zig").GDTR) void {
     );
 }
 
+pub inline fn load_tss(selector: u16) void {
+    asm volatile (
+        \\ ltr %[selector]
+        :
+        : [selector] "{ax}" (selector),
+    );
+}
+
 // todo: non comptime code segment
 pub inline fn load_segments(comptime code: u16, data: u16, stack: u16) void {
     comptime var code_selector_buf: [10]u8 = undefined;

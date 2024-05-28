@@ -68,6 +68,8 @@ pub fn make_present(address: paging.VirtualPagePtr) !void {
         .virtually_contiguous_allocation => {
             const physical = try pageFrameAllocator.alloc_pages(1);
             const present_entry: paging.present_table_entry = .{
+                // TODO: remove it
+                .owner = .User,
                 .writable = true,
                 .address_fragment = @truncate(physical >> 12),
             };
@@ -77,6 +79,8 @@ pub fn make_present(address: paging.VirtualPagePtr) !void {
         },
         .physically_contiguous_allocation => |m| {
             const present_entry: paging.present_table_entry = .{
+                // TODO: remove it
+                .owner = .User,
                 .writable = true,
                 .address_fragment = @truncate(
                     @as(paging.PhysicalPtr, @intCast(@intFromPtr(address) + m.offset)) / paging.page_size,
@@ -88,6 +92,8 @@ pub fn make_present(address: paging.VirtualPagePtr) !void {
         },
         .physical_mapping => |m| {
             const present_entry: paging.present_table_entry = .{
+                // TODO: remove it
+                .owner = .User,
                 .writable = true,
                 .address_fragment = @truncate(
                     @as(paging.PhysicalPtr, @intCast(@intFromPtr(address) + m.offset)) / paging.page_size,

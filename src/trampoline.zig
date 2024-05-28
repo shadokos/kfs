@@ -23,6 +23,8 @@ fn get_page_tables() [table_count][1024]paging.page_table_entry {
         const table = i / paging.page_table_size;
         ret[table][i % paging.page_table_size].present = true;
         ret[table][i % paging.page_table_size].writable = true;
+        // TODO: remove
+        ret[table][i % paging.page_table_size].owner = .User;
         ret[table][i % paging.page_table_size].address_fragment = i;
     }
     return ret;
@@ -40,6 +42,8 @@ export fn trampoline_jump() linksection(".bootstrap_code") callconv(.C) void {
         page_directory[t] = .{
             .present = true,
             .writable = true,
+            // TODO: remove
+            .owner = .User,
             .address_fragment = @intCast(t + @intFromPtr(&page_tables) / paging.page_size),
         };
         page_directory[768 + t] = page_directory[t];

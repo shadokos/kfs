@@ -34,7 +34,7 @@ fn encode_gdt(entry: gdt_entry) u64 {
         (@as(u64, entry.limit) & 0xffff));
 }
 
-const GDT = [_]u64{
+var GDT = [_]u64{
     0,
     encode_gdt(.{ // kernel code
         .base = 0,
@@ -128,6 +128,7 @@ const GDT = [_]u64{
             .readable_writable = true,
         }),
     }),
+    0, // Tss
 };
 
 pub const GDTR = packed struct(u48) {
@@ -153,11 +154,63 @@ pub fn init() void {
         .base = @intFromPtr(&GDT),
     };
 
+    // Setting up TSS entry
+    GDT[7] = encode_gdt(.{ // Tss
+        .base = @intFromPtr(&tss),
+        .limit = @sizeOf(@TypeOf(tss)) - 1,
+        .access_byte = @bitCast(access_byte_type{
+            .present = true,
+            .executable = true,
+            .Accessed = true,
+        }),
+        .flags = @bitCast(flag_type{ .size = true }),
+    });
+
+    // Initialize TSS
+    tss.ss0 = comptime get_selector(3, .GDT, cpu.PrivilegeLevel.Supervisor);
+    tss.cs = comptime get_selector(4, .GDT, cpu.PrivilegeLevel.User);
+    tss.ss = comptime get_selector(5, .GDT, cpu.PrivilegeLevel.User);
+
     cpu.load_gdt(&gdtr);
     cpu.load_segments(
         comptime get_selector(1, .GDT, cpu.PrivilegeLevel.Supervisor),
         comptime get_selector(2, .GDT, cpu.PrivilegeLevel.Supervisor),
         comptime get_selector(3, .GDT, cpu.PrivilegeLevel.Supervisor),
     );
+
+    cpu.load_tss(comptime get_selector(7, .GDT, cpu.PrivilegeLevel.Supervisor));
+
     logger.info("Gdt initialized", .{});
 }
+
+pub const Tss = extern struct {
+    link: u16 = 0,
+    esp0: u32 = 0,
+    ss0: u16 = 0,
+    esp1: u32 = 0,
+    ss1: u16 = 0,
+    esp2: u32 = 0,
+    ss2: u16 = 0,
+    cr3: u32 = 0,
+    eip: u32 = 0,
+    eflags: u32 = 0,
+    eax: u32 = 0,
+    ecx: u32 = 0,
+    edx: u32 = 0,
+    ebx: u32 = 0,
+    esp: u32 = 0,
+    ebp: u32 = 0,
+    esi: u32 = 0,
+    edi: u32 = 0,
+    es: u32 = 0,
+    cs: u32 = 0,
+    ss: u32 = 0,
+    ds: u32 = 0,
+    fs: u32 = 0,
+    gs: u32 = 0,
+    ldtr: u32 = 0,
+    trap: u16 = 0,
+    iopb: u16 = @sizeOf(Tss),
+};
+
+pub var tss: Tss align(4096) = .{};
