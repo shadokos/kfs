@@ -316,7 +316,7 @@ pub const VirtualSpace = struct {
 
     pub fn make_present(address: paging.VirtualPagePtr, npages: usize) !void {
         for (0..npages) |p| {
-            @import("regions.zig").make_present(@ptrFromInt(@intFromPtr(address) + (p * paging.page_size)));
+            try @import("regions.zig").make_present(@ptrFromInt(@intFromPtr(address) + (p * paging.page_size)));
         }
     }
 

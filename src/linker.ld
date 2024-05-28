@@ -22,6 +22,14 @@ SECTIONS
 		KEEP(*(.bootstrap_code))
 	}
 
+    userspace_start = .;
+
+	.userspace ALIGN(4K) : {
+        KEEP(*(.userspace))
+    }
+
+    userspace_end = .;
+
 	. += 0xC0000000;
 
 	.text ALIGN(4K) : AT (ADDR (.text) - 0xC0000000)

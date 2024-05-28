@@ -10,6 +10,7 @@ const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = @import("../ft/ft.zig").log.scoped(.task);
 const Errno = @import("errno.zig").Errno;
+const ft = @import("../ft/ft.zig");
 
 pub const TaskDescriptor = struct {
     pid: Pid,
@@ -119,6 +120,7 @@ pub const TaskDescriptor = struct {
         if (is_parent_ptr.*) {} else {
             is_parent_ptr.* = true;
             scheduler.set_current_task(self);
+            @import("../gdt.zig").tss.esp0 = @as(usize, @intFromPtr(&taskUnion.stack)) + taskUnion.stack.len;
             cpu.set_esp(@as(usize, @intFromPtr(&taskUnion.stack)) + taskUnion.stack.len);
             start_task(function, data);
         }
@@ -161,6 +163,8 @@ pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     if (next.vm) |vm| {
         vm.transfer();
     }
+    const task_union: *TaskUnion = @fieldParentPtr("task", next);
+    @import("../gdt.zig").tss.esp0 = @as(usize, @intFromPtr(&task_union.stack)) + task_union.stack.len;
     switch_to_task_opts(prev, next, false);
     //todo
     // const current = scheduler.get_current_task();
@@ -202,4 +206,47 @@ pub fn exit(code: u8) noreturn {
 
 pub fn start_task(function: *const fn (anytype) u8, data: anytype) noreturn {
     exit(function(data));
+}
+
+pub fn bootstrap(_: anytype) u8 {
+    const stack_segment: u32 = @intCast(@import("../gdt.zig").get_selector(6, .GDT, .User));
+    const task = scheduler.get_current_task();
+    const vm = task.vm orelse b: {
+        init_vm(task) catch @panic("failed to init task");
+        break :b task.vm orelse unreachable;
+    };
+    const up_start = ft.mem.alignBackward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_start" })), 4096);
+    const up_end = ft.mem.alignForward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_end" })), 4096);
+
+    vm.spaceAllocator.print();
+    vm.map(
+        up_start,
+        @ptrFromInt(up_start),
+        (up_end - up_start) / 4096,
+    ) catch @panic("AAAAH map non non non :(");
+    VirtualSpace.make_present(@ptrFromInt(up_start), (up_end - up_start) / 4096) catch @panic("baaaah make_present 1");
+    vm.spaceAllocator.print();
+    const stack: u32 = @as(u32, @intFromPtr(vm.alloc_pages(4) catch @panic("stack allocation bouuh :("))) + (4 * 4096);
+    VirtualSpace.make_present(@ptrFromInt(stack - (4 * 4096)), 4) catch @panic("baaaah make_present 2");
+    vm.spaceAllocator.print();
+    const code_segment: u32 = @import("../gdt.zig").get_selector(4, .GDT, .User);
+
+    asm volatile (
+        \\ push %[ss]
+        \\ push %[esp]
+        \\ push $0x200
+        \\ push %[cs]
+        \\ push %[function]
+        \\ iret
+        :
+        : [ss] "r" (stack_segment),
+          [esp] "r" (stack),
+          [cs] "r" (code_segment),
+          [function] "r" (&_test_userspace),
+    );
+    return 0;
+}
+
+export fn _test_userspace() linksection(".userspace") void {
+    while (true) {}
 }
