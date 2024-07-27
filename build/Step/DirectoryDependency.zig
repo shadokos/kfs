@@ -5,7 +5,7 @@ const AddDirectoryStep = struct {
     run_step: *std.Build.Step.Run,
     dir_path: std.Build.LazyPath,
 
-    fn make(step: *std.Build.Step, _: *std.Progress.Node) !void {
+    fn make(step: *std.Build.Step, _: std.Progress.Node) !void {
         const self: *AddDirectoryStep = @alignCast(@fieldParentPtr("step", step));
         const b = step.owner;
 

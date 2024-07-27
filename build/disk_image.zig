@@ -5,7 +5,7 @@ const addDirectoryDependency = @import("Step/DirectoryDependency.zig").addDirect
 
 pub fn install_iso_folder(context: *BuildContext) void {
     context.install_iso_folder = context.builder.addInstallDirectory(.{
-        .source_dir = .{ .path = context.iso_source_dir },
+        .source_dir = .{ .cwd_relative = context.iso_source_dir },
         .install_dir = .prefix,
         .install_subdir = "iso",
     });
@@ -18,11 +18,11 @@ pub fn build_disk_image(context: *BuildContext) void {
         "-o",
     });
     const iso_file = context.grub.addOutputFileArg("kfs.iso");
-    context.grub.addDirectoryArg(.{ .path = "zig-out/iso" });
+    context.grub.addDirectoryArg(.{ .cwd_relative = "zig-out/iso" });
 
     const directory_step = addDirectoryDependency(
         context.grub,
-        .{ .path = "zig-out/iso" },
+        .{ .cwd_relative = "zig-out/iso" },
     );
 
     directory_step.step.dependOn(&context.install_iso_folder.step);
