@@ -16,7 +16,7 @@ pub fn build_executable(context: *BuildContext) void {
 
     context.kernel = context.builder.addExecutable(.{
         .name = context.name,
-        .root_source_file = .{ .path = "src/boot.zig" },
+        .root_source_file = .{ .cwd_relative = "src/boot.zig" },
         .target = context.builder.resolveTargetQuery(CrossTarget{
             .cpu_arch = Target.Cpu.Arch.x86,
             .os_tag = Target.Os.Tag.freestanding,
@@ -32,12 +32,14 @@ pub fn build_executable(context: *BuildContext) void {
     context.build_options.addOption(bool, "ci", context.ci);
     context.kernel.root_module.addOptions("build_options", context.build_options);
 
-    const colors_module = context.builder.createModule(.{ .root_source_file = .{ .path = "./src/misc/colors.zig" } });
+    const colors_module = context.builder.createModule(
+        .{ .root_source_file = .{ .cwd_relative = "./src/misc/colors.zig" } },
+    );
     context.kernel.root_module.addImport("colors", colors_module);
 
-    context.kernel.addIncludePath(std.Build.LazyPath{ .path = "./src/c_headers/" });
+    context.kernel.addIncludePath(std.Build.LazyPath{ .cwd_relative = "./src/c_headers/" });
 
-    context.kernel.setLinkerScriptPath(.{ .path = "src/linker.ld" });
+    context.kernel.setLinkerScriptPath(.{ .cwd_relative = "src/linker.ld" });
     context.kernel.entry = .{ .symbol_name = "_entry" };
 
     context.install_kernel = context.builder.addInstallArtifact(context.kernel, .{
