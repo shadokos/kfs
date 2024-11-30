@@ -115,7 +115,7 @@ pub fn init_channel(comptime channel: SelectChannel, frequency: u32) void {
     const divisor = FREQUENCY / frequency;
     const reload_value = switch (divisor) {
         0 => b: {
-            init_logger.warn("Frequency too high, using maximym hz", .{});
+            init_logger.warn("Frequency too high, using maximum frequency", .{});
             break :b 1;
         },
         1...0x10000 => divisor,
