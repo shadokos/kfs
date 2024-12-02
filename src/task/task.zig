@@ -246,6 +246,30 @@ pub fn bootstrap(_: anytype) u8 {
     return 0;
 }
 
+fn syscall(n: u32) linksection(".userspace") u32 {
+    return asm ("int $0x80"
+        : [_] "={eax}" (-> u32),
+        : [_] "{eax}" (n),
+    );
+}
+
+// fn putchar(c : u8) linksection(".userspace") void {
+//     _ = syscall(c);
+// }
+
+// fn putstr(s : []const u8) linksection(".userspace") void {
+//     _ = syscall(@intFromPtr(s.ptr), s.len);
+//
+//     // for (s) |c| {
+//     //     putchar(c);
+//     // }
+// }
+
+pub export fn sighandler(signum: u32) linksection(".userspace") void {
+    _ = syscall(signum);
+}
+
 export fn _test_userspace() linksection(".userspace") void {
+    _ = syscall(1);
     while (true) {}
 }
