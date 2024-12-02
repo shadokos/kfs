@@ -7,7 +7,7 @@ const interrupts = @import("../../interrupts.zig");
 pub const Shell = @import("../Shell.zig").Shell(@import("builtins.zig"));
 pub var com_port_1: Serial = Serial.init(.com_port_1);
 
-fn pic_handler(_: interrupts.InterruptFrame) callconv(.C) void {
+fn pic_handler(_: *interrupts.InterruptFrame) callconv(.C) void {
     pic.ack(.COM1);
 }
 
