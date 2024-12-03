@@ -218,17 +218,17 @@ pub fn bootstrap(_: anytype) u8 {
     const up_start = ft.mem.alignBackward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_start" })), 4096);
     const up_end = ft.mem.alignForward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_end" })), 4096);
 
-    vm.spaceAllocator.print();
+    // vm.spaceAllocator.print();
     vm.map(
         up_start,
         @ptrFromInt(up_start),
         (up_end - up_start) / 4096,
     ) catch @panic("AAAAH map non non non :(");
     VirtualSpace.make_present(@ptrFromInt(up_start), (up_end - up_start) / 4096) catch @panic("baaaah make_present 1");
-    vm.spaceAllocator.print();
+    // vm.spaceAllocator.print();
     const stack: u32 = @as(u32, @intFromPtr(vm.alloc_pages(4) catch @panic("stack allocation bouuh :("))) + (4 * 4096);
     VirtualSpace.make_present(@ptrFromInt(stack - (4 * 4096)), 4) catch @panic("baaaah make_present 2");
-    vm.spaceAllocator.print();
+    // vm.spaceAllocator.print();
     const code_segment: u32 = @import("../gdt.zig").get_selector(4, .GDT, .User);
 
     asm volatile (
@@ -247,30 +247,18 @@ pub fn bootstrap(_: anytype) u8 {
     return 0;
 }
 
-fn syscall(n: u32) linksection(".userspace") u32 {
-    return asm ("int $0x80"
-        : [_] "={eax}" (-> u32),
-        : [_] "{eax}" (n),
-    );
-}
-
-// fn putchar(c : u8) linksection(".userspace") void {
-//     _ = syscall(c);
-// }
-
-// fn putstr(s : []const u8) linksection(".userspace") void {
-//     _ = syscall(@intFromPtr(s.ptr), s.len);
-//
-//     // for (s) |c| {
-//     //     putchar(c);
-//     // }
-// }
-
 pub export fn sighandler(signum: u32) linksection(".userspace") void {
-    _ = syscall(signum);
+    _ = syscall(.{.eax = signum});
 }
+
+const syscall = @import("../syscall.zig").syscall;
+const SysNum = @import("../syscall.zig").Num;
+
+const nanosleep = @import("../syscall.zig").nanosleep;
 
 export fn _test_userspace() linksection(".userspace") void {
-    _ = syscall(1);
-    while (true) {}
+    _ = syscall(.{ .eax = @intFromEnum(SysNum.Kill) });
+    while (true) {
+        nanosleep(1000000000);
+    }
 }
