@@ -342,7 +342,3 @@ pub fn default_handler(
         .interrupt => Handler.create(&handlers.interrupt, false),
     };
 }
-
-// pub fn ret_from_interrupt(frame : *InterruptFrame) void {
-//
-// }
