@@ -1,1 +1,9 @@
 .cache
+zig-out
+.zig-cache
+.zig-docker
+kfs.iso
+src/tty/themes
+.idea
+.optimize-*
+themes
