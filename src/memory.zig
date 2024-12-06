@@ -49,7 +49,7 @@ pub var physicalMemory: MultipoolAllocator = undefined;
 
 const InterruptFrame = @import("interrupts.zig").InterruptFrame;
 
-fn GPE_handler(frame: InterruptFrame) callconv(.C) void {
+fn GPE_handler(frame: *InterruptFrame) callconv(.C) void {
     logger.err("general protection fault 0b{b:0>32}", .{frame.code});
 }
 
