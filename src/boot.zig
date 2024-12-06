@@ -77,6 +77,8 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("./drivers/acpi/acpi.zig").init();
 
+    @import("syscall.zig").init();
+
     if (!@import("build_options").ci) {
         kernel.main();
     } else {
