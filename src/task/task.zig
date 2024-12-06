@@ -120,6 +120,7 @@ pub const TaskDescriptor = struct {
         if (is_parent_ptr.*) {} else {
             is_parent_ptr.* = true;
             scheduler.set_current_task(self);
+            @import("../gdt.zig").tss.esp0 = @as(usize, @intFromPtr(&taskUnion.stack)) + taskUnion.stack.len;
             cpu.set_esp(@as(usize, @intFromPtr(&taskUnion.stack)) + taskUnion.stack.len);
             start_task(function, data);
         }

@@ -4,7 +4,7 @@ const ft = @import("./ft/ft.zig");
 
 const task = @import("task/task.zig");
 const cpu = @import("cpu.zig");
-const wait = @import("task/wait.zeig");
+const wait = @import("task/wait.zig");
 const signal = @import("task/signal.zig");
 const mapping = @import("memory/mapping.zig");
 const paging = @import("memory/paging.zig");
@@ -68,8 +68,8 @@ fn task2(_: anytype) u8 {
     logger.info("invoked", .{});
     scheduler.schedule();
     for (0..5) |_| {
-        // logger.info("tac", .{});
-        for (0..100_0) |_| asm volatile ("nop");
+        for (0..100000000) |_| asm volatile ("nop");
+        logger.info("tac", .{});
         scheduler.schedule();
     }
     return 42;
@@ -79,22 +79,24 @@ pub fn main() void {
     // const logger = @import("ft/ft.zig").log.scoped(.main);
     task.TaskUnion.init_cache() catch @panic("Failed to initialized kernel_task cache");
 
-    _ = task_set.create_task() catch @panic("c'est  la  panique 2");
+    const kernel = task_set.create_task() catch @panic("c'est  la  panique 2");
 
     syscall.init();
 
     const new_task = task_set.create_task() catch @panic("c'est  la  panique 4");
     new_task.spawn(@import("userspace.poc.zig").switch_to_userspace, null) catch @panic("c'est  la  panique 3");
 
-    // const c2 = task.spawn(task2, null) catch @panic("c'est  la  panique 4");
+    const c2 = task_set.create_task() catch @panic("c'est  la  panique 4");
+    _ = c2.spawn(task2, null) catch @panic("c'est  la  panique 4");
     // const c3 = task.spawn(task3, null) catch @panic("c'est  la  panique 5");
 
     // for (0..1000) |_| {
     //     scheduler.schedule();
     // }
     //
-    // var stat: wait.Status = undefined;
-    // _ = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("c'est  la  panique 4");
+    var stat: wait.Status = undefined;
+    _ = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("c'est  la  panique 4");
+
     // logger.warn("task 1 returned", .{});
     // _ = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("c'est  la  panique 5");
     // logger.warn("task 2 returned", .{});
