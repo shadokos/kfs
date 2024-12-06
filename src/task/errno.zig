@@ -1,3 +1,5 @@
+const ft = @import("../ft/ft.zig");
+
 pub const Errno = error{
     E2BIG,
     EACCES,
@@ -81,3 +83,31 @@ pub const Errno = error{
     EWOULDBLOCK,
     EXDEV,
 };
+
+pub fn is_in_set(e: anytype, comptime s: type) bool {
+    @setEvalBranchQuota(10_000);
+    return switch (e) {
+        inline else => |ce| comptime b: {
+            const errors = @typeInfo(s).ErrorSet orelse return false;
+            for (errors) |err| {
+                if (ft.mem.eql(u8, err.name, @errorName(ce))) break :b true;
+            }
+            break :b false;
+        },
+    };
+}
+
+pub fn error_num(e: Errno) usize {
+    @setEvalBranchQuota(10_000);
+    return switch (e) {
+        inline else => |ce| comptime b: {
+            const errors = @typeInfo(Errno).ErrorSet orelse unreachable;
+            for (errors, 1..) |err, n| {
+                if (ft.mem.eql(u8, err.name, @errorName(ce))) break :b n;
+            }
+            unreachable;
+        },
+    };
+}
+
+pub var errno: u32 = 0;

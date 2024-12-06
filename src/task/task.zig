@@ -10,6 +10,7 @@ const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = @import("../ft/ft.zig").log.scoped(.task);
 const Errno = @import("errno.zig").Errno;
+const errno = @import("errno.zig");
 const ft = @import("../ft/ft.zig");
 
 pub const TaskDescriptor = struct {
@@ -253,21 +254,17 @@ pub export fn sighandler(signum: u32) linksection(".userspace") void {
     _ = syscall(.DebugSyscall, &.{syscall(signum, .{})});
 }
 
-const errno = @import("../errno.zig");
-
 export fn _test_userspace() linksection(".userspace") void {
-    // Pourquoi ? Ici, str ne se place pas dans la section .userspace,
-    // elle se trouve a une adresse en "0xc......."
-    // Donc bah, le syscall Write fonctionne, mais théoriquement ça ne devrait pas
     const str: [*]const u8 = "abcdefghijklmnopqrstuvwxyz";
 
-    errno.errno = 0;
     _ = syscall(.Kill, .{});
 
     var i: i8 = 0;
     while (true) {
         errno.errno = 0;
-        _ = syscall(.DebugSyscall, &.{syscall(.Write, &.{ str, i + 1 })});
+        const ret = syscall(.Write, &.{ str, i + 1 });
+        _ = syscall(.Write, &.{ "\n", 1 });
+        _ = syscall(.DebugSyscall, &.{ret});
         _ = syscall(.Sleep, .{1_000});
 
         i = @mod(i + 1, 26);

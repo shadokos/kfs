@@ -3,7 +3,7 @@ const tty = @import("./tty/tty.zig");
 const ft = @import("ft/ft.zig");
 const std = @import("std");
 const log = @import("ft/ft.zig").log;
-const errno = @import("errno.zig");
+const errno = @import("task/errno.zig");
 
 const syscall_logger = log.scoped(.syscall);
 
@@ -21,25 +21,32 @@ pub const Code = enum(u8) {
 
 // TODO: Put this function into the intergalactic void
 fn debug_syscall(ret: i32) u8 {
-    tty.printk("errno: {d}, ret: {d}\n", .{ errno.errno, ret });
+    // tty.printk("errno: {d}, ret: {d}\n", .{ errno.errno, ret });
+    tty.printk("ret: {d}, errno: {d}\n", .{ ret, errno.errno });
     return 0;
 }
 
 pub fn syscall_handler(fr: *interrupts.InterruptFrame) callconv(.C) void {
     const code: Code = std.meta.intToEnum(Code, fr.eax) catch {
         syscall_logger.debug("Unknown call ({d})", .{fr.eax});
-        fr.eax = errno.Error.ENOSYS.cast();
+        fr.ebx = errno.error_num(errno.Errno.ENOSYS);
         return;
     };
-
-    fr.eax = switch (code) {
+    if (switch (code) {
         .Sleep => @import("syscall/sleep.zig").sys_sleep(fr.ebx),
         .Kill => @import("syscall/kill.zig").sys_kill(fr),
         .Sigreturn => @import("syscall/kill.zig").sys_sigreturn(fr),
         .Write => @import("syscall/write.zig").sys_write(@as([*]const u8, @ptrFromInt(fr.ebx)), fr.ecx),
         .DebugSyscall => debug_syscall(@bitCast(fr.ebx)),
         // else => syscall_logger.debug("not implemented yet ({d})", .{@intFromEnum(sys_num)}),
-    };
+    }) |v| {
+        fr.eax = v;
+        fr.ebx = 0;
+    } else |e| {
+        if (errno.is_in_set(e, errno.Errno)) {
+            fr.ebx = errno.error_num(e);
+        } else syscall_logger.err("unhandled error: {s}", .{@errorName(e)});
+    }
 }
 
 // TODO: Discuss about this implementation :eyes:
@@ -74,8 +81,10 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
         };
     }
 
-    var res: i32 = @bitCast(asm volatile ("int $0x80"
-        : [_] "={eax}" (-> i32),
+    var ebx: u32 = 0;
+    const res: i32 = @bitCast(asm volatile ("int $0x80"
+        : [_] "={ebx}" (ebx),
+          [_] "={eax}" (-> i32),
         : [_] "{eax}" (_code),
           [_] "{ebx}" (_args.ebx),
           [_] "{ecx}" (_args.ecx),
@@ -83,9 +92,9 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
           [_] "{esi}" (_args.esi),
           [_] "{edi}" (_args.edi),
     ));
-    if (res < 0) {
-        errno.errno = -res;
-        res = -1;
+    if (ebx != 0) {
+        errno.errno = ebx;
+        return -1;
     }
     return res;
 }
