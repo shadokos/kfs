@@ -237,7 +237,7 @@ pub const Handler = extern union {
 
     const Self = @This();
 
-    pub fn create(comptime f: *const fn (frame: InterruptFrame) callconv(.C) void, comptime has_error: bool) Self {
+    pub fn create(comptime f: *const fn (frame: *InterruptFrame) callconv(.C) void, comptime has_error: bool) Self {
         const factory = comptime struct {
             pub fn raw_stub() callconv(.Naked) void {
                 if (!has_error) asm volatile ("push $0");
@@ -249,6 +249,7 @@ pub const Handler = extern union {
                     \\push %%ebp
                     \\push %%esi
                     \\push %%edi
+                    \\push %%esp
                     \\cld
                 );
                 asm volatile ("call *%[f]"
@@ -256,6 +257,7 @@ pub const Handler = extern union {
                     : [f] "r" (f),
                 );
                 asm volatile (
+                    \\add $4, %%esp
                     \\pop %%edi
                     \\pop %%esi
                     \\pop %%ebp
@@ -278,20 +280,20 @@ pub fn default_handler(
     comptime t: enum { except, except_err, irq, interrupt },
 ) Handler {
     const handlers = struct {
-        pub fn exception(_: InterruptFrame) callconv(.C) void {
+        pub fn exception(_: *InterruptFrame) callconv(.C) void {
             const e = @as(Exceptions, @enumFromInt(id));
             ft.log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
         }
-        pub fn exception_err(_: InterruptFrame) callconv(.C) void {
+        pub fn exception_err(_: *InterruptFrame) callconv(.C) void {
             const e = @as(Exceptions, @enumFromInt(id));
             ft.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), 0 });
         }
-        pub fn irq(_: InterruptFrame) callconv(.C) void {
+        pub fn irq(_: *InterruptFrame) callconv(.C) void {
             const _id = pic.get_irq_from_interrupt_id(id);
             pic.ack(_id);
             ft.log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
         }
-        pub fn interrupt(_: InterruptFrame) callconv(.C) void {
+        pub fn interrupt(_: *InterruptFrame) callconv(.C) void {
             ft.log.scoped(.interrupt).err("{d} unhandled", .{id});
         }
     };
