@@ -13,7 +13,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
       - name: Check Format
-        run: make DOCKER=true format
+        run: make BOOTLOADER=limine format
       - name: Build Kernel (DEBUG)
         run: make BOOTLOADER=limine debug
       - name: Build Kernel (RELEASE SMALL)

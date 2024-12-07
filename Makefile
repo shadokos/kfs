@@ -1,5 +1,4 @@
 BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
-ZIG ?= zig
 
 # get the last bootloader option
 BOOTLOADER ?= $(shell echo $$(ls ".bootloader-"* 2>/dev/null || echo grub) | cut -d'-' -f2)
@@ -10,7 +9,9 @@ OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo Debug) | cut -d
 .PHONY: all
 all: build
 
+-include build/Makefiles/Zig.mk
 -include build/Makefiles/Docker.mk
+-include build/Makefiles/Themes.mk
 -include build/Makefiles/CI.mk
 -include build/Makefiles/Limine.mk
 
@@ -54,7 +55,7 @@ clean:
 
 .PHONY: fclean
 fclean: clean
-	rm -rf .zig-cache zig-out .optimize-*
+	rm -rf .zig-cache zig-out .optimize-* .bootloader-*
 
 .PHONY: format
 format:

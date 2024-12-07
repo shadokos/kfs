@@ -57,9 +57,6 @@ pub fn build(b: *Builder) !void {
 
     context.optimize = context.builder.standardOptimizeOption(.{});
 
-    @import("std").debug.print("\x1b[32minstall prefix\x1b[0m: {s}\n", .{context.builder.install_prefix});
-    @import("std").debug.print("\x1b[32minstall path\x1b[0m: {s}\n", .{context.builder.install_path});
-
     @import("build/kernel.zig").build_executable(&context);
     @import("build/themes.zig").install_themes(&context);
     switch (context.bootloader) {
