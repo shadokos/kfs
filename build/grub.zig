@@ -18,11 +18,11 @@ pub fn build_disk_image(context: *BuildContext) void {
         "-o",
     });
     const iso_file = context.grub.addOutputFileArg("kfs.iso");
-    context.grub.addDirectoryArg(.{ .cwd_relative = "zig-out/iso" });
+    context.grub.addDirectoryArg(.{ .cwd_relative = context.install_path_iso });
 
     const directory_step = addDirectoryDependency(
         context.grub,
-        .{ .cwd_relative = "zig-out/iso" },
+        .{ .cwd_relative = context.install_path_iso },
     );
 
     directory_step.step.dependOn(&context.install_iso_folder.step);

@@ -45,7 +45,7 @@ clean:
 
 .PHONY: fclean
 fclean: clean
-	rm -rf zig-cache zig-out .optimize-*
+	rm -rf .zig-cache zig-out .optimize-*
 
 .PHONY: format
 format:

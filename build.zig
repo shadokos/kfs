@@ -23,6 +23,9 @@ pub const BuildContext = struct {
     name: []const u8 = undefined,
     posix: bool = false,
     ci: bool = false,
+
+    // runtime var
+    install_path_iso: []const u8 = undefined,
 };
 
 pub fn build(b: *Builder) !void {
@@ -50,9 +53,11 @@ pub fn build(b: *Builder) !void {
 
     context.optimize = context.builder.standardOptimizeOption(.{});
 
-    @import("build/disk_image.zig").install_iso_folder(&context);
+    context.install_path_iso = context.builder.pathResolve(&.{ context.builder.install_path, context.iso_source_dir });
+
     @import("build/kernel.zig").build_executable(&context);
     @import("build/themes.zig").install_themes(&context);
-    @import("build/disk_image.zig").build_disk_image(&context);
+    @import("build/grub.zig").install_iso_folder(&context);
+    @import("build/grub.zig").build_disk_image(&context);
     @import("build/qemu.zig").add_step_run(&context);
 }
