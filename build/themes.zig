@@ -5,8 +5,6 @@ const BuildContext = @import("../build.zig").BuildContext;
 pub fn install_themes(context: *BuildContext) void {
     const themes = context.builder.addSystemCommand(&.{
         "make",
-        "-f",
-        "build/Makefiles/Themes.mk",
         "install_themes",
         "--no-print-directory",
     });
@@ -20,8 +18,6 @@ pub fn install_themes(context: *BuildContext) void {
 pub fn register_uninstall_themes(context: *BuildContext) void {
     const uninstall_theme = context.builder.addSystemCommand(&.{
         "make",
-        "-f",
-        "build/Makefiles/Themes.mk",
         "theme_clean",
         "--no-print-directory",
     });
