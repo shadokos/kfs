@@ -6,4 +6,5 @@ zig-out
 src/tty/themes
 .idea
 .optimize-*
+.bootloader-*
 themes

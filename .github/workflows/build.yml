@@ -12,15 +12,13 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
-      - name: Build Docker Image
-        run: make DOCKER=true .zig-docker
       - name: Check Format
         run: make DOCKER=true format
       - name: Build Kernel (DEBUG)
-        run: make DOCKER=true debug
+        run: make BOOTLOADER=limine debug
       - name: Build Kernel (RELEASE SMALL)
-        run: make DOCKER=true small
+        run: make BOOTLOADER=limine small
       - name: Build Kernel (RELEASE SAFE)
-        run: make DOCKER=true release
+        run: make BOOTLOADER=limine release
       - name: Build Kernel (RELEASE FAST)
-        run: make DOCKER=true fast
+        run: make BOOTLOADER=limine fast

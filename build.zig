@@ -21,11 +21,9 @@ pub const BuildContext = struct {
     optimize: std.builtin.Mode = undefined,
     iso_source_dir: []const u8 = undefined,
     name: []const u8 = undefined,
+    bootloader: enum { grub, limine } = .grub,
     posix: bool = false,
     ci: bool = false,
-
-    // runtime var
-    install_path_iso: []const u8 = undefined,
 };
 
 pub fn build(b: *Builder) !void {
@@ -49,15 +47,30 @@ pub fn build(b: *Builder) !void {
         "Enable this flag if strict POSIX conformance is wanted",
     ) orelse false;
 
+    context.bootloader = context.builder.option(
+        @TypeOf(context.bootloader),
+        "bootloader",
+        "Specify the bootloader to use",
+    ) orelse .grub;
+
     context.ci = b.option(bool, "ci", "Build the kernel for CI") orelse false;
 
     context.optimize = context.builder.standardOptimizeOption(.{});
 
-    context.install_path_iso = context.builder.pathResolve(&.{ context.builder.install_path, context.iso_source_dir });
+    @import("std").debug.print("\x1b[32minstall prefix\x1b[0m: {s}\n", .{context.builder.install_prefix});
+    @import("std").debug.print("\x1b[32minstall path\x1b[0m: {s}\n", .{context.builder.install_path});
 
     @import("build/kernel.zig").build_executable(&context);
     @import("build/themes.zig").install_themes(&context);
-    @import("build/grub.zig").install_iso_folder(&context);
-    @import("build/grub.zig").build_disk_image(&context);
+    switch (context.bootloader) {
+        .grub => {
+            @import("build/grub.zig").install_iso_folder(&context);
+            @import("build/grub.zig").build_disk_image(&context);
+        },
+        .limine => {
+            @import("build/limine.zig").install_iso_folder(&context);
+            @import("build/limine.zig").build_disk_image(&context);
+        },
+    }
     @import("build/qemu.zig").add_step_run(&context);
 }

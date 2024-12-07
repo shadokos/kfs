@@ -7,7 +7,7 @@ endif
 .PHONY: ci
 ifeq ($(MAKELEVEL), 0)
 ci:
-	$(MAKE) DOCKER=true CI=true ci --no-print-directory
+	$(MAKE) BOOTLOADER=limine CI=true ci --no-print-directory
 else
 ci: debug
 	bash CI/run_ci.sh
