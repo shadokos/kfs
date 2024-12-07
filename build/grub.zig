@@ -12,17 +12,19 @@ pub fn install_iso_folder(context: *BuildContext) void {
 }
 
 pub fn build_disk_image(context: *BuildContext) void {
+    const install_iso_path = context.builder.pathResolve(&.{ context.builder.install_prefix, "iso" });
+
     context.grub = context.builder.addSystemCommand(&.{
         "grub-mkrescue",
         "--compress=xz",
         "-o",
     });
     const iso_file = context.grub.addOutputFileArg("kfs.iso");
-    context.grub.addDirectoryArg(.{ .cwd_relative = context.install_path_iso });
+    context.grub.addDirectoryArg(.{ .cwd_relative = install_iso_path });
 
     const directory_step = addDirectoryDependency(
         context.grub,
-        .{ .cwd_relative = context.install_path_iso },
+        .{ .cwd_relative = context.iso_source_dir },
     );
 
     directory_step.step.dependOn(&context.install_iso_folder.step);
