@@ -2,7 +2,7 @@
 zig-out
 .zig-cache
 .zig-docker
-kfs.iso
+*.iso
 src/tty/themes
 .idea
 .optimize-*

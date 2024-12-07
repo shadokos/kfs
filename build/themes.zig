@@ -1,7 +1,6 @@
 const std = @import("std");
 
 const BuildContext = @import("../build.zig").BuildContext;
-const addDirectoryDependency = @import("Step/DirectoryDependency.zig").addDirectoryDependency;
 
 pub fn install_themes(context: *BuildContext) void {
     const themes = context.builder.addSystemCommand(&.{
@@ -19,7 +18,14 @@ pub fn install_themes(context: *BuildContext) void {
 }
 
 pub fn register_uninstall_themes(context: *BuildContext) void {
-    const uninstall_theme = context.builder.addSystemCommand(&.{ "rm", "-r", "src/tty/themes" });
+    const uninstall_theme = context.builder.addSystemCommand(&.{
+        "make",
+        "-f",
+        "build/Makefiles/Themes.mk",
+        "theme_clean",
+        "--no-print-directory",
+    });
+
     uninstall_theme.setName("uninstall themes");
     context.builder.getUninstallStep().dependOn(&uninstall_theme.step);
 }
