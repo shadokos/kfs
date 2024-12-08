@@ -2,8 +2,10 @@
 zig-out
 .zig-cache
 .zig-docker
-kfs.iso
+*.iso
 src/tty/themes
 .idea
 .optimize-*
+.bootloader-*
 themes
+zig-linux-x86_64-[0-9]*.[0-9]*.[0-9]*
