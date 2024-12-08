@@ -26,7 +26,7 @@ install_zig: $(ZIG_LOCAL) zig_warning
 
 .PHONY: uninstall_zig
 uninstall_zig:
-	rm -rf zig-linux-x86_64-$(ZIG_VERSION)
+	rm -rf $(ZIG_LOCAL)
 
 $(ZIG_LOCAL):
 	curl -sSfL https://ziglang.org/download/$(ZIG_VERSION)/zig-linux-x86_64-$(ZIG_VERSION).tar.xz | tar -xJ
