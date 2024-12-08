@@ -40,6 +40,7 @@ pub fn build(b: *Builder) !void {
     ) orelse .grub;
 
     context.ci = b.option(bool, "ci", "Build the kernel for CI") orelse false;
+
     context.optimize = b.standardOptimizeOption(.{});
 
     // Build steps
