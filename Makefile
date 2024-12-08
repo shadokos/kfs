@@ -1,10 +1,10 @@
-BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
-
 # get the last bootloader option
 BOOTLOADER ?= $(shell echo $$(ls ".bootloader-"* 2>/dev/null || echo grub) | cut -d'-' -f2)
 
 # get the last optimize option
 OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo Debug) | cut -d'-' -f2)
+
+BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
 
 .PHONY: all
 all: build
