@@ -13,12 +13,12 @@ pub fn install_themes(context: *BuildContext) *Step.Run {
     return themes;
 }
 
-pub fn uninstall_themes(context: *BuildContext) *Step.Run {
+pub fn uninstall_themes(context: *BuildContext) *Step {
     const uninstall_theme = context.builder.addSystemCommand(&.{
         "make",
         "theme_clean",
         "--no-print-directory",
     });
     uninstall_theme.setName("uninstall themes");
-    return uninstall_theme;
+    return &uninstall_theme.step;
 }

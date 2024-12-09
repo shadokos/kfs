@@ -46,12 +46,16 @@ pub fn build(b: *Builder) !void {
     // Build steps
     const kernel = @import("build/kernel.zig").build_executable(&context);
     const themes = @import("build/themes.zig").install_themes(&context);
+    const syscall_table = @import("build/syscall_table.zig").build_syscall_table_step(&context);
     const install_disk_image = @import("build/iso.zig").build_iso(&context, kernel);
     const uninstall_themes = @import("build/themes.zig").uninstall_themes(&context);
+    const uninstall_syscall_table = @import("build/syscall_table.zig").uninstall_syscall_table_step(&context);
     _ = @import("build/qemu.zig").add_step_run(&context, install_disk_image);
 
     // Dependencies
     kernel.step.dependOn(&themes.step);
+    kernel.step.dependOn(syscall_table);
     b.getInstallStep().dependOn(&install_disk_image.step);
-    b.getUninstallStep().dependOn(&uninstall_themes.step);
+    b.getUninstallStep().dependOn(uninstall_themes);
+    b.getUninstallStep().dependOn(uninstall_syscall_table);
 }
