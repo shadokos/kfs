@@ -1,6 +1,7 @@
 const pit = @import("../drivers/pit/pit.zig");
 
-pub fn sys_sleep(ns: u32) !u8 {
+pub const Id = 1;
+
+pub fn do(ns: u32) !void {
     pit.sleep(ns);
-    return 0;
 }
