@@ -90,6 +90,13 @@ pub inline fn unset_flag(flag: Cr0Flag) void {
     );
 }
 
+pub inline fn set_esp(value: u32) void {
+    asm volatile (""
+        :
+        : [_] "{esp}" (value),
+    );
+}
+
 pub const Ports = enum(u16) {
     vga_idx_reg = 0x03d4,
     vga_io_reg = 0x03d5,
@@ -177,6 +184,14 @@ pub inline fn load_gdt(gdtr: *const @import("gdt.zig").GDTR) void {
     asm volatile ("lgdt (%%eax)"
         :
         : [idtr] "{eax}" (gdtr),
+    );
+}
+
+pub inline fn load_tss(selector: u16) void {
+    asm volatile (
+        \\ ltr %[selector]
+        :
+        : [selector] "{ax}" (selector),
     );
 }
 
