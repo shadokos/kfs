@@ -142,7 +142,6 @@ pub fn kb_read() void {
 const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
 
 pub fn handler(_: *InterruptFrame) callconv(.C) void {
-    // frame.debug();
     const scan_code: u8 = ps2.get_data();
     const index: u8 = scan_code & SCANCODE_MASK_INDEX;
     const released: u16 = scan_code & SCANCODE_MASK_RELEASED;

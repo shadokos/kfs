@@ -13,13 +13,17 @@ pub const InterruptFrame = extern struct {
     ebx: u32,
     eax: u32,
     code: u32,
-    ip: u32,
-    cs: u32,
-    flags: u32,
-    sp: u32,
-    ss: u32,
+    iret: IretFrame,
 
-    pub inline fn debug(self: InterruptFrame) void {
+    pub const IretFrame = extern struct {
+        ip: u32,
+        cs: u32,
+        flags: u32,
+        sp: u32,
+        ss: u32,
+    };
+
+    pub inline fn debug(self: *InterruptFrame) void {
         logger.warn(
             \\
             \\edi: 0x{x:0>8}
@@ -44,11 +48,11 @@ pub const InterruptFrame = extern struct {
             self.ebx,
             self.eax,
             self.code,
-            self.ip,
-            self.cs,
-            self.flags,
-            self.sp,
-            self.ss,
+            self.iret.ip,
+            self.iret.cs,
+            self.iret.flags,
+            self.iret.sp,
+            self.iret.ss,
         });
     }
 };
@@ -226,8 +230,44 @@ pub fn unset_gate(id: u8) void {
 pub const Stub = *const fn () callconv(.Naked) void;
 
 export fn swapGsIfNeeded(frame: InterruptFrame) callconv(.C) void {
-    if (frame.cs != 0x28) {
+    if (frame.iret.cs != 0x28) {
         asm volatile ("swapgs");
+    }
+}
+
+// TODO: Send this to the intergalactic void, it's a simple POC
+pub var frame_stack: ?ft.ArrayListAligned(InterruptFrame, 4) = null;
+
+comptime {
+    asm (@import("std").fmt.comptimePrint(
+            \\ _rfi_sigreturn:
+            \\ mov ${}, %eax
+            \\ int $0x80
+            \\ _rfi_sigreturn_end:
+        , .{@import("syscall/sigreturn.zig").Id}));
+}
+
+pub fn ret_from_interrupt(frame: *InterruptFrame) callconv(.C) void {
+    if (frame_stack == null)
+        frame_stack = @TypeOf(frame_stack.?).init(@import("memory.zig").physicalMemory.allocator());
+    if (@import("userspace.poc.zig").get_next_signal()) |handler_ptr| {
+        frame_stack.?.append(frame.*) catch @panic("todo");
+        frame.iret.ip = @intFromPtr(handler_ptr);
+        const rfi_sigreturn: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn" });
+        const rfi_sigreturn_end: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn_end" });
+
+        const bytecode = rfi_sigreturn[0 .. @as(usize, @intFromPtr(rfi_sigreturn_end)) - @as(
+            usize,
+            @intFromPtr(rfi_sigreturn),
+        )];
+        const bytecode_begin: [*]align(4) u8 = @ptrFromInt(
+            frame.iret.sp - 4 - ft.mem.alignForward(usize, bytecode.len, 4),
+        );
+        @memcpy(bytecode_begin[0..bytecode.len], bytecode);
+
+        const stack: [*]u32 = @as([*]u32, @ptrCast(bytecode_begin)) - 1;
+        stack[0] = @intFromPtr(bytecode_begin);
+        frame.iret.sp = @intFromPtr(stack);
     }
 }
 
@@ -255,6 +295,10 @@ pub const Handler = extern union {
                 asm volatile ("call *%[f]"
                     :
                     : [f] "r" (f),
+                );
+                asm volatile ("call *%[ret_from_interrupt]"
+                    :
+                    : [ret_from_interrupt] "r" (&ret_from_interrupt),
                 );
                 asm volatile (
                     \\add $4, %%esp

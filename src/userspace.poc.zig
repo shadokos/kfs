@@ -16,6 +16,24 @@ pub fn init_vm() !*VirtualSpace {
     return vm;
 }
 
+pub const SigHandler = *fn () void;
+
+var current_signal: ?SigHandler = null;
+
+pub fn queue_signal(handler: SigHandler) void {
+    current_signal = handler;
+}
+
+pub fn get_next_signal() ?SigHandler {
+    defer current_signal = null;
+    return current_signal;
+}
+
+fn poc_signal() linksection("userspace") void {
+    const str = "Signal handled\n";
+    _ = syscall(.write, .{ str, str.len });
+}
+
 pub fn switch_to_userspace() void {
     @import("gdt.zig").tss.esp0 = @as(usize, @intFromPtr(&task_stack)) + task_stack.len;
 
@@ -90,8 +108,10 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
 }
 
 export fn _userland() linksection(".userspace") void {
-    while (true) {
+    for (0..9) |i| {
+        if (i % 3 == 0) _ = syscall(.poc_raise, .{&poc_signal});
         _ = syscall(.write, &.{ "write from userspace\n", 21 });
         _ = syscall(.sleep, .{1000});
     }
+    _ = syscall(.reboot, .{});
 }
