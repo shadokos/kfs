@@ -70,29 +70,50 @@ fn convert_ret(comptime T: type, val: T) usize {
     }
 }
 
-fn call_syscall(comptime code: Code, fr: interrupts.InterruptFrame) !usize {
-    const do_fn = @field(syscall_table, @tagName(code)).do;
-    const proto: std.builtin.Type.Fn = @typeInfo(@TypeOf(do_fn)).Fn;
+fn SyscallType(sys_struct: type) enum { do, do_raw } {
+    if (@hasDecl(sys_struct, "do")) {
+        return .do;
+    } else if (@hasDecl(sys_struct, "do_raw")) {
+        return .do_raw;
+    } else @compileError("Missing do or do_raw function for syscall");
+}
 
+fn get_params(comptime proto: std.builtin.Type.Fn, fr: *interrupts.InterruptFrame) get_fn_proto_tuple(proto) {
     if (proto.params.len > 6)
-        @compileError("syscall cannot have more than 6 parameter: " ++ @tagName(code));
+        @compileError("syscall cannot have more than 6 parameter");
 
     const TupleType = get_fn_proto_tuple(proto);
     var tuple: TupleType = undefined;
     const param_register = [_][]const u8{ "ebx", "ecx", "edx", "esi", "edi", "ebp" };
     inline for (0..tuple.len) |i| {
-        const reg = @field(fr, param_register[i]);
+        const reg = @field(fr.*, param_register[i]);
         tuple[i] = convert_param(@TypeOf(tuple[i]), reg);
     }
+    return tuple;
+}
 
-    const ret: proto.return_type.? = @call(.auto, do_fn, tuple);
+fn call_syscall(comptime code: Code, fr: *interrupts.InterruptFrame) void {
+    const sys_struct = @field(syscall_table, @tagName(code));
+    const syscall_type = comptime SyscallType(sys_struct);
 
-    if (ret) |v| {
-        return if (comptime @TypeOf(v) != void)
-            convert_ret(@TypeOf(v), v)
-        else
-            0;
-    } else |e| return e;
+    switch (comptime syscall_type) {
+        .do => {
+            const ret = @call(.auto, sys_struct.do, get_params(
+                @typeInfo(@TypeOf(sys_struct.do)).Fn,
+                fr,
+            ));
+            if (ret) |v| {
+                fr.eax = if (comptime @TypeOf(v) != void)
+                    convert_ret(@TypeOf(v), v)
+                else
+                    0;
+                fr.ebx = 0;
+            } else |e| if (errno.is_in_set(e, errno.Errno)) {
+                fr.ebx = errno.error_num(e);
+            } else syscall_logger.err("unhandled error: {s}", .{@errorName(e)});
+        },
+        .do_raw => @call(.auto, sys_struct.do_raw, .{fr}),
+    }
 }
 
 pub fn syscall_handler(fr: *interrupts.InterruptFrame) callconv(.C) void {
@@ -101,14 +122,9 @@ pub fn syscall_handler(fr: *interrupts.InterruptFrame) callconv(.C) void {
         fr.ebx = errno.error_num(errno.Errno.ENOSYS);
         return;
     };
-    if (switch (code) {
-        inline else => |c| call_syscall(c, fr.*),
-    }) |v| {
-        fr.eax = v;
-        fr.ebx = 0;
-    } else |e| if (errno.is_in_set(e, errno.Errno)) {
-        fr.ebx = errno.error_num(e);
-    } else syscall_logger.err("unhandled error: {s}", .{@errorName(e)});
+    switch (code) {
+        inline else => |c| call_syscall(c, fr),
+    }
 }
 
 pub fn init() void {
