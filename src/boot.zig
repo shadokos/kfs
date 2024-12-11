@@ -5,7 +5,7 @@ const builtin = @import("std").builtin;
 const paging = @import("memory/paging.zig");
 const logger = @import("ft/ft.zig").log;
 
-const STACK_SIZE: u32 = 32 * 1024;
+const STACK_SIZE: u32 = 64 * 1024;
 
 var stack: [STACK_SIZE]u8 align(4096) linksection(".bss") = undefined;
 
