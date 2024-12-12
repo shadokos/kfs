@@ -192,6 +192,13 @@ pub fn bufPrint(buf: []u8, comptime fmt: []const u8, args: anytype) BufPrintErro
     return stream.getWritten();
 }
 
+pub inline fn comptimePrint(comptime fmt: []const u8, args: anytype) *const [count(fmt, args):0]u8 {
+    var buf: [count(fmt, args):0]u8 = undefined;
+    _ = bufPrint(buf[0..count(fmt, args)], fmt, args) catch unreachable;
+    const copy: [count(fmt, args):0]u8 = buf;
+    return &copy;
+}
+
 pub fn charToDigit(c: u8, base: u8) error{InvalidCharacter}!u8 {
     const ret = switch (c) {
         '0'...'9' => c - '0',
@@ -329,6 +336,12 @@ fn get_specifier(comptime fmt: *[]const u8) !?Specifier {
     };
 }
 
+pub fn count(comptime fmt: []const u8, args: anytype) u64 {
+    var writer = ft.io.countingWriter(ft.io.null_writer);
+    format(writer.writer(), fmt, args) catch unreachable;
+    return writer.bytes_written;
+}
+
 pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
     comptime var fmt_copy = fmt;
     comptime var current_arg = 0;
@@ -336,7 +349,7 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
     inline while (fmt_copy.len > 0) {
         if (comptime accept("{", &fmt_copy) catch unreachable) |_| {
             if (comptime accept("{", &fmt_copy) catch {}) |c| {
-                try writer.writeByte(c);
+                _ = try writer.write(&.{c});
             } else {
                 comptime var argument: ?Argument = try get_argument(&fmt_copy);
                 if (argument == null) {
@@ -372,7 +385,7 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
             }
         } else if (comptime accept("}", &fmt_copy) catch unreachable) |_| {
             if (comptime accept("}", &fmt_copy) catch null) |c| {
-                try writer.writeByte(c);
+                _ = try writer.write(&.{c});
             } else {
                 @compileError("missing opening {");
             }
@@ -383,7 +396,7 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
                     next += 1;
                 }
             }
-            try writer.writeByte(c);
+            _ = try writer.write(&.{c});
             _ = try writer.write(fmt_copy[0..next]);
             fmt_copy = fmt_copy[next..];
         }
@@ -416,7 +429,7 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
                     switch (specifier) {
                         .address => {
                             _ = try writer.write(@typeName(pointer.child));
-                            try writer.writeByte('@');
+                            _ = try writer.write(&.{'@'});
                             try formatInt(@intFromPtr(obj), 16, Case.lower, .{
                                 .width = @sizeOf(*u8) * 2,
                                 .alignment = .right,
@@ -435,7 +448,7 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
                         },
                         .address => {
                             _ = try writer.write(@typeName(@TypeOf(obj)));
-                            try writer.writeByte('@');
+                            _ = try writer.write(&.{'@'});
                             try formatInt(@intFromPtr(obj), 16, Case.lower, .{
                                 .width = @sizeOf(*u8) * 2,
                                 .alignment = .right,
@@ -473,11 +486,11 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
         // .ErrorSet,
         .Enum => {
             _ = try writer.write(@typeName(@TypeOf(obj)));
-            try writer.writeByte('.');
+            _ = try writer.write(&.{'.'});
             try formatBuf(@tagName(obj), options, writer);
         },
         .EnumLiteral => {
-            try writer.writeByte('.');
+            _ = try writer.write(&.{'.'});
             try formatBuf(@tagName(obj), options, writer);
         },
         // .Union,
