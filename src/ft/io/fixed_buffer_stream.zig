@@ -67,7 +67,7 @@ fn FixedBufferStream(comptime Buffer: type) type {
                 self.pos += 1;
                 ret += 1;
             }
-            if (ret == 0)
+            if (ret == 0 and bytes.len != 0)
                 return WriteError.NoSpaceLeft;
             return ret;
         }
