@@ -243,12 +243,10 @@ pub fn ArrayListAligned(comptime T: type, comptime alignment: ?u29) type {
         }
 
         pub fn popOrNull(self: *Self) ?T {
-            if (self.slice.len != 0) {
+            if (self.getLastOrNull()) |v| {
                 self.slice.len -= 1;
-                return self.slice[self.slice.len];
-            } else {
-                return null;
-            }
+                return v;
+            } else return null;
         }
 
         pub fn replaceRange(self: *Self, start: usize, len: usize, new_items: []const T) Allocator.Error!void {
