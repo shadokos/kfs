@@ -239,7 +239,7 @@ export fn swapGsIfNeeded(frame: InterruptFrame) callconv(.C) void {
 pub var frame_stack: ?ft.ArrayListAligned(InterruptFrame, 4) = null;
 
 comptime {
-    asm (@import("std").fmt.comptimePrint(
+    asm (ft.fmt.comptimePrint(
             \\ _rfi_sigreturn:
             \\ mov ${}, %eax
             \\ int $0x80
