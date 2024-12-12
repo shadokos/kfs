@@ -89,3 +89,13 @@ pub const Reader = GenericReader;
 
 pub const FixedBufferStream = @import("io/fixed_buffer_stream.zig").FixedBufferStream;
 pub const fixedBufferStream = @import("io/fixed_buffer_stream.zig").fixedBufferStream;
+
+pub fn dummyWrite(_: void, data: []const u8) error{}!usize {
+    return data.len;
+}
+
+pub const NullWriter = Writer(void, error{}, dummyWrite);
+pub const null_writer: NullWriter = .{ .context = {} };
+
+pub const countingWriter = @import("io/counting_writer.zig").countingWriter;
+pub const CountingWriter = @import("io/counting_writer.zig").CountingWriter;
