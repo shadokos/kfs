@@ -19,5 +19,9 @@ ifeq ($(DOCKER), true)
     release: $(DOCKER_STAMP)
     fast: $(DOCKER_STAMP)
     format: $(DOCKER_STAMP)
+    fclean: docker_clean
+
+    docker_clean:
+		rm -rf $(DOCKER_STAMP)
 
 endif

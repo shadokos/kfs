@@ -2,7 +2,7 @@
 BOOTLOADER ?= $(shell echo $$(ls ".bootloader-"* 2>/dev/null || echo grub) | cut -d'-' -f2)
 
 # get the last optimize option
-OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo Debug) | cut -d'-' -f2)
+OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo ReleaseSafe) | cut -d'-' -f2)
 
 BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
 
