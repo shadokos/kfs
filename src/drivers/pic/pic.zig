@@ -96,11 +96,9 @@ pub fn remap(offset1: u8, offset2: u8) void {
 }
 
 pub inline fn ack(irq: IRQ) void {
-    if (@intFromEnum(irq) < 8) {
-        cpu.outb(0x20, 0x20);
-    } else {
-        cpu.outb(0xa0, 0x20);
-    }
+    cpu.outb(.pic_master_command, 0x20);
+    if (@intFromEnum(irq) >= 8)
+        cpu.outb(.pic_slave_command, 0x20);
 }
 
 pub fn get_irq_from_interrupt_id(comptime id: u8) IRQ {
