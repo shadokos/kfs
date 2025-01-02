@@ -8,7 +8,7 @@ const Cache = @import("../memory/object_allocators/slab/cache.zig").Cache;
 const scheduler = @import("scheduler.zig");
 const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
-const logger = @import("../ft/ft.zig").log.scoped(.task);
+const logger = @import("ft").log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
 pub const TaskDescriptor = struct {
