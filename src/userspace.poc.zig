@@ -4,7 +4,9 @@ const memory = @import("memory.zig");
 const VirtualSpace = @import("memory/virtual_space.zig").VirtualSpace;
 const paging = @import("memory/paging.zig");
 
-export var task_stack: [32 * paging.page_size]u8 align(paging.page_size) = undefined;
+const config = @import("config");
+
+export var task_stack: [config.TASK_KERNEL_STACK_SIZE]u8 align(paging.page_size) = undefined;
 
 pub fn init_vm() !*VirtualSpace {
     const vm = try memory.virtualMemory.allocator().create(VirtualSpace);
@@ -52,13 +54,14 @@ pub fn switch_to_userspace() void {
         (up_end - up_start) / paging.page_size,
     ) catch unreachable;
 
-    const stack = vm.alloc_pages(4) catch @panic("Failed to allocate user");
-    VirtualSpace.make_present(stack, 4) catch unreachable;
+    const user_stack_n_pages = config.TASK_USER_STACK_SIZE / paging.page_size;
+    const stack = vm.alloc_pages(user_stack_n_pages) catch @panic("Failed to allocate user");
+    VirtualSpace.make_present(stack, user_stack_n_pages) catch unreachable;
 
     const stack_segment: u32 = @intCast(@import("gdt.zig").get_selector(6, .GDT, .User));
     const code_segment: u32 = @intCast(@import("gdt.zig").get_selector(4, .GDT, .User));
 
-    @import("cpu.zig").set_esp(@as(u32, @intFromPtr(stack)) + paging.page_size);
+    // @import("cpu.zig").set_esp(@as(u32, @intFromPtr(stack)) + user_stack_n_pages);
     asm volatile (
         \\ push %[ss]
         \\ push %[esp]
@@ -68,7 +71,7 @@ pub fn switch_to_userspace() void {
         \\ iret
         :
         : [ss] "r" (stack_segment),
-          [esp] "r" (@as(u32, @intFromPtr(stack)) + (paging.page_size * 4)),
+          [esp] "r" (@as(u32, @intFromPtr(stack)) + (paging.page_size * user_stack_n_pages)),
           [cs] "r" (code_segment),
           [function] "r" (&_userland),
     );

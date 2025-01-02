@@ -4,10 +4,9 @@ const multiboot = @import("multiboot.zig");
 const builtin = @import("std").builtin;
 const paging = @import("memory/paging.zig");
 const logger = @import("ft/ft.zig").log;
+const config = @import("config");
 
-const STACK_SIZE: u32 = 64 * 1024;
-
-var stack: [STACK_SIZE]u8 align(4096) linksection(".bss") = undefined;
+var stack: [config.BOOT_STACK_SIZE]u8 align(4096) linksection(".bss") = undefined;
 
 export var stack_bottom: [*]u8 = @as([*]u8, @ptrCast(&stack)) + @sizeOf(@TypeOf(stack));
 

@@ -10,6 +10,7 @@ const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = @import("../ft/ft.zig").log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
+const config = @import("config");
 
 pub const TaskDescriptor = struct {
     pid: Pid,
@@ -100,7 +101,7 @@ pub const TaskDescriptor = struct {
 
 pub const TaskUnion = struct {
     task: TaskDescriptor,
-    stack: [2048 - @sizeOf(TaskDescriptor)]u8, // todo
+    stack: [config.TASK_KERNEL_STACK_SIZE - @sizeOf(TaskDescriptor)]u8, // todo
 
     const Self = @This();
 
@@ -111,7 +112,7 @@ pub const TaskUnion = struct {
             "kernel_task",
             memory.directPageAllocator.page_allocator(),
             @sizeOf(TaskUnion),
-            4,
+            config.TASK_KERNEL_CACHE_ORDER,
         );
     }
 };

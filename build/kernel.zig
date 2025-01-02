@@ -37,6 +37,11 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
     );
     kernel.root_module.addImport("colors", colors_module);
 
+    const config_module = context.builder.createModule(
+        .{ .root_source_file = .{ .cwd_relative = "./src/config.zig" } },
+    );
+    kernel.root_module.addImport("config", config_module);
+
     kernel.addIncludePath(std.Build.LazyPath{ .cwd_relative = "./src/c_headers/" });
 
     kernel.setLinkerScriptPath(.{ .cwd_relative = "src/linker.ld" });
