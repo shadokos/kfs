@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const task = @import("task.zig");
 const TaskDescriptor = task.TaskDescriptor;
 const scheduler = @import("scheduler.zig");
