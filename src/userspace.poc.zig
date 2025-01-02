@@ -34,7 +34,7 @@ fn poc_signal() linksection("userspace") void {
     _ = syscall(.write, .{ str, str.len });
 }
 
-pub fn switch_to_userspace() void {
+pub fn switch_to_userspace(_: anytype) u8 {
     @import("gdt.zig").tss.esp0 = @as(usize, @intFromPtr(&task_stack)) + task_stack.len;
 
     const vm = init_vm() catch @panic("Failed to initialize userspace");
@@ -72,6 +72,7 @@ pub fn switch_to_userspace() void {
           [cs] "r" (code_segment),
           [function] "r" (&_userland),
     );
+    return 0;
 }
 
 pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
