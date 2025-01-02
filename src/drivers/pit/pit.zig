@@ -146,6 +146,7 @@ pub fn init_channel(comptime channel: SelectChannel, frequency: u32) void {
 pub fn pit_handler(_: *interrupts.InterruptFrame) callconv(.C) void {
     ch0_ticks +%= 1;
     pic.ack(.Timer);
+    @import("../../task/scheduler.zig").schedule();
 }
 
 pub fn sleep_n_ticks(ticks: u64) void {
