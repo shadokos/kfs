@@ -229,12 +229,6 @@ pub fn unset_gate(id: u8) void {
 
 pub const Stub = *const fn () callconv(.Naked) void;
 
-export fn swapGsIfNeeded(frame: InterruptFrame) callconv(.C) void {
-    if (frame.iret.cs != 0x28) {
-        asm volatile ("swapgs");
-    }
-}
-
 // TODO: Send this to the intergalactic void, it's a simple POC
 pub var frame_stack: ?ft.ArrayListAligned(InterruptFrame, 4) = null;
 

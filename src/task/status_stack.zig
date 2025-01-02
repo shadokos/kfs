@@ -1,10 +1,10 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const task = @import("task.zig");
 const TaskDescriptor = task.TaskDescriptor;
 const scheduler = @import("scheduler.zig");
 const Status = @import("status_informations.zig").Status;
 const task_set = @import("task_set.zig");
-const logger = @import("../ft/ft.zig").log.scoped(.status_stack);
+const logger = @import("ft").log.scoped(.status_stack);
 
 pub const StatusStack = struct {
     lists: [3]?*Node = .{ null, null, null },

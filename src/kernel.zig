@@ -7,7 +7,7 @@ const task_set = @import("task/task_set.zig");
 const scheduler = @import("task/scheduler.zig");
 
 fn task1() u8 {
-    const logger = @import("ft/ft.zig").log.scoped(.task1);
+    const logger = @import("ft").log.scoped(.task1);
     logger.info("invoked", .{});
     for (0..5) |_| {
         logger.info("tic", .{});
@@ -18,7 +18,7 @@ fn task1() u8 {
 }
 
 fn task2() u8 {
-    const logger = @import("ft/ft.zig").log.scoped(.task2);
+    const logger = @import("ft").log.scoped(.task2);
     logger.info("invoked", .{});
     scheduler.schedule();
     for (0..5) |_| {
@@ -30,7 +30,7 @@ fn task2() u8 {
 }
 
 pub fn main() void {
-    const logger = @import("ft/ft.zig").log.scoped(.main);
+    const logger = @import("ft").log.scoped(.main);
     task.TaskUnion.init_cache() catch @panic("Failed to initialized kernel_task cache");
 
     const kernel = task_set.create_task() catch @panic("c'est  la  panique 2");

@@ -1,4 +1,4 @@
-const ft = @import("ft.zig");
+const ft = @import("ft");
 
 pub const whitespace = [_]u8{ ' ', '\t', '\n', '\r', 11, 12 };
 

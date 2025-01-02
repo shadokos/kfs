@@ -1,4 +1,4 @@
-const ft = @import("ft.zig");
+const ft = @import("ft");
 
 pub fn GenericReader(
     comptime Context: type,
