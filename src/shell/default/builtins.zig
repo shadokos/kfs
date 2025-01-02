@@ -286,7 +286,3 @@ pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
     const ms = ft.fmt.parseInt(u64, args[1], 0) catch return CmdError.InvalidParameter;
     @import("../../drivers/pit/pit.zig").sleep(ms);
 }
-
-pub fn userspace(_: anytype, _: [][]u8) CmdError!void {
-    @import("../../userspace.poc.zig").switch_to_userspace();
-}
