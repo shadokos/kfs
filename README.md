@@ -1,8 +1,14 @@
-# ShadokOS
-
-Shadokos is a UNIX-like kernel for i386 written entirely in [Zig](https://ziglang.org/)
-
-## features
+<p align=center><img src="https://github.com/user-attachments/assets/5e3e4e69-b3db-40ee-9684-8ccf9a6c31d5" width="350px"/></p>
+<h1 align=center>
+  <sup><sub>
+    UNIX-like kernel for i386 written entirely in
+  </sub></sup>
+  <a href="https://ziglang.org/">
+    <img src="https://github.com/user-attachments/assets/5e13dfe0-8d15-415c-b981-95ac5a351080" width="75px" />
+  </a>
+  <br><br>
+  <div align=left>features</div>
+</h1>
 
 ### Terminal
 
