@@ -2,7 +2,7 @@ const printk = @import("../../../tty/tty.zig").printk;
 const Cache = @import("cache.zig").Cache;
 const BitMap = @import("../../../misc/bitmap.zig").BitMap;
 const Bit = @import("../../../misc/bitmap.zig").Bit;
-const ft = @import("../../../ft/ft.zig");
+const ft = @import("ft");
 
 pub const SlabState = enum {
     Empty,
