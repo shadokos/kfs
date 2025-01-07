@@ -31,7 +31,7 @@ fn task2() u8 {
 
 pub fn main() void {
     const logger = @import("ft/ft.zig").log.scoped(.main);
-    task.TaskUnion.init_cache() catch @panic("Failed to initialized kernel_task cache");
+    task.TaskDescriptor.init_cache() catch @panic("Failed to initialized kernel_task cache");
 
     const kernel = task_set.create_task() catch @panic("c'est  la  panique 2");
 

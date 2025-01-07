@@ -11,20 +11,20 @@ var count: usize = 0;
 
 pub fn create_task() !*TaskDescriptor {
     const pid = next_pid() orelse return error.TooMuchProcesses;
-    const new_task = try task.TaskUnion.cache.allocator().create(task.TaskUnion);
+    const new_task = try TaskDescriptor.cache.allocator().create(TaskDescriptor);
     const parent = scheduler.get_current_task();
     if (pid == 0) {
-        new_task.task = .{ .pid = pid, .pgid = pid, .parent = null, .state = .Running };
-        scheduler.init(&new_task.task);
+        new_task.* = .{ .pid = pid, .pgid = pid, .parent = null, .state = .Running };
+        scheduler.init(new_task);
     } else {
-        new_task.task = .{ .pid = pid, .pgid = parent.pgid, .parent = parent, .state = .Running };
-        new_task.task.next_sibling = parent.childs;
-        parent.childs = &new_task.task;
-        scheduler.add_task(&new_task.task);
+        new_task.* = .{ .pid = pid, .pgid = parent.pgid, .parent = parent, .state = .Running };
+        new_task.next_sibling = parent.childs;
+        parent.childs = new_task;
+        scheduler.add_task(new_task);
     }
-    list[@intCast(pid)] = &new_task.task;
+    list[@intCast(pid)] = new_task;
     count += 1;
-    return &new_task.task;
+    return new_task;
 }
 
 fn next_pid() ?TaskDescriptor.Pid {
@@ -53,5 +53,5 @@ pub fn destroy_task(pid: TaskDescriptor.Pid) !void {
     descriptor.deinit();
     list[index] = null;
     count -= 1;
-    task.TaskUnion.cache.allocator().destroy(descriptor);
+    TaskDescriptor.cache.allocator().destroy(descriptor);
 }
