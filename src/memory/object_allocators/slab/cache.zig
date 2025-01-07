@@ -27,17 +27,28 @@ pub const Cache = struct {
     nb_active_slab: usize = 0,
     obj_per_slab: u16 = 0,
     size_obj: usize = 0,
+    align_obj: usize = 0,
 
-    pub fn init(name: []const u8, page_allocator: PageAllocator, obj_size: usize, order: u5) Error!Cache {
+    pub fn init(
+        name: []const u8,
+        page_allocator: PageAllocator,
+        obj_size: usize,
+        obj_align: usize,
+        order: u5,
+    ) Error!Cache {
         var new = Cache{
             .page_allocator = page_allocator,
             .pages_per_slab = @as(usize, 1) << order,
-            // align the size of the object with usize
-            .size_obj = ft.mem.alignForward(usize, obj_size, @sizeOf(usize)),
+            .size_obj = ft.mem.alignForward(usize, obj_size, obj_align),
+            .align_obj = obj_align,
         };
 
         // Compute the available space for the slab ((page_size * 2^order) - size of slab header)
-        const available = (paging.page_size * new.pages_per_slab) - @sizeOf(Self);
+        const available = (paging.page_size * new.pages_per_slab) - ft.mem.alignForward(
+            usize,
+            @sizeOf(Slab),
+            obj_align,
+        );
 
         new.obj_per_slab = 0;
         while (true) {
@@ -209,17 +220,18 @@ pub const Cache = struct {
         printk("{d: >5} ", .{self.size_obj});
         printk("{d: >5} ", .{self.obj_per_slab});
         printk("{d: >5} ", .{object_in_use});
-        printk("{d: >5}  ", .{self.pages_per_slab});
-        printk("{d: >5}  ", .{self.nb_slab});
-        printk("{d: >5}  ", .{nb_slab_empty});
-        printk("{d: >5} ", .{nb_slab_partial});
+        printk("{d: >5} ", .{self.pages_per_slab});
+        printk("{d: >6} ", .{self.nb_slab});
+        printk("{d: >6} ", .{nb_slab_empty});
+        printk("{d: >6} ", .{nb_slab_partial});
         printk("{d: >5} ", .{nb_slab_full});
         printk("\n", .{});
     }
 
     fn vtable_free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        _ = buf_align; // todo
+        if (buf_align > self.align_obj)
+            @panic("Invalid alignment for slab allocator cache");
         _ = ret_addr; // todo
 
         self.free(@alignCast(@ptrCast(buf))) catch @panic("invalid free");
@@ -227,7 +239,8 @@ pub const Cache = struct {
 
     fn vtable_alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        _ = ptr_align; // todo
+        if (ptr_align > self.align_obj)
+            @panic("Invalid alignment for slab allocator cache");
         _ = ret_addr; // todo
         if (len != self.size_obj) {
             return null;
@@ -237,7 +250,8 @@ pub const Cache = struct {
 
     fn vtable_resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        _ = buf_align; // todo
+        if (buf_align > self.align_obj)
+            @panic("Invalid alignment for slab allocator cache");
         _ = ret_addr; // todo
         _ = buf;
         return new_len == self.size_obj;
@@ -260,13 +274,20 @@ pub const GlobalCache = struct {
     cache: Cache = Cache{},
 
     pub fn init(allocator: PageAllocator) !GlobalCache {
-        return .{ .cache = try Cache.init("global", allocator, @sizeOf(Cache), 0) };
+        return .{ .cache = try Cache.init("global", allocator, @sizeOf(Cache), @alignOf(Cache), 0) };
     }
 
-    pub fn create(self: *Self, name: []const u8, allocator: PageAllocator, obj_size: usize, order: u5) !*Cache {
+    pub fn create(
+        self: *Self,
+        name: []const u8,
+        allocator: PageAllocator,
+        obj_size: usize,
+        obj_align: usize,
+        order: u5,
+    ) !*Cache {
         var cache: *Cache = @ptrCast(@alignCast(self.cache.alloc_one() catch |e| return e));
 
-        cache.* = try Cache.init(name, allocator, obj_size, order);
+        cache.* = try Cache.init(name, allocator, obj_size, obj_align, order);
 
         cache.next = self.cache.next;
         if (self.cache.next) |next| next.prev = cache;
