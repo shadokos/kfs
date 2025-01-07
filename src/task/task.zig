@@ -116,22 +116,15 @@ pub const TaskUnion = struct {
     }
 };
 
-pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor, clone_stack: bool) void {
+pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     asm volatile ("pushal");
     prev.esp = cpu.get_esp();
-    if (clone_stack) {
-        @memcpy(
-            @as([*]u8, @ptrCast(next))[@sizeOf(TaskDescriptor)..@sizeOf(TaskUnion)],
-            @as([*]u8, @ptrCast(prev))[@sizeOf(TaskDescriptor)..@sizeOf(TaskUnion)],
-        );
-        next.esp = prev.esp - @as(usize, @intFromPtr(prev)) + @as(usize, @intFromPtr(next));
-    }
     cpu.set_esp(next.esp);
     asm volatile ("popal");
 }
 
 pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
-    return switch_to_task_opts(prev, next, false);
+    return switch_to_task_opts(prev, next);
 }
 
 pub fn getpid() TaskDescriptor.Pid {
