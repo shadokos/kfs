@@ -28,6 +28,7 @@ pub const Region = struct {
             "regions",
             @import("../memory.zig").directPageAllocator.page_allocator(),
             @sizeOf(@This()),
+            @alignOf(@This()),
             4,
         );
     }

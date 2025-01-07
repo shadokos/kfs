@@ -217,6 +217,7 @@ pub fn cache_create(_: anytype, args: [][]u8) CmdError!void {
 
         size,
         @truncate(order),
+        @alignOf(usize),
     ) catch {
         printk("Failed to create cache\n", .{});
         return CmdError.OtherError;

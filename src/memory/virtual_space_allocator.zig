@@ -45,6 +45,7 @@ pub const VirtualSpaceAllocator = struct {
                 "virtual_space_nodes",
                 @import("../memory.zig").directPageAllocator.page_allocator(),
                 @sizeOf(@This()),
+                @alignOf(@This()),
                 4,
             );
         }
