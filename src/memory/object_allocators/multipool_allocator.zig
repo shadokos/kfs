@@ -39,6 +39,7 @@ pub const MultipoolAllocator = struct {
                 name ++ "_" ++ cache_descriptions[i].name,
                 page_allocator,
                 cache_descriptions[i].size,
+                @alignOf(usize),
                 cache_descriptions[i].order,
             );
         }
