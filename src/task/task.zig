@@ -12,6 +12,7 @@ const logger = @import("ft").log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
 pub const TaskDescriptor = struct {
+    stack: [4096]u8 align(4096) = undefined, // todo
     pid: Pid,
     pgid: Pid,
 
@@ -38,6 +39,18 @@ pub const TaskDescriptor = struct {
     };
     pub const Pid = i32;
     pub const Self = @This();
+
+    pub var cache: *Cache = undefined;
+
+    pub fn init_cache() !void {
+        cache = try memory.globalCache.create(
+            "task_descriptor",
+            memory.directPageAllocator.page_allocator(),
+            @sizeOf(Self),
+            @alignOf(Self),
+            6,
+        );
+    }
 
     pub fn deinit(self: *Self) void {
         if (self.parent) |p| {
@@ -92,27 +105,9 @@ pub const TaskDescriptor = struct {
 
     pub fn wait_child(self: *Self, transition: status_informations.Status.Transition) Errno!?*Self {
         if (self.status_stack.top(transition)) |n| {
-            const descriptor: *Self = @fieldParentPtr("status_stack_process_node", n);
+            const descriptor: *Self = @alignCast(@fieldParentPtr("status_stack_process_node", n));
             return descriptor;
         } else return null;
-    }
-};
-
-pub const TaskUnion = struct {
-    task: TaskDescriptor,
-    stack: [2048 - @sizeOf(TaskDescriptor)]u8, // todo
-
-    const Self = @This();
-
-    pub var cache: *Cache = undefined;
-
-    pub fn init_cache() !void {
-        cache = try memory.globalCache.create(
-            "kernel_task",
-            memory.directPageAllocator.page_allocator(),
-            @sizeOf(TaskUnion),
-            4,
-        );
     }
 };
 
@@ -152,14 +147,13 @@ pub fn start_task(function: *const fn () u8) noreturn {
 
 pub fn spawn(function: *const fn () u8) !*TaskDescriptor {
     const descriptor = try task_set.create_task();
-    const taskUnion: *TaskUnion = @fieldParentPtr("task", descriptor);
     var is_parent: bool = false;
     const is_parent_ptr: *volatile bool = &is_parent;
     scheduler.checkpoint();
-    if (is_parent_ptr.*) {} else {
+    if (!is_parent_ptr.*) {
         is_parent_ptr.* = true;
         scheduler.set_current_task(descriptor);
-        cpu.set_esp(@as(usize, @intFromPtr(&taskUnion.stack)) + taskUnion.stack.len);
+        cpu.set_esp(@as(usize, @intFromPtr(&descriptor.stack)) + descriptor.stack.len);
         start_task(function);
     }
     return descriptor;
