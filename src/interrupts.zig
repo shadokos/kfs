@@ -243,7 +243,7 @@ comptime {
 
 pub fn ret_from_interrupt(frame: *InterruptFrame) callconv(.C) void {
     if (frame_stack == null)
-        frame_stack = @TypeOf(frame_stack.?).init(@import("memory.zig").physicalMemory.allocator());
+        frame_stack = @TypeOf(frame_stack.?).init(@import("memory.zig").smallAlloc.allocator());
     if (@import("userspace.poc.zig").get_next_signal()) |handler_ptr| {
         frame_stack.?.append(frame.*) catch @panic("todo");
         frame.iret.ip = @intFromPtr(handler_ptr);
