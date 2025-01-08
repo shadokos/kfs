@@ -7,7 +7,7 @@ const paging = @import("memory/paging.zig");
 export var task_stack: [32 * paging.page_size]u8 align(paging.page_size) = undefined;
 
 pub fn init_vm() !*VirtualSpace {
-    const vm = try memory.virtualMemory.allocator().create(VirtualSpace);
+    const vm = try memory.bigAlloc.allocator().create(VirtualSpace);
     try vm.init();
     try vm.add_space(0, paging.high_half / paging.page_size);
     try vm.add_space((paging.page_tables) / paging.page_size, 768);

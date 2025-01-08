@@ -136,7 +136,7 @@ pub fn alloc_page(shell: anytype, args: [][]u8) CmdError!void {
 
 pub fn kmalloc(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
-    var kmem = &@import("../../memory.zig").physicalMemory;
+    var kmem = &@import("../../memory.zig").smallAlloc;
     const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
     const obj: []u8 = kmem.alloc(u8, nb) catch {
         utils.print_error(shell, "Failed to allocate {d} bytes", .{nb});
@@ -148,7 +148,7 @@ pub fn kmalloc(shell: anytype, args: [][]u8) CmdError!void {
 pub fn kfree(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
-    var kmem = &@import("../../memory.zig").physicalMemory;
+    var kmem = &@import("../../memory.zig").smallAlloc;
     const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
     if (!ft.mem.isAligned(addr, @sizeOf(usize))) {
         utils.print_error(shell, "0x{x} is not aligned", .{addr});
@@ -160,7 +160,7 @@ pub fn kfree(shell: anytype, args: [][]u8) CmdError!void {
 pub fn ksize(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
-    var kmem = &@import("../../memory.zig").physicalMemory;
+    var kmem = &@import("../../memory.zig").smallAlloc;
     const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
     if (!ft.mem.isAligned(addr, @sizeOf(usize))) {
         utils.print_error(shell, "0x{x} is not aligned", .{addr});
@@ -176,7 +176,7 @@ pub fn ksize(shell: anytype, args: [][]u8) CmdError!void {
 pub fn krealloc(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) return CmdError.InvalidNumberOfArguments;
 
-    var kmem = &@import("../../memory.zig").physicalMemory;
+    var kmem = &@import("../../memory.zig").smallAlloc;
     const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
     const new_size = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
     if (!ft.mem.isAligned(addr, @sizeOf(usize))) {
@@ -255,7 +255,7 @@ pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
     ) catch return CmdError.InvalidParameter else 10000;
 
     return utils.fuzz(
-        @import("../../memory.zig").physicalMemory.allocator(),
+        @import("../../memory.zig").directMemory.allocator(),
         shell.writer,
         nb,
         max_size,
@@ -274,7 +274,7 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
     ) catch return CmdError.InvalidParameter else 10000;
 
     return utils.fuzz(
-        @import("../../memory.zig").virtualMemory.allocator(),
+        @import("../../memory.zig").bigAlloc.allocator(),
         shell.writer,
         nb,
         max_size,
