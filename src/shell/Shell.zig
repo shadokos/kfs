@@ -1,7 +1,7 @@
 const ft = @import("../ft/ft.zig");
 const token = @import("token.zig");
 const colors = @import("colors");
-const allocator = @import("../memory.zig").physicalMemory.allocator();
+const allocator = @import("../memory.zig").smallAlloc.allocator();
 
 pub const CmdError = error{ CommandNotFound, InvalidNumberOfArguments, InvalidParameter, OtherError };
 pub const Config = struct {
