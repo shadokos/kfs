@@ -1,7 +1,7 @@
 const ft = @import("ft");
 const Shell = @import("shell.zig").Shell;
 
-const allocator = @import("../../memory.zig").physicalMemory.allocator();
+const allocator = @import("../../memory.zig").smallAlloc.allocator();
 
 pub fn Packet(comptime T: type) type {
     return struct {

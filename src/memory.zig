@@ -43,8 +43,9 @@ pub var virtually_contiguous_page_allocator = kernel_virtual_space.generate_page
 pub var boot_allocator: StaticAllocator(
     PageFrameAllocatorType.UnderlyingAllocator.size_for(paging.direct_zone_size / paging.page_size),
 ) = .{};
-pub var virtualMemory: PageGrainedAllocator = undefined;
-pub var physicalMemory: MultipoolAllocator = undefined;
+pub var bigAlloc: PageGrainedAllocator = undefined;
+pub var smallAlloc: MultipoolAllocator = undefined;
+pub var directMemory: MultipoolAllocator = undefined;
 //  =================================
 
 const InterruptFrame = @import("interrupts.zig").InterruptFrame;
@@ -107,7 +108,10 @@ pub fn init() void {
     logger.debug("\tGlobal cache initialized", .{});
 
     logger.debug("\tInitializing physical memory allocator...", .{});
-    MultipoolAllocator.cache_init("kmalloc", directPageAllocator.page_allocator()) catch {
+    directMemory = MultipoolAllocator.init("dma_kmalloc", directPageAllocator.page_allocator()) catch {
+        @panic("cannot cache_init MultipoolAllocator");
+    };
+    smallAlloc = MultipoolAllocator.init("kmalloc", virtually_contiguous_page_allocator.page_allocator()) catch {
         @panic("cannot cache_init MultipoolAllocator");
     };
     logger.debug("\tPhysical memory allocator initialized", .{});
@@ -144,7 +148,7 @@ pub fn init() void {
     // logger.debug("\tKernel remapped", .{});
 
     logger.debug("\tInitializing virtual memory allocator...", .{});
-    virtualMemory = PageGrainedAllocator.init(virtually_contiguous_page_allocator.page_allocator());
+    bigAlloc = PageGrainedAllocator.init(virtually_contiguous_page_allocator.page_allocator());
     logger.debug("\tVirtual memory allocator initialized", .{});
 
     if (medium_size != 0) {
@@ -156,7 +160,7 @@ pub fn init() void {
             .Medium,
             medium_begin,
             medium_size,
-            virtualMemory.allocator(),
+            bigAlloc.allocator(),
         );
         check_mem_availability(medium_begin, medium_end); // todo
         logger.debug("\tMedium physical memory initialized...", .{});
