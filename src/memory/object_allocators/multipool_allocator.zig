@@ -8,9 +8,9 @@ const logger = ft.log.scoped(.physical_memory);
 pub const MultipoolAllocator = struct {
     const Self = @This();
 
-    var caches: [14]*Cache = undefined;
+    caches: [14]*Cache = undefined,
 
-    pub fn cache_init(comptime name: []const u8, page_allocator: PageAllocator) !void {
+    pub fn init(comptime name: []const u8, page_allocator: PageAllocator) !Self {
         const CacheDescription = struct {
             name: []const u8,
             size: usize,
@@ -34,8 +34,10 @@ pub const MultipoolAllocator = struct {
             .{ .name = "32k", .size = 32768, .order = 5 },
         };
 
+        var ret: Self = undefined;
+
         inline for (0..cache_descriptions.len) |i| {
-            caches[i] = try globalCache.create(
+            ret.caches[i] = try globalCache.create(
                 name ++ "_" ++ cache_descriptions[i].name,
                 page_allocator,
                 cache_descriptions[i].size,
@@ -43,30 +45,32 @@ pub const MultipoolAllocator = struct {
                 cache_descriptions[i].order,
             );
         }
+
+        return ret;
     }
 
-    fn _kmalloc(size: usize) !*align(1) usize {
+    fn _kmalloc(self: *Self, size: usize) !*align(1) usize {
         return switch (size) {
-            0...4 => caches[0].alloc_one(),
-            5...8 => caches[1].alloc_one(),
-            9...16 => caches[2].alloc_one(),
-            17...32 => caches[3].alloc_one(),
-            33...64 => caches[4].alloc_one(),
-            65...128 => caches[5].alloc_one(),
-            129...256 => caches[6].alloc_one(),
-            257...512 => caches[7].alloc_one(),
-            513...1024 => caches[8].alloc_one(),
-            1025...2048 => caches[9].alloc_one(),
-            2049...4096 => caches[10].alloc_one(),
-            4097...8192 => caches[11].alloc_one(),
-            8193...16384 => caches[12].alloc_one(),
-            16385...32768 => caches[13].alloc_one(),
+            0...4 => self.caches[0].alloc_one(),
+            5...8 => self.caches[1].alloc_one(),
+            9...16 => self.caches[2].alloc_one(),
+            17...32 => self.caches[3].alloc_one(),
+            33...64 => self.caches[4].alloc_one(),
+            65...128 => self.caches[5].alloc_one(),
+            129...256 => self.caches[6].alloc_one(),
+            257...512 => self.caches[7].alloc_one(),
+            513...1024 => self.caches[8].alloc_one(),
+            1025...2048 => self.caches[9].alloc_one(),
+            2049...4096 => self.caches[10].alloc_one(),
+            4097...8192 => self.caches[11].alloc_one(),
+            8193...16384 => self.caches[12].alloc_one(),
+            16385...32768 => self.caches[13].alloc_one(),
             else => Cache.Error.AllocationFailed,
         };
     }
 
-    pub fn alloc(_: *Self, comptime T: type, n: usize) ![]T {
-        return @as([*]T, @ptrFromInt(@intFromPtr(try _kmalloc(@sizeOf(T) * n))))[0..n];
+    pub fn alloc(self: *Self, comptime T: type, n: usize) ![]T {
+        return @as([*]T, @ptrFromInt(@intFromPtr(try self._kmalloc(@sizeOf(T) * n))))[0..n];
     }
 
     pub fn free(_: *Self, ptr: anytype) void {
@@ -109,10 +113,10 @@ pub const MultipoolAllocator = struct {
     }
 
     fn vtable_alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
-        _ = ctx;
+        const self: *Self = @alignCast(@ptrCast(ctx));
         _ = ptr_align;
         _ = ret_addr;
-        return @as([*]u8, @ptrFromInt(@intFromPtr(_kmalloc(len) catch |e| {
+        return @as([*]u8, @ptrFromInt(@intFromPtr(self._kmalloc(len) catch |e| {
             logger.debug("{s}", .{@errorName(e)});
             return null;
         })));

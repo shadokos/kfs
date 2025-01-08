@@ -16,7 +16,7 @@ pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
     var packet = Packet(void).init(shell.writer);
     packet.type = .Success;
     packet.err = if (utils.fuzz(
-        @import("../../memory.zig").physicalMemory.allocator(),
+        @import("../../memory.zig").smallAlloc.allocator(),
         shell.writer,
         nb,
         max_size,
@@ -38,7 +38,7 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
     var packet = Packet(void).init(shell.writer);
     packet.type = .Success;
     packet.err = if (utils.fuzz(
-        @import("../../memory.zig").virtualMemory.allocator(),
+        @import("../../memory.zig").bigAlloc.allocator(),
         shell.writer,
         nb,
         max_size,
