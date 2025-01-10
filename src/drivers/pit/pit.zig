@@ -149,15 +149,18 @@ pub fn pit_handler(_: *interrupts.InterruptFrame) callconv(.C) void {
 }
 
 pub fn sleep_n_ticks(ticks: u64) void {
+    @setRuntimeSafety(true);
     const start = ch0_ticks;
     while (ch0_ticks - start < ticks) cpu.halt();
 }
 
 pub fn nano_sleep(ns: u64) void {
+    @setRuntimeSafety(true);
     sleep_n_ticks(ns / interval_ns);
 }
 
 pub fn sleep(ms: u64) void {
+    @setRuntimeSafety(true);
     sleep_n_ticks(ms * 1_000_000 / interval_ns);
 }
 
