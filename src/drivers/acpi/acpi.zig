@@ -268,6 +268,10 @@ pub fn enable() ACPI_error!void {
     acpi_logger.debug("\t- Done ({d} ms)", .{time});
 }
 
+pub fn get_acpi() PTR(ACPI) {
+    return &acpi;
+}
+
 pub fn init() void {
     const rsdp = _get_rsdp() catch |err| @panic(acpi_strerror("RSDP", err));
     const rsdt = _get_rsdt(rsdp) catch |err| @panic(acpi_strerror("RSDT", err));
