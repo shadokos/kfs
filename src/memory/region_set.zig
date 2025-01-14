@@ -14,9 +14,21 @@ pub const RegionSet = struct {
         }
     }
 
+    pub fn clone(self: Self) !Self {
+        var ret = Self{};
+        var current = self.list;
+        errdefer ret.clear() catch unreachable;
+        while (current) |n| : (current = n.next) {
+            _ = try ret.create_region(n.*);
+        }
+        return ret;
+    }
+
     pub fn create_region(self: *Self, content: Region) !*Region {
         const new_region = try Region.create();
         new_region.* = content;
+        new_region.prev = null;
+        new_region.next = null;
         self.size += 1;
         if (self.list) |first| {
             first.prev = new_region;
