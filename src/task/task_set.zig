@@ -23,7 +23,6 @@ pub fn create_task() !*TaskDescriptor {
         new_task.* = .{ .pid = pid, .pgid = parent.pgid, .parent = parent, .state = .Running };
         new_task.next_sibling = parent.childs;
         parent.childs = new_task;
-        scheduler.add_task(new_task);
     }
     list[@intCast(pid)] = new_task;
     count += 1;
