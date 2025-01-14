@@ -105,7 +105,7 @@ pub fn wait(
         if (options.WNOHANG) {
             return null;
         }
-        scheduler.schedule();
+        @import("../cpu.zig").halt();
         // todo signals
     }
 }
