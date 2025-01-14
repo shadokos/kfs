@@ -29,7 +29,7 @@ pub const StackIterator = struct {
         const fp = self.fp;
 
         // Sanity check.
-        const mem = @import("../ft/ft.zig").mem;
+        const mem = @import("ft.zig").mem;
         if (fp == 0 or !mem.isAligned(fp, @alignOf(usize)))
             return null;
 
