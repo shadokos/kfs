@@ -168,7 +168,7 @@ pub fn init() void {
     idtr.offset = @intFromPtr(&idt);
     cpu.load_idt(&idtr);
     logger.info("Idt initialized", .{});
-    cpu.enable_interrupts();
+    @import("task/scheduler.zig").unlock();
     logger.info("Interrupts enabled", .{});
 }
 
@@ -265,6 +265,16 @@ pub fn ret_from_interrupt(frame: *InterruptFrame) callconv(.C) void {
     }
 }
 
+export fn wrapper(f: *const fn (frame: *InterruptFrame) callconv(.C) void, frame: *InterruptFrame) callconv(.C) void {
+    const interrupt_enable = cpu.get_eflags().interrupt_enable;
+    if (!interrupt_enable)
+        @import("task/scheduler.zig").lock_count += 1;
+    f(frame);
+    ret_from_interrupt(frame);
+    if (!interrupt_enable)
+        @import("task/scheduler.zig").lock_count -|= 1;
+}
+
 pub const Handler = extern union {
     ptr: usize,
     raw_handler: Stub,
@@ -284,18 +294,17 @@ pub const Handler = extern union {
                     \\push %%esi
                     \\push %%edi
                     \\push %%esp
-                    \\cld
-                );
-                asm volatile ("call *%[f]"
-                    :
-                    : [f] "r" (f),
-                );
-                asm volatile ("call *%[ret_from_interrupt]"
-                    :
-                    : [ret_from_interrupt] "r" (&ret_from_interrupt),
                 );
                 asm volatile (
-                    \\add $4, %%esp
+                    \\push %[f]
+                    \\cld
+                    \\call *%[wrapper]
+                    :
+                    : [f] "r" (f),
+                      [wrapper] "r" (wrapper),
+                );
+                asm volatile (
+                    \\add $8, %%esp
                     \\pop %%edi
                     \\pop %%esi
                     \\pop %%ebp

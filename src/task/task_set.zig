@@ -10,6 +10,9 @@ var head: TaskDescriptor.Pid = 0;
 var count: usize = 0;
 
 pub fn create_task() !*TaskDescriptor {
+    scheduler.lock();
+    defer scheduler.unlock();
+
     const pid = next_pid() orelse return error.TooMuchProcesses;
     const new_task = try TaskDescriptor.cache.allocator().create(TaskDescriptor);
     const parent = scheduler.get_current_task();
@@ -46,6 +49,9 @@ pub fn get_task_descriptor(pid: TaskDescriptor.Pid) ?*TaskDescriptor {
 }
 
 pub fn destroy_task(pid: TaskDescriptor.Pid) !void {
+    scheduler.lock();
+    defer scheduler.unlock();
+
     if (pid < 0) return error.NoSuchTask;
     const index: u32 = @intCast(pid);
     const descriptor = list[index] orelse return error.NoSuchTask; // todo error
