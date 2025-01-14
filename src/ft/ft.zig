@@ -18,6 +18,8 @@ pub const log = @import("log.zig");
 
 pub const ArrayList = @import("array_list.zig").ArrayList;
 
+pub const TailQueue = @import("linked_list.zig").TailQueue;
+
 pub const ArrayListAligned = @import("array_list.zig").ArrayListAligned;
 
 const root = @import("root");
