@@ -287,3 +287,41 @@ pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
     const ms = ft.fmt.parseInt(u64, args[1], 0) catch return CmdError.InvalidParameter;
     @import("../../drivers/pit/pit.zig").sleep(ms);
 }
+
+pub fn wait(_: anytype, _: [][]u8) CmdError!void {
+    var status: @import("../../task/wait.zig").Status = undefined;
+    const pid = @import("../../task/wait.zig").wait(0, .CHILD, &status, .{
+        .WNOHANG = true,
+        .WCONTINUED = true,
+        .WUNTRACED = true,
+    }) catch @panic("ono") orelse return;
+    switch (status.type) {
+        .Exited => printk("task {d} has exited with code {d}\n", .{ pid, status.value }),
+        .Signaled => printk("task {d} was terminated by signal {d}\n", .{ pid, status.value }),
+        .Stopped => printk("task {d} was stopped by signal {d}\n", .{ pid, status.value }),
+        .Continued => printk("task {d} was continued by signal {d}\n", .{ pid, status.value }),
+    }
+}
+
+pub fn kill(_: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+    const pid = ft.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter;
+    const signal = ft.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
+    for (0..10) |_| {
+        @import("../../task/signal.zig").kill(pid, @enumFromInt(signal)) catch @panic("ono");
+    }
+}
+
+pub fn pstree(shell: anytype, _: [][]u8) CmdError!void {
+    var prefix: [80]u8 = [1]u8{' '} ** 80;
+    utils.pstree(shell, 0, &prefix, 0);
+}
+
+pub fn tic(shell: anytype, args: [][]u8) CmdError!void {
+    var n = if (args.len == 2) ft.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter else null;
+    while (if (n) |nv| nv > 0 else true) {
+        shell.print("tic\n", .{});
+        @import("../../drivers/pit/pit.zig").sleep(1000);
+        if (n) |*nv| nv.* -= 1;
+    }
+}
