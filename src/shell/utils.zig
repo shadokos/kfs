@@ -272,3 +272,32 @@ pub fn fuzz(allocator: ft.mem.Allocator, writer: ft.io.AnyWriter, nb: usize, max
 
     return fuzzer.fuzz(nb, max_size, quiet);
 }
+
+const task = @import("../task/task.zig");
+const taskSet = @import("../task/task_set.zig");
+pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth: usize) void {
+    const descriptor = taskSet.get_task_descriptor(pid) orelse return;
+    if (descriptor.childs) |first_child| {
+        shell.print("{d:\xc4<5}", .{descriptor.pid});
+        if ((depth + 1) * 6 > prefix.len) return;
+        var child: ?*task.TaskDescriptor = first_child;
+        while (child) |current| : (child = current.next_sibling) {
+            if (current == first_child) {
+                if (current.next_sibling == null) {
+                    shell.print("\xc4", .{});
+                } else {
+                    shell.print("\xc2", .{});
+                    prefix[depth * 6 + 5] = 0xb3;
+                }
+            } else if (current.next_sibling == null) {
+                prefix[depth * 6 + 5] = ' ';
+                shell.print("{s}\xc0", .{prefix[0 .. (depth + 1) * 6 - 1]});
+            } else {
+                shell.print("{s}\xc3", .{prefix[0 .. (depth + 1) * 6 - 1]});
+            }
+            pstree(shell, current.pid, prefix, depth + 1);
+        }
+    } else {
+        shell.print("{d}\n", .{descriptor.pid});
+    }
+}

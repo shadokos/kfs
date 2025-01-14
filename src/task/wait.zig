@@ -97,10 +97,11 @@ pub fn wait(
         if (try wait_transition(descriptor, selector, options)) |d| {
             const status_info = d.get_status() orelse unreachable;
             stat_loc.* = Status.from_status_info(status_info);
+            const ret = d.pid;
             if (status_info.transition == .Terminated) {
                 task_set.destroy_task(d.pid) catch @panic("je panique la");
             }
-            return d.pid;
+            return ret;
         }
         if (options.WNOHANG) {
             return null;
