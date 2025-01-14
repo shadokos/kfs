@@ -47,6 +47,6 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
     packet.send();
 }
 
-pub fn quit(_: anytype, _: anytype) void {
+pub fn quit(_: anytype, _: anytype) CmdError!void {
     @import("../../drivers/acpi/acpi.zig").power_off();
 }
