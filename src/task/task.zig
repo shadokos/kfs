@@ -12,7 +12,7 @@ const logger = @import("ft").log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
 pub const TaskDescriptor = struct {
-    stack: [4096]u8 align(4096) = undefined, // todo
+    stack: [16 * 1024]u8 align(4096) = undefined, // todo
     pid: Pid,
     pgid: Pid,
 
@@ -123,10 +123,34 @@ pub const TaskDescriptor = struct {
             return descriptor;
         } else return null;
     }
+
+    pub fn spawn(self: *Self, function: *const fn (anytype) u8, data: anytype) !void {
+        scheduler.lock();
+        var is_parent: bool = false;
+        const is_parent_ptr: *volatile bool = &is_parent;
+        scheduler.checkpoint();
+        if (is_parent_ptr.*) {} else {
+            is_parent_ptr.* = true;
+            cpu.set_esp(@as(usize, @intFromPtr(&self.stack)) + self.stack.len);
+            self.start_task(function, data);
+        }
+        scheduler.unlock();
+    }
+
+    pub noinline fn start_task(self: *Self, function: *const fn (anytype) u8, data: anytype) noreturn {
+        scheduler.add_task(self);
+        scheduler.set_current_task(self);
+        scheduler.unlock();
+        exit(function(data));
+    }
 };
 
 pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     asm volatile ("pushal");
+    asm volatile (
+        \\ mov %cr3, %eax
+        \\ push %eax
+    );
     asm volatile (
         \\push %[lock_count]
         :
@@ -139,6 +163,10 @@ pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor
     scheduler.lock_count = asm volatile (
         \\pop %eax
         : [_] "={eax}" (-> u32),
+    );
+    asm volatile (
+        \\ pop %eax
+        \\ mov %eax, %cr3
     );
     asm volatile ("popal");
 }
@@ -182,25 +210,4 @@ pub fn exit(code: u8) noreturn {
 
     scheduler.schedule();
     unreachable;
-}
-
-pub noinline fn start_task(function: *const fn () u8) noreturn {
-    scheduler.unlock();
-    exit(function());
-}
-
-pub fn spawn(function: *const fn () u8) !*TaskDescriptor {
-    scheduler.lock();
-    const descriptor = try task_set.create_task();
-    var is_parent: bool = false;
-    const is_parent_ptr: *volatile bool = &is_parent;
-    scheduler.checkpoint();
-    if (!is_parent_ptr.*) {
-        is_parent_ptr.* = true;
-        scheduler.set_current_task(descriptor);
-        cpu.set_esp(@as(usize, @intFromPtr(&descriptor.stack)) + descriptor.stack.len);
-        start_task(function);
-    }
-    scheduler.unlock();
-    return descriptor;
 }
