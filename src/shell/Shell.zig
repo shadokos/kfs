@@ -128,7 +128,7 @@ pub fn Shell(comptime _builtins: anytype) type {
                 const job = self.jobs.slice[i];
                 if (wait.wait(job.pid, .SELF, &status, .{ .WNOHANG = true }) catch @panic("todo")) |_| {
                     self.print("[{}] done {s}\n", .{ job.pid, job.command_line });
-                    allocator.free(job.command_line);
+                    allocator.destroy(job.command_line);
                     _ = self.jobs.swapRemove(i);
                 } else {
                     i += 1;
