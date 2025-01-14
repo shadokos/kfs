@@ -42,12 +42,21 @@ fn page_fault_handler(frame: *InterruptFrame) callconv(.C) void {
         };
     } else {
         ft.log.err(
-            "PAGE FAULT!\n\taddress 0x{x:0>8} is not mapped\n\taction type: {s}\n\tmode: {s}\n\terror: {s}",
+            \\PAGE FAULT!
+            \\  address 0x{x:0>8} is not mapped
+            \\  action type: {s}
+            \\  mode: {s}
+            \\  error: {s}
+            \\  ip: 0x{x:0>8}
+            \\  current task: {d}
+        ,
             .{
                 @intFromPtr(address),
                 @tagName(error_object.type),
                 @tagName(error_object.mode),
                 if (error_object.present) "page-level protection violation" else "page not present",
+                frame.iret.ip,
+                @import("../task/scheduler.zig").get_current_task().pid,
             },
         );
     }
