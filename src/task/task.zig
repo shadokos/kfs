@@ -1,6 +1,6 @@
 const memory = @import("../memory.zig");
 const paging = @import("../memory/paging.zig");
-const VirtualSpace = @import("../memory/virtual_space.zig");
+const VirtualSpace = @import("../memory/virtual_space.zig").VirtualSpace;
 const cpu = @import("../cpu.zig");
 const task_set = @import("task_set.zig");
 const signal = @import("signal.zig");
@@ -21,6 +21,8 @@ pub const TaskDescriptor = struct {
     parent: ?*TaskDescriptor,
     childs: ?*TaskDescriptor = null,
     next_sibling: ?*TaskDescriptor = null,
+
+    vm: ?*VirtualSpace = null,
 
     status_info: ?status_informations.Status = null,
     status_stack: StatusStack = .{},
@@ -53,6 +55,9 @@ pub const TaskDescriptor = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        if (self.vm) |_| {
+            // todo destroy vm
+        }
         if (self.parent) |p| {
             p.status_stack.remove(&self.status_stack_process_node);
             var n: ?*Self = p.childs;
@@ -82,6 +87,15 @@ pub const TaskDescriptor = struct {
             }
             // todo: process group
         } else @panic("todo");
+    }
+
+    pub fn clone_vm(self: *Self, other: *Self) !void {
+        if (self.vm != null) {
+            @panic("task already has a vm");
+        }
+        if (other.vm) |vm| {
+            self.vm = try vm.clone();
+        }
     }
 
     pub fn get_status(self: *Self) ?status_informations.Status {
@@ -133,6 +147,20 @@ pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     scheduler.lock();
     defer scheduler.unlock();
     return switch_to_task_opts(prev, next);
+}
+
+pub fn init_vm(t: *TaskDescriptor) !void {
+    if (t.vm) |_| {
+        return;
+    }
+    t.vm = try VirtualSpace.cache.allocator().create(VirtualSpace);
+    if (t.vm) |vm| {
+        try vm.init();
+        try vm.add_space(0, paging.high_half / paging.page_size);
+        try vm.add_space((paging.page_tables) / paging.page_size, 768);
+        vm.transfer();
+        try vm.fill_page_tables(paging.page_tables / paging.page_size, 768, false);
+    } else unreachable;
 }
 
 pub fn getpid() TaskDescriptor.Pid {
