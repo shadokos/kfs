@@ -19,6 +19,7 @@ pub fn ArrayListAligned(comptime T: type, comptime alignment: ?u29) type {
 
         // https://ziglang.org/documentation/master/std/#std.array_list.ArrayListAligned.Slice
         pub const Slice = if (alignment) |a| ([]align(a) T) else []T;
+        const Pointer = if (alignment) |a| (*align(a) T) else *T;
 
         // https://ziglang.org/documentation/master/std/#std.array_list.ArrayListAligned.Writer
         pub const Writer = if (T != u8)
@@ -59,15 +60,15 @@ pub fn ArrayListAligned(comptime T: type, comptime alignment: ?u29) type {
             return @ptrCast(&self.addManyAsSlice(n)[0]);
         }
 
-        pub fn addManyAsSlice(self: *Self, n: usize) Allocator.Error![]T {
+        pub fn addManyAsSlice(self: *Self, n: usize) Allocator.Error!Slice {
             return self.addManyAt(self.slice.len, n);
         }
 
-        pub fn addManyAsSliceAssumeCapacity(self: *Self, n: usize) []T {
+        pub fn addManyAsSliceAssumeCapacity(self: *Self, n: usize) Slice {
             return self.addManyAtAssumeCapacity(self.slice.len, n);
         }
 
-        pub fn addManyAt(self: *Self, index: usize, count: usize) Allocator.Error![]T {
+        pub fn addManyAt(self: *Self, index: usize, count: usize) Allocator.Error!Slice {
             if (self.capacity < self.slice.len + count) {
                 try self.ensureTotalCapacity(self.capacity + count);
             }
@@ -75,24 +76,23 @@ pub fn ArrayListAligned(comptime T: type, comptime alignment: ?u29) type {
             return self.addManyAtAssumeCapacity(index, count);
         }
 
-        pub fn addManyAtAssumeCapacity(self: *Self, index: usize, count: usize) []T {
+        pub fn addManyAtAssumeCapacity(self: *Self, index: usize, count: usize) Slice {
             assert(self.capacity >= self.slice.len + count);
-
-            ft.mem.copyBackwards(
-                T,
-                self.slice.ptr[index + count .. self.slice.len + count],
-                self.slice.ptr[index..self.slice.len],
-            );
-            const ret: []T = self.slice.ptr[index .. index + count];
+            const source = self.slice.ptr[index..self.slice.len];
+            const dest = self.slice.ptr[index + count .. self.slice.len + count];
+            for (0..source.len) |i| {
+                dest[source.len - i - 1] = source[source.len - i - 1];
+            }
+            const ret: Slice = self.slice.ptr[index .. index + count];
             self.slice.len += count;
             return ret;
         }
 
-        pub fn addOne(self: *Self) Allocator.Error!*T {
+        pub fn addOne(self: *Self) Allocator.Error!Pointer {
             return &(try self.addManyAsSlice(1))[0];
         }
 
-        pub fn addOneAssumeCapacity(self: *Self) *T {
+        pub fn addOneAssumeCapacity(self: *Self) Pointer {
             return &self.addManyAsSlice(1)[0];
         }
 
