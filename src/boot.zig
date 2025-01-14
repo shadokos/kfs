@@ -77,7 +77,7 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("./drivers/acpi/acpi.zig").init();
 
-    @import("drivers/rtc/rtc.zig").init();
+    @import("drivers/cmos/cmos.zig").init();
 
     @import("syscall.zig").init();
 
