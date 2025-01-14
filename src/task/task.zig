@@ -29,6 +29,8 @@ pub const TaskDescriptor = struct {
     status_stack_process_node: StatusStack.Node = .{},
     // status_stack_group_node : StatusStack.Node = .{},
 
+    signalManager: signal.SignalManager = signal.SignalManager.init(),
+
     esp: u32 = undefined,
 
     // scheduling
@@ -37,6 +39,7 @@ pub const TaskDescriptor = struct {
 
     pub const State = enum(u8) {
         Running,
+        Stopped,
         Zombie,
     };
     pub const Pid = i32;
@@ -122,6 +125,40 @@ pub const TaskDescriptor = struct {
             const descriptor: *Self = @alignCast(@fieldParentPtr("status_stack_process_node", n));
             return descriptor;
         } else return null;
+    }
+
+    pub fn handle_signal(self: *Self) void {
+        while (self.signalManager.get_pending_signal_for_handler(signal.SIG_DFL)) |sig| {
+            switch (self.signalManager.get_defaultAction(@enumFromInt(sig.si_signo))) {
+                .Ignore => {},
+                .Terminate => {
+                    self.state = .Zombie;
+                    self.update_status(.{
+                        .transition = .Terminated,
+                        .signaled = true,
+                        .siginfo = sig,
+                    });
+                    scheduler.schedule();
+                    unreachable;
+                },
+                .Stop => if (self.state == .Running) {
+                    self.state = .Stopped;
+                    self.update_status(.{
+                        .transition = .Stopped,
+                        .signaled = true,
+                        .siginfo = sig,
+                    });
+                },
+                .Continue => if (self.state == .Stopped) {
+                    self.state = .Running;
+                    self.update_status(.{
+                        .transition = .Continued,
+                        .signaled = true,
+                        .siginfo = sig,
+                    });
+                },
+            }
+        }
     }
 
     pub fn spawn(self: *Self, function: *const fn (anytype) u8, data: anytype) !void {
