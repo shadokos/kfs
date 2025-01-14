@@ -392,7 +392,7 @@ pub fn TtyN(comptime history_size: u32) type {
             var count: usize = 0;
             for (s) |*c| {
                 while (self.read_tail == self.current_line_begin and self.read_head +% 1 != self.read_tail) {
-                    @import("../task/scheduler.zig").schedule();
+                    @import("../cpu.zig").halt();
                     keyboard.kb_read();
                 }
 
@@ -615,6 +615,10 @@ var ttyBufferWriter = init: {
 
 /// print a formatted string to the current terminal using WriterBuffers
 pub inline fn printk(comptime fmt: []const u8, args: anytype) void {
+    // TODO: replace the scheduler lock with a semaphore when implemented
+    @import("../task/scheduler.zig").lock();
+    defer @import("../task/scheduler.zig").unlock();
+
     ttyBufferWriter[current_tty].print(fmt, args) catch {};
     ttyBufferWriter[current_tty].flush() catch {};
 }
