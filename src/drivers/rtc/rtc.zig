@@ -13,8 +13,8 @@ pub const Datetime = packed struct {
 };
 
 const DataMode = enum(u1) {
-    Raw = 0,
-    Bcd = 1,
+    Bcd = 0,
+    Bin = 1,
 };
 
 const HourMode = enum(u1) {
@@ -129,11 +129,11 @@ pub fn wait_for_rtc() void {
     while (read_register_a().update_in_progress) {}
 }
 
-// Read the current time from the RTC without taking into account the update in progress flag
+// Read the current time from the RTC
 pub fn get_time() Datetime {
     wait_for_rtc();
     return switch (is_binary_coded_decimal()) {
-        true => .{
+        false => .{
             .seconds = read_register(reg_seconds),
             .minutes = read_register(reg_minutes),
             .hours = read_register(reg_hours),
@@ -142,7 +142,7 @@ pub fn get_time() Datetime {
             .year = read_register(reg_year),
             .century = if (reg_century != 0) read_register(reg_century) else DEFAULT_CENTURY,
         },
-        false => .{
+        true => .{
             .seconds = bcd_to_bin(read_register(reg_seconds)),
             .minutes = bcd_to_bin(read_register(reg_minutes)),
             .hours = bcd_to_bin(read_register(reg_hours)),
@@ -156,7 +156,7 @@ pub fn get_time() Datetime {
 
 pub fn set_time(time: Datetime) void {
     switch (is_binary_coded_decimal()) {
-        true => {
+        false => {
             write_register(reg_seconds, time.seconds);
             write_register(reg_minutes, time.minutes);
             write_register(reg_hours, time.hours);
@@ -166,7 +166,7 @@ pub fn set_time(time: Datetime) void {
             if (reg_century != 0)
                 write_register(reg_century, time.century);
         },
-        false => {
+        true => {
             write_register(reg_seconds, bin_to_bcd(time.seconds));
             write_register(reg_minutes, bin_to_bcd(time.minutes));
             write_register(reg_hours, bin_to_bcd(time.hours));
