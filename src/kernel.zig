@@ -9,10 +9,9 @@ const scheduler = @import("task/scheduler.zig");
 fn task1() u8 {
     const logger = @import("ft").log.scoped(.task1);
     logger.info("invoked", .{});
-    for (0..5) |_| {
+    for (0..10) |_| {
         logger.info("tic", .{});
-        for (0..100_000_000) |_| asm volatile ("nop");
-        scheduler.schedule();
+        @import("drivers/pit/pit.zig").sleep(500);
     }
     return 43;
 }
@@ -20,37 +19,32 @@ fn task1() u8 {
 fn task2() u8 {
     const logger = @import("ft").log.scoped(.task2);
     logger.info("invoked", .{});
-    scheduler.schedule();
-    for (0..5) |_| {
+    for (0..10) |_| {
         logger.info("tac", .{});
-        for (0..100_000_000) |_| asm volatile ("nop");
-        scheduler.schedule();
+        @import("drivers/pit/pit.zig").sleep(500);
     }
     return 42;
 }
 
-pub fn main() void {
-    const logger = @import("ft").log.scoped(.main);
-    task.TaskDescriptor.init_cache() catch @panic("Failed to initialized kernel_task cache");
+fn test_tasks() void {
+    const logger = @import("ft").log.scoped(.test_tasks);
+    const kernel = task_set.create_task() catch @panic("Failed to create kernel task");
 
-    const kernel = task_set.create_task() catch @panic("c'est  la  panique 2");
-
-    const c1 = task.spawn(task1) catch @panic("c'est  la  panique 3");
-    const c2 = task.spawn(task2) catch @panic("c'est  la  panique 4");
-
-    for (0..1000) |_| {
-        scheduler.schedule();
-    }
+    _ = task.spawn(task1) catch @panic("Failed to spawn task1");
+    _ = task.spawn(task2) catch @panic("Failed to spawn task2");
 
     var stat: wait.Status = undefined;
-    _ = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("c'est  la  panique 4");
-    logger.warn("task 1 returned", .{});
-    _ = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("c'est  la  panique 5");
-    logger.warn("task 2 returned", .{});
-    // _ = kernel;
-    _ = c1;
-    _ = c2;
-    // _ = logger;
+    var pid: ?task.TaskDescriptor.Pid = 0;
+
+    pid = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("Failed to wait for kernel task");
+    logger.warn("task {} returned {}", .{ pid, stat.value });
+
+    pid = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("Failed to wait for kernel task");
+    logger.warn("task {} returned {}", .{ pid, stat.value });
+}
+
+pub fn main() void {
+    test_tasks();
 
     var shell = DefaultShell.Shell.init(tty.get_reader(), tty.get_writer(), .{}, .{
         .on_init = DefaultShell.on_init,

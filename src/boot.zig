@@ -54,7 +54,8 @@ export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
 }
 
 export fn init(eax: u32, ebx: u32) callconv(.C) void {
-    @import("cpu.zig").disable_interrupts();
+    // Locks the scheduler (disables interrupts, and increments lock_count)
+    @import("task/scheduler.zig").lock();
 
     if (eax == multiboot2_h.MULTIBOOT2_BOOTLOADER_MAGIC) {
         multiboot_info = @ptrFromInt(paging.high_half + ebx); // TODO!
@@ -69,6 +70,7 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("drivers/pic/pic.zig").init();
 
+    // Sets up the IDT, and unlocks the scheduler (decrements lock_count, and enables interrupts)
     @import("interrupts.zig").init();
 
     @import("drivers/pit/pit.zig").init();
@@ -82,6 +84,8 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
     @import("./drivers/acpi/acpi.zig").init();
 
     @import("syscall.zig").init();
+
+    @import("task/task.zig").TaskDescriptor.init_cache() catch @panic("Failed to initialized task_descriptor cache");
 
     if (!@import("build_options").ci) {
         kernel.main();

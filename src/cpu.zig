@@ -24,6 +24,35 @@ const Cr0 = packed struct(u32) {
     pg: bool = false,
 };
 
+pub const EFlags = packed struct(u32) {
+    carry: bool = false,
+    reserved1: u1 = 1,
+    parity: bool = false,
+    reserved2: u1 = 0,
+    auxiliary_carry: bool = false,
+    reserved3: u1 = 0,
+    zero: bool = false,
+    sign: bool = false,
+    trap: bool = false,
+    interrupt_enable: bool = false,
+    direction: bool = false,
+    overflow: bool = false,
+    iopl: PrivilegeLevel = .Supervisor,
+    nested_task: bool = false,
+    reserved4: u1 = 0,
+    resume_flag: bool = false,
+    virtual_8086: bool = false,
+    reserved5: u14 = 0,
+};
+
+pub inline fn get_eflags() EFlags {
+    return asm volatile (
+        \\ pushfd
+        \\ pop %eax
+        : [_] "={eax}" (-> EFlags),
+    );
+}
+
 pub inline fn get_cr0() Cr0 {
     return asm (
         \\ mov %cr0, %eax

@@ -113,12 +113,25 @@ pub const TaskDescriptor = struct {
 
 pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     asm volatile ("pushal");
+    asm volatile (
+        \\push %[lock_count]
+        :
+        : [lock_count] "r" (scheduler.lock_count),
+    );
+
     prev.esp = cpu.get_esp();
     cpu.set_esp(next.esp);
+
+    scheduler.lock_count = asm volatile (
+        \\pop %eax
+        : [_] "={eax}" (-> u32),
+    );
     asm volatile ("popal");
 }
 
 pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
+    scheduler.lock();
+    defer scheduler.unlock();
     return switch_to_task_opts(prev, next);
 }
 
@@ -127,6 +140,8 @@ pub fn getpid() TaskDescriptor.Pid {
 }
 
 pub fn exit(code: u8) noreturn {
+    scheduler.lock();
+
     const task = scheduler.get_current_task();
     task.state = .Zombie;
     task.update_status(.{
@@ -141,11 +156,13 @@ pub fn exit(code: u8) noreturn {
     unreachable;
 }
 
-pub fn start_task(function: *const fn () u8) noreturn {
+pub noinline fn start_task(function: *const fn () u8) noreturn {
+    scheduler.unlock();
     exit(function());
 }
 
 pub fn spawn(function: *const fn () u8) !*TaskDescriptor {
+    scheduler.lock();
     const descriptor = try task_set.create_task();
     var is_parent: bool = false;
     const is_parent_ptr: *volatile bool = &is_parent;
@@ -156,5 +173,6 @@ pub fn spawn(function: *const fn () u8) !*TaskDescriptor {
         cpu.set_esp(@as(usize, @intFromPtr(&descriptor.stack)) + descriptor.stack.len);
         start_task(function);
     }
+    scheduler.unlock();
     return descriptor;
 }
