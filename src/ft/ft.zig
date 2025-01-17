@@ -20,6 +20,10 @@ pub const ArrayList = @import("array_list.zig").ArrayList;
 
 pub const ArrayListAligned = @import("array_list.zig").ArrayListAligned;
 
+pub const DoublyLinkedList = @import("linked_list.zig").DoublyLinkedList;
+
+pub const SinglyLinkedList = @import("linked_list.zig").SinglyLinkedList;
+
 const root = @import("root");
 pub const options: Options = if (@hasDecl(root, "ft_options")) root.ft_options else .{};
 
