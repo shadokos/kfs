@@ -3,7 +3,7 @@ const tty = @import("./tty/tty.zig");
 
 const task = @import("task/task.zig");
 const cpu = @import("cpu.zig");
-const wait = @import("task/wait.zeig");
+const wait = @import("task/wait.zig");
 const mapping = @import("memory/mapping.zig");
 const paging = @import("memory/paging.zig");
 const task_set = @import("task/task_set.zig");
@@ -77,10 +77,18 @@ fn task2(_: anytype) u8 {
 pub fn main() void {
     // const logger = @import("ft/ft.zig").log.scoped(.main);
     task.TaskDescriptor.init_cache() catch @panic("Failed to initialized kernel_task cache");
-    _ = task_set.create_task() catch @panic("c'est  la  panique 2");
+    const kernel = task_set.create_task() catch @panic("c'est  la  panique 2");
+    // _ = kernel;
 
     const new_task = task_set.create_task() catch @panic("c'est  la  panique 4");
-    new_task.spawn(task1, 3) catch @panic("c'est  la  panique 3");
+    // new_task.spawn(task1, 3) catch @panic("c'est  la  panique 3");
+    new_task.spawn(&@import("task/userspace.zig").switch_to_userspace, 3) catch @panic("c'est  la  panique 3");
+    const new_task2 = task_set.create_task() catch @panic("c'est  la  panique 4");
+    new_task2.spawn(&@import("task/userspace.zig").switch_to_userspace, 3) catch @panic("c'est  la  panique 3");
+    var stat: wait.Status = undefined;
+    _ = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("c'est  la  panique 4");
+    //     @import("drivers/pit/pit.zig").sleep(1000);
+
     // logger.info("coucou\n", .{});
     // const c2 = task.spawn(task2, null) catch @panic("c'est  la  panique 4");
     // const c3 = task.spawn(task3, null) catch @panic("c'est  la  panique 5");
