@@ -1,20 +1,5 @@
 const ft = @import("ft");
-const memory = @import("memory.zig");
-
-const VirtualSpace = @import("memory/virtual_space.zig").VirtualSpace;
 const paging = @import("memory/paging.zig");
-
-export var task_stack: [32 * paging.page_size]u8 align(paging.page_size) = undefined;
-
-pub fn init_vm() !*VirtualSpace {
-    const vm = try memory.bigAlloc.allocator().create(VirtualSpace);
-    try vm.init();
-    try vm.add_space(0, paging.high_half / paging.page_size);
-    try vm.add_space((paging.page_tables) / paging.page_size, 768);
-    vm.transfer();
-    try vm.fill_page_tables(paging.page_tables / paging.page_size, 768, false);
-    return vm;
-}
 
 pub const SigHandler = *fn () void;
 
@@ -32,47 +17,6 @@ pub fn get_next_signal() ?SigHandler {
 fn poc_signal() linksection("userspace") void {
     const str = "Signal handled\n";
     _ = syscall(.write, .{ str, str.len });
-}
-
-pub fn switch_to_userspace(_: anytype) u8 {
-    @import("gdt.zig").tss.esp0 = @as(usize, @intFromPtr(&task_stack)) + task_stack.len;
-
-    const vm = init_vm() catch @panic("Failed to initialize userspace");
-
-    const up_start = ft.mem.alignBackward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_start" })), 4096);
-    const up_end = ft.mem.alignForward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_end" })), 4096);
-
-    vm.map(
-        up_start,
-        @ptrFromInt(up_start),
-        (up_end - up_start) / paging.page_size,
-    ) catch @panic("Failed to map userspace");
-    VirtualSpace.make_present(
-        @ptrFromInt(up_start),
-        (up_end - up_start) / paging.page_size,
-    ) catch unreachable;
-
-    const stack = vm.alloc_pages(4) catch @panic("Failed to allocate user");
-    VirtualSpace.make_present(stack, 4) catch unreachable;
-
-    const stack_segment: u32 = @intCast(@import("gdt.zig").get_selector(6, .GDT, .User));
-    const code_segment: u32 = @intCast(@import("gdt.zig").get_selector(4, .GDT, .User));
-
-    @import("cpu.zig").set_esp(@as(u32, @intFromPtr(stack)) + paging.page_size);
-    asm volatile (
-        \\ push %[ss]
-        \\ push %[esp]
-        \\ push $0x200
-        \\ push %[cs]
-        \\ push %[function]
-        \\ iret
-        :
-        : [ss] "r" (stack_segment),
-          [esp] "r" (@as(u32, @intFromPtr(stack)) + (paging.page_size * 4)),
-          [cs] "r" (code_segment),
-          [function] "r" (&_userland),
-    );
-    return 0;
 }
 
 pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
@@ -109,10 +53,14 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
 }
 
 export fn _userland() linksection(".userspace") void {
-    for (0..9) |i| {
-        if (i % 3 == 0) _ = syscall(.poc_raise, .{&poc_signal});
+    // while (true) {}
+    for (0..9) |_| {
+        // if (i % 3 == 0) _ = syscall(.poc_raise, .{&poc_signal});
         _ = syscall(.write, &.{ "write from userspace\n", 21 });
         _ = syscall(.sleep, .{1000});
+        // for (0..100000) |_| {
+        //     asm volatile ("nop");
+        // }
     }
-    _ = syscall(.reboot, .{});
+    _ = syscall(.exit, .{});
 }
