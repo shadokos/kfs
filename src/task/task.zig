@@ -2,6 +2,7 @@ const memory = @import("../memory.zig");
 const paging = @import("../memory/paging.zig");
 const VirtualSpace = @import("../memory/virtual_space.zig").VirtualSpace;
 const cpu = @import("../cpu.zig");
+const gdt = @import("../gdt.zig");
 const task_set = @import("task_set.zig");
 const signal = @import("signal.zig");
 const Cache = @import("../memory/object_allocators/slab/cache.zig").Cache;
@@ -177,14 +178,16 @@ pub const TaskDescriptor = struct {
     pub noinline fn start_task(self: *Self, function: *const fn (anytype) u8, data: anytype) noreturn {
         scheduler.add_task(self);
         scheduler.set_current_task(self);
+        gdt.tss.esp0 = @as(usize, @intFromPtr(&self.stack)) + self.stack.len;
+        gdt.flush();
         scheduler.unlock();
         exit(function(data));
     }
 };
 
 pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor) void {
-    asm volatile ("pushal");
     asm volatile (
+        \\ pushal
         \\ mov %cr3, %eax
         \\ push %eax
     );
@@ -204,14 +207,16 @@ pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor
     asm volatile (
         \\ pop %eax
         \\ mov %eax, %cr3
+        \\ popal
     );
-    asm volatile ("popal");
 }
 
 pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     scheduler.lock();
     defer scheduler.unlock();
-    return switch_to_task_opts(prev, next);
+    gdt.tss.esp0 = @as(usize, @intFromPtr(&next.stack)) + next.stack.len;
+    gdt.flush();
+    switch_to_task_opts(prev, next);
 }
 
 pub fn init_vm(t: *TaskDescriptor) !void {
