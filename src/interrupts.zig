@@ -241,7 +241,7 @@ comptime {
         , .{@import("syscall/sigreturn.zig").Id}));
 }
 
-pub fn ret_from_interrupt(frame: *InterruptFrame) callconv(.C) void {
+pub fn setup_iret_frame(frame: *InterruptFrame) callconv(.C) void {
     if (frame_stack == null)
         frame_stack = @TypeOf(frame_stack.?).init(@import("memory.zig").smallAlloc.allocator());
     if (@import("userspace.poc.zig").get_next_signal()) |handler_ptr| {
@@ -265,14 +265,35 @@ pub fn ret_from_interrupt(frame: *InterruptFrame) callconv(.C) void {
     }
 }
 
-export fn wrapper(f: *const fn (frame: *InterruptFrame) callconv(.C) void, frame: *InterruptFrame) callconv(.C) void {
+export fn wrapper(
+    f: *const fn (frame: *InterruptFrame) callconv(.C) void,
+    frame: *InterruptFrame,
+) callconv(.C) noreturn {
     const interrupt_enable = cpu.get_eflags().interrupt_enable;
     if (!interrupt_enable)
         @import("task/scheduler.zig").lock_count += 1;
     f(frame);
-    ret_from_interrupt(frame);
+    setup_iret_frame(frame);
     if (!interrupt_enable)
         @import("task/scheduler.zig").lock_count -|= 1;
+    ret_from_interrupt(frame);
+}
+
+pub fn ret_from_interrupt(frame: *const InterruptFrame) noreturn {
+    asm volatile (
+        \\pop %%edi
+        \\pop %%esi
+        \\pop %%ebp
+        \\pop %%edx
+        \\pop %%ecx
+        \\pop %%ebx
+        \\pop %%eax
+        \\add $4, %%esp
+        \\iret
+        :
+        : [_] "{esp}" (@as(u32, @intFromPtr(frame))),
+    );
+    unreachable;
 }
 
 pub const Handler = extern union {
@@ -302,18 +323,6 @@ pub const Handler = extern union {
                     :
                     : [f] "r" (f),
                       [wrapper] "r" (wrapper),
-                );
-                asm volatile (
-                    \\add $8, %%esp
-                    \\pop %%edi
-                    \\pop %%esi
-                    \\pop %%ebp
-                    \\pop %%edx
-                    \\pop %%ecx
-                    \\pop %%ebx
-                    \\pop %%eax
-                    \\add $4, %%esp
-                    \\iret
                 );
             }
         };

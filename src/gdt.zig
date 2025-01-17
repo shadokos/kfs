@@ -147,6 +147,10 @@ pub fn get_selector(selector: u12, table: TableType, privilege: cpu.PrivilegeLev
 
 var gdtr: GDTR = undefined;
 
+pub fn flush() void {
+    cpu.load_gdt(&gdtr);
+}
+
 pub fn init() void {
     logger.debug("Initializing gdt...", .{});
     gdtr = .{
@@ -171,7 +175,7 @@ pub fn init() void {
     tss.cs = comptime get_selector(4, .GDT, cpu.PrivilegeLevel.User);
     tss.ss = comptime get_selector(5, .GDT, cpu.PrivilegeLevel.User);
 
-    cpu.load_gdt(&gdtr);
+    flush();
     cpu.load_segments(
         comptime get_selector(1, .GDT, cpu.PrivilegeLevel.Supervisor),
         comptime get_selector(2, .GDT, cpu.PrivilegeLevel.Supervisor),
