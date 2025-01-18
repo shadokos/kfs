@@ -1,3 +1,4 @@
+const ft = @import("ft");
 const memory = @import("../memory.zig");
 const paging = @import("../memory/paging.zig");
 const VirtualSpace = @import("../memory/virtual_space.zig");
@@ -6,6 +7,7 @@ const task_set = @import("task_set.zig");
 const signal = @import("signal.zig");
 const Cache = @import("../memory/object_allocators/slab/cache.zig").Cache;
 const scheduler = @import("scheduler.zig");
+const ready_queue = @import("ready_queue.zig");
 const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = @import("ft").log.scoped(.task);
@@ -30,11 +32,11 @@ pub const TaskDescriptor = struct {
     esp: u32 = undefined,
 
     // scheduling
-    prev: *TaskDescriptor = undefined,
-    next: *TaskDescriptor = undefined,
+    rq_node: ready_queue.Node = .{ .data = null },
 
     pub const State = enum(u8) {
         Running,
+        Ready,
         Zombie,
     };
     pub const Pid = i32;
@@ -132,6 +134,12 @@ pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor
 pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     scheduler.lock();
     defer scheduler.unlock();
+
+    if (prev.state == .Running) {
+        prev.state = .Ready;
+        ready_queue.append(prev);
+    }
+    next.state = .Running;
     return switch_to_task_opts(prev, next);
 }
 
@@ -152,6 +160,8 @@ pub fn exit(code: u8) noreturn {
         },
     });
 
+    ready_queue.remove(task);
+
     scheduler.schedule();
     unreachable;
 }
@@ -171,6 +181,7 @@ pub fn spawn(function: *const fn () u8) !*TaskDescriptor {
         is_parent_ptr.* = true;
         scheduler.set_current_task(descriptor);
         cpu.set_esp(@as(usize, @intFromPtr(&descriptor.stack)) + descriptor.stack.len);
+        descriptor.state = .Running;
         start_task(function);
     }
     scheduler.unlock();
