@@ -20,7 +20,7 @@ pub fn create_task() !*TaskDescriptor {
         new_task.* = .{ .pid = pid, .pgid = pid, .parent = null, .state = .Running };
         scheduler.init(new_task);
     } else {
-        new_task.* = .{ .pid = pid, .pgid = parent.pgid, .parent = parent, .state = .Running };
+        new_task.* = .{ .pid = pid, .pgid = parent.pgid, .parent = parent, .state = .Ready };
         new_task.next_sibling = parent.childs;
         parent.childs = new_task;
     }
@@ -54,7 +54,7 @@ pub fn destroy_task(pid: TaskDescriptor.Pid) !void {
     if (pid < 0) return error.NoSuchTask;
     const index: u32 = @intCast(pid);
     const descriptor = list[index] orelse return error.NoSuchTask; // todo error
-    scheduler.remove_task(descriptor);
+    @import("ready_queue.zig").remove(descriptor);
     descriptor.deinit();
     list[index] = null;
     count -= 1;
