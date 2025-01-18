@@ -1,19 +1,11 @@
 const ft = @import("ft");
 const task = @import("task.zig");
 const task_set = @import("task_set.zig");
+const ready_queue = @import("ready_queue.zig");
 
 pub var lock_count: u32 = 0;
 var current_task: *task.TaskDescriptor = undefined;
 pub var initialized: bool = false;
-
-pub fn init(new_task: *task.TaskDescriptor) void {
-    @This().lock();
-    initialized = true;
-    current_task = new_task;
-    current_task.next = new_task;
-    current_task.prev = new_task;
-    @This().unlock();
-}
 
 pub inline fn lock() void {
     @import("../cpu.zig").disable_interrupts();
@@ -25,35 +17,26 @@ pub inline fn unlock() void {
     if (lock_count == 0) @import("../cpu.zig").enable_interrupts();
 }
 
-pub fn add_task(new_task: *task.TaskDescriptor) void {
+pub fn init(new_task: *task.TaskDescriptor) void {
     @This().lock();
-    new_task.next = current_task.next;
-    new_task.prev = current_task;
-    new_task.next.prev = new_task;
-    new_task.prev.next = new_task;
-    @This().unlock();
-}
+    defer @This().unlock();
 
-pub fn remove_task(t: *task.TaskDescriptor) void {
-    @This().lock();
-    t.prev.next = t.next;
-    t.next.prev = t.prev;
-    @This().unlock();
+    initialized = true;
+    new_task.state = .Running;
+    current_task = new_task;
 }
 
 pub fn schedule() void {
     if (!initialized) return;
+
     @This().lock();
-    const prev = current_task;
-    current_task = current_task.next;
-    while (current_task.state != .Running and current_task != prev) {
-        current_task = current_task.next;
+    defer @This().unlock();
+
+    if (ready_queue.popFirst()) |node| {
+        const prev = current_task;
+        current_task = ready_queue.get_task_descriptor(node, "rq_node");
+        task.switch_to_task(prev, current_task);
     }
-    if (current_task.state != .Running) {
-        @panic("no task running");
-    }
-    task.switch_to_task(prev, current_task);
-    @This().unlock();
 }
 
 pub export fn checkpoint() void {
