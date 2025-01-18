@@ -1,3 +1,4 @@
+const ft = @import("ft");
 const memory = @import("../memory.zig");
 const interrupts = @import("../interrupts.zig");
 const paging = @import("../memory/paging.zig");
@@ -9,9 +10,9 @@ const signal = @import("signal.zig");
 const ucontext = @import("ucontext.zig");
 const Cache = @import("../memory/object_allocators/slab/cache.zig").Cache;
 const scheduler = @import("scheduler.zig");
+const ready_queue = @import("ready_queue.zig");
 const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
-const ft = @import("ft");
 const logger = ft.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
@@ -41,11 +42,11 @@ pub const TaskDescriptor = struct {
     ucontext: ucontext.ucontext_t = .{},
 
     // scheduling
-    prev: *TaskDescriptor = undefined,
-    next: *TaskDescriptor = undefined,
+    rq_node: ready_queue.Node = .{ .data = null },
 
     pub const State = enum(u8) {
         Running,
+        Ready,
         Stopped,
         Zombie,
     };
@@ -243,13 +244,13 @@ pub const TaskDescriptor = struct {
         if (is_parent_ptr.*) {} else {
             is_parent_ptr.* = true;
             cpu.set_esp(@as(usize, @intFromPtr(&self.stack)) + self.stack.len);
+            self.state = .Running;
             self.start_task(function, data);
         }
         scheduler.unlock();
     }
 
     pub noinline fn start_task(self: *Self, function: *const fn (usize) u8, data: usize) noreturn {
-        scheduler.add_task(self);
         scheduler.set_current_task(self);
         gdt.tss.esp0 = @as(usize, @intFromPtr(&self.stack)) + self.stack.len;
         gdt.flush();
@@ -287,9 +288,17 @@ pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor
 pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     scheduler.lock();
     defer scheduler.unlock();
+
+    if (prev.state == .Running) {
+        prev.state = .Ready;
+        ready_queue.append(prev);
+    }
+    next.state = .Running;
+
     gdt.tss.esp0 = @as(usize, @intFromPtr(&next.stack)) + next.stack.len;
     gdt.flush();
-    switch_to_task_opts(prev, next);
+
+    return switch_to_task_opts(prev, next);
 }
 
 pub fn init_vm(t: *TaskDescriptor) !void {
@@ -322,6 +331,8 @@ pub fn exit(code: u8) noreturn {
             .si_status = code,
         },
     });
+
+    ready_queue.remove(task);
 
     scheduler.schedule();
     unreachable;
