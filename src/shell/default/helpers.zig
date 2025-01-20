@@ -98,3 +98,11 @@ pub fn vfuzz() void {
         .usage = "vfuzz <n> [<max_size>]",
     });
 }
+
+pub fn spurious() void {
+    print_helper(Help{
+        .name = "spurious",
+        .description = "Show the amount of spurious interrupts since boot for both PIC master and slave",
+        .usage = null,
+    });
+}

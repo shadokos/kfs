@@ -36,6 +36,9 @@ pub const IRQ = enum {
     SecondaryATAHardDisk,
 };
 
+var spurious_master: u32 = 0;
+var spurious_slave: u32 = 0;
+
 fn get_irq_port_id(irq: IRQ) struct { id: u8, port: cpu.Ports } {
     var id: u8 = @intFromEnum(irq);
     var port = cpu.Ports.pic_master_data;
@@ -119,6 +122,37 @@ pub inline fn ack(irq: IRQ) void {
     cpu.outb(.pic_master_command, 0x20);
     if (@intFromEnum(irq) >= 8)
         cpu.outb(.pic_slave_command, 0x20);
+}
+
+// Check if the interrupt is spurious and acknowledge it accordingly
+// Returns true if the interrupt was spurious
+pub fn ack_spurious_interrupt(id: u8) bool {
+    const master_isr = cpu.inb(.pic_master_command);
+    const slave_isr = cpu.inb(.pic_slave_command);
+
+    // If the interrupt is spurious, the ISR bit will be 0
+    if (id == 7 and master_isr & 0b1000_0000 == 0) {
+        // Spurious interrupt for the master PIC
+        // nothing to do as it's not a real interrupt
+        spurious_master += 1;
+        return true;
+    } else if (id == 15 and slave_isr & 0b1000_0000 == 0) {
+        // Spurious interrupt for the slave PIC,
+        // we need to acknowledge the master PIC as the mster don't know that the slave interrupt was spurious.
+        // Note: here, .Slave is the IRQ for the slave PIC on the master PIC, not the slave PIC itself.
+        spurious_slave += 1;
+        ack(.Slave);
+        return true;
+    }
+    return false;
+}
+
+pub fn get_spurious_master() u32 {
+    return spurious_master;
+}
+
+pub fn get_spurious_slave() u32 {
+    return spurious_slave;
 }
 
 pub fn get_irq_from_interrupt_id(comptime id: u8) IRQ {

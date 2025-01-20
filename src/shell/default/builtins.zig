@@ -290,3 +290,9 @@ pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
 pub fn userspace(_: anytype, _: [][]u8) CmdError!void {
     @import("../../userspace.poc.zig").switch_to_userspace();
 }
+
+pub fn spurious(_: anytype, _: [][]u8) CmdError!void {
+    const pic = @import("../../drivers/pic/pic.zig");
+    printk("Spurious master: {d}\n", .{pic.get_spurious_master()});
+    printk("Spurious slave: {d}\n", .{pic.get_spurious_slave()});
+}

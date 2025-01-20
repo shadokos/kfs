@@ -334,6 +334,12 @@ pub fn default_handler(
         }
         pub fn irq(_: *InterruptFrame) callconv(.C) void {
             const _id = pic.get_irq_from_interrupt_id(id);
+
+            // If the interrupt was a spurious interrupt,
+            // the ack_spurious_interrupt will keep track of the
+            // spurious interrupt amount since boot, and will return true.
+            // So we can ignore the interrupt then.
+            if (pic.ack_spurious_interrupt(@intFromEnum(_id))) return;
             pic.ack(_id);
             ft.log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
         }
