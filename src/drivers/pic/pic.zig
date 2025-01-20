@@ -47,10 +47,27 @@ fn get_irq_port_id(irq: IRQ) struct { id: u8, port: cpu.Ports } {
     return .{ .id = id, .port = port };
 }
 
+pub fn enable_slave() void {
+    enable_irq(.Slave);
+}
+
+pub fn try_disable_slave() void {
+    if (cpu.inb(cpu.Ports.pic_slave_data) == 0xff) {
+        disable_irq(.Slave);
+    }
+}
+
+pub fn disable_slave() void {
+    disable_irq(.Slave);
+}
+
 pub fn enable_irq(irq: IRQ) void {
     const port_id = get_irq_port_id(irq);
     const mask = cpu.inb(port_id.port);
+
     cpu.outb(port_id.port, mask & ~(@as(u8, 1) << @truncate(port_id.id)));
+    if (@intFromEnum(irq) >= 8)
+        enable_slave();
 }
 
 pub fn enable_all_irqs() void {
@@ -61,7 +78,10 @@ pub fn enable_all_irqs() void {
 pub fn disable_irq(irq: IRQ) void {
     const port_id = get_irq_port_id(irq);
     const mask = cpu.inb(port_id.port);
+
     cpu.outb(port_id.port, mask | (@as(u8, 1) << @truncate(port_id.id)));
+    if (@intFromEnum(irq) >= 8)
+        try_disable_slave();
 }
 
 pub fn disable_all_irqs() void {
@@ -114,7 +134,7 @@ pub fn get_irq_from_interrupt_id(comptime id: u8) IRQ {
 
 pub fn get_interrupt_id_from_irq(irq: IRQ) !u8 {
     const id = @intFromEnum(irq);
-    return if (id < 8) id + offset_master else if (id < 16) id + offset_slave else error.InvalidIRQ;
+    return if (id < 8) id + offset_master else if (id < 16) id + offset_slave - 8 else error.InvalidIRQ;
 }
 
 pub fn init() void {
