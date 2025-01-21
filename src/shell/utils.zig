@@ -260,7 +260,7 @@ pub fn show_palette() void {
         tty.printk("\x1b[{d}m" ++ "\xdb" ** 10 ++ "\x1b[0m", .{30 + i});
     }
     for (0..8) |i| {
-        tty.printk("\x1b[2m\x1b[{d}m" ++ "\xdb" ** 10 ++ "\x1b[0m", .{30 + i});
+        tty.printk("\x1b[1m\x1b[{d}m" ++ "\xdb" ** 10 ++ "\x1b[0m", .{30 + i});
     }
 }
 

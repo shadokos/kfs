@@ -41,12 +41,12 @@ pub fn vt100(comptime history_size: u32) type {
                         30 => tty.Color.black,
                         31 => tty.Color.red,
                         32 => tty.Color.green,
-                        33 => tty.Color.brown,
+                        33 => tty.Color.yellow,
                         34 => tty.Color.blue,
                         35 => tty.Color.magenta,
                         36 => tty.Color.cyan,
-                        37 => tty.Color.light_grey,
-                        else => tty.Color.light_grey,
+                        37 => tty.Color.white,
+                        else => tty.Color.white,
                     });
                 },
                 40...47 => {
@@ -54,11 +54,11 @@ pub fn vt100(comptime history_size: u32) type {
                         40 => tty.Color.black,
                         41 => tty.Color.red,
                         42 => tty.Color.green,
-                        43 => tty.Color.brown,
+                        43 => tty.Color.yellow,
                         44 => tty.Color.blue,
                         45 => tty.Color.magenta,
                         46 => tty.Color.cyan,
-                        47 => tty.Color.light_grey,
+                        47 => tty.Color.white,
                         else => tty.Color.black,
                     });
                 },
@@ -85,12 +85,12 @@ pub fn vt100(comptime history_size: u32) type {
             switch (n) {
                 0 => {
                     for (terminal.pos.col..tty.width) |i| {
-                        terminal.history_buffer[terminal.pos.line][i] = tty.BLANK_CHAR;
+                        terminal.history_buffer[terminal.pos.line][i] = terminal.blank_char();
                     }
                 },
                 1 => {
                     for (0..terminal.pos.col + 1) |i| {
-                        terminal.history_buffer[terminal.pos.line][i] = tty.BLANK_CHAR;
+                        terminal.history_buffer[terminal.pos.line][i] = terminal.blank_char();
                     }
                 },
                 2 => {
