@@ -15,21 +15,19 @@ pub const Color = enum(u8) {
     cyan = 3,
     red = 4,
     magenta = 5,
-    brown = 6,
-    light_grey = 7,
-    dark_grey = 8,
-    light_blue = 9,
-    light_green = 10,
-    light_cyan = 11,
-    light_red = 12,
-    light_magenta = 13,
-    light_brown = 14,
-    white = 15,
+    yellow = 6,
+    white = 7,
+    bright_black = 8,
+    bright_blue = 9,
+    bright_green = 10,
+    bright_cyan = 11,
+    bright_red = 12,
+    bright_magenta = 13,
+    bright_yellow = 14,
+    bright_white = 15,
 };
 
 pub const Attribute = enum { reset, bold, dim, empty1, underline, blink, empty2, reverse, hidden };
-
-pub const BLANK_CHAR = ' ' | (@as(u16, @intCast(@intFromEnum(Color.white))) << 8);
 
 const MAX_INPUT: usize = 4096; // must be a power of 2
 
@@ -282,7 +280,7 @@ pub fn TtyN(comptime history_size: u32) type {
         fn put_char_to_buffer(self: *Self, c: u8) void {
             var char: u16 = c;
             char |= self.current_color << 8;
-            if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.dim)) == 0) {
+            if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.bold)) != 0) {
                 char |= @as(u16, 0b00001000) << 8;
             }
             if (self.attributes & (@as(u16, 1) << @intFromEnum(Attribute.blink)) != 0) {
@@ -483,7 +481,7 @@ pub fn TtyN(comptime history_size: u32) type {
                 self.set_font_color(@enumFromInt(t.foreground_idx));
                 self.set_background_color(@enumFromInt(t.background_idx));
             } else {
-                self.set_font_color(Color.light_grey);
+                self.set_font_color(Color.white);
                 self.set_background_color(Color.black);
             }
         }
