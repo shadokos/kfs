@@ -1,17 +1,25 @@
 #!/usr/bin/sh
 
-result=$(${ZIG:=zig} fmt --check src build.zig build)
-if [ $? -ne 0 ]; then
-  if [ -n "$result" ]; then
-    echo "$result" 1>&2
-    echo "Error: Code is not formatted." 1>&2
-  fi
-  exit 1
-fi
+# Get the list of added or modified files
+# --cached: only check staged changes
+# --name-only: only print the name of the file
+# --diff-filter=AM: only check added or modified files
+files=$(git diff --cached --name-only --diff-filter=AM | grep -E '\.zig$')
 
-result=$(grep -REn '.{120,}' src build.zig build/**.zig | sed -E 's/^(.{80}).*/\1(...)/g')
-if [ -n "$result" ]; then
-  echo "Error: Found lines longer than 120 characters." 1>&2
-  echo "$result" 1>&2
-  exit 1
+if [ -n "$files" ]; then
+  result=$(${ZIG:=zig} fmt --check $files)
+  if [ $? -ne 0 ]; then
+    if [ -n "$result" ]; then
+      echo "$result" 1>&2
+      echo "Error: Code is not formatted." 1>&2
+    fi
+    exit 1
+  fi
+
+  result=$(grep -REn '.{120,}' $files | sed -E 's/^(.{80}).*/\1(...)/g')
+  if [ -n "$result" ]; then
+    echo "Error: Found lines longer than 120 characters." 1>&2
+    echo "$result" 1>&2
+    exit 1
+  fi
 fi
