@@ -1,6 +1,6 @@
 const vga = @import("../drivers/vga/text.zig");
 const themes = @import("themes/index.zig");
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 
 pub const Theme = struct {
     palette: vga.Palette,

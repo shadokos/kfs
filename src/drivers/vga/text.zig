@@ -1,5 +1,5 @@
 const cpu = @import("../../cpu.zig");
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 
 /// screen width
 pub const width = 80;

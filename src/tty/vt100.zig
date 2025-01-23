@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const tty = @import("tty.zig");
 
 pub fn vt100(comptime history_size: u32) type {

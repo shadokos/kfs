@@ -1,4 +1,4 @@
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 const tty = @import("../../tty/tty.zig");
 const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
@@ -6,7 +6,7 @@ const cpu = @import("../../cpu.zig");
 const pit = @import("../pit/pit.zig");
 const colors = @import("colors");
 
-const acpi_logger = @import("../../ft/ft.zig").log.scoped(.driver_acpi);
+const acpi_logger = @import("ft").log.scoped(.driver_acpi);
 
 const ACPI = @import("types/acpi.zig").ACPI;
 const S5Object = @import("types/s5.zig").S5Object;

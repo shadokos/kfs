@@ -1,5 +1,5 @@
 const InputKey = @import("scanmap.zig").InputKey;
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 const keymaps = @import("keymap_index.zig");
 const keyboard = @import("../keyboard.zig");
 

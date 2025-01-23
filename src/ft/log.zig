@@ -15,7 +15,7 @@ pub const Level = enum {
 };
 
 // the default log scope (used in ft.Options as log_level default value)
-pub const default_level = if (@import("build_options").optimize == .Debug) Level.debug else Level.info;
+pub const default_level = .info;
 
 // the default log scope (a literal enum used for default scope)
 pub const default_log_scope = .default;

@@ -1,6 +1,6 @@
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 pub const cpu = @import("../../cpu.zig");
-const logger = @import("../../ft/ft.zig").log.scoped(.serial);
+const logger = @import("ft").log.scoped(.serial);
 
 const Self = @This();
 pub const Reader = ft.io.Reader(*Self, anyerror, read);

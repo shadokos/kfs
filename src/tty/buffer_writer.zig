@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 
 /// this class wrap a Writer and provide bufferization
 pub fn BufferWriter(

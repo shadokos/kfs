@@ -3,7 +3,7 @@ const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const multiboot = @import("multiboot.zig");
 const builtin = @import("std").builtin;
 const paging = @import("memory/paging.zig");
-const logger = @import("ft/ft.zig").log;
+const log = @import("ft").log;
 
 const STACK_SIZE: u32 = 64 * 1024;
 
@@ -17,8 +17,12 @@ pub const kernel_end = @extern([*]u8, .{ .name = "kernel_end" });
 
 pub var multiboot_info: *multiboot.info_header = undefined;
 
-pub const ft_options: @import("ft/ft.zig").Options = .{
+pub const ft_options: @import("ft").Options = .{
     .logFn = @import("logger.zig").kernel_log,
+    .log_level = switch (@import("build_options").optimize) {
+        .Debug => log.Level.debug,
+        else => log.Level.info,
+    },
 };
 
 export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
@@ -59,7 +63,7 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
     @import("trampoline.zig").clean();
 
     @import("tty/tty.zig").init();
-    logger.info("Terminal initialized", .{});
+    log.info("Terminal initialized", .{});
 
     @import("gdt.zig").init();
 
@@ -87,6 +91,6 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 }
 
 pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
-    @import("ft/ft.zig").log.err("{s}", .{msg});
+    @import("ft").log.err("{s}", .{msg});
     unreachable;
 }

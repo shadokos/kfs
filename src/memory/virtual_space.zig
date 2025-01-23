@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const paging = @import("paging.zig");
 const VirtualSpaceAllocator = @import("virtual_space_allocator.zig").VirtualSpaceAllocator;
 const mapping = @import("mapping.zig");

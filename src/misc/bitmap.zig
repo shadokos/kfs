@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 
 pub const Bit = enum(u1) {
     Taken,

@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const token = @import("token.zig");
 const colors = @import("colors");
 const allocator = @import("../memory.zig").physicalMemory.allocator();

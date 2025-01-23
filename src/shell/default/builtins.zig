@@ -1,4 +1,4 @@
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 const tty = @import("../../tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("../utils.zig");

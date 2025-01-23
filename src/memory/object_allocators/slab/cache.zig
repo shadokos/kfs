@@ -1,4 +1,4 @@
-const ft = @import("../../../ft/ft.zig");
+const ft = @import("ft");
 const printk = @import("../../../tty/tty.zig").printk;
 const PageAllocator = @import("../../page_allocator.zig");
 const paging = @import("../../paging.zig");

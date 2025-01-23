@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const vt100 = @import("vt100.zig").vt100;
 const termios = @import("termios.zig");
 const cc_t = termios.cc_t;

@@ -1,7 +1,7 @@
 const tty = @import("../../tty/tty.zig");
 const cpu = @import("../../cpu.zig");
 
-const ps2_logger = @import("../../ft/ft.zig").log.scoped(.driver_ps2);
+const ps2_logger = @import("ft").log.scoped(.driver_ps2);
 
 // The PS/2 controller driver, is implemented according to osdev.org
 // See: https://wiki.osdev.org/%228042%22_PS/2_Controller

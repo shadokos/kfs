@@ -1,8 +1,8 @@
 const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 const paging = @import("paging.zig");
 const builtin = @import("builtin");
-const logger = @import("../ft/ft.zig").log.scoped(.PFA);
-const ft = @import("../ft/ft.zig");
+const logger = @import("ft").log.scoped(.PFA);
+const ft = @import("ft");
 
 const max_order = 10;
 

@@ -1,4 +1,4 @@
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 const LinearAllocator = @import("linear_allocator.zig").LinearAllocator;
 
 /// implement LinearAllocator on a statically allocated array

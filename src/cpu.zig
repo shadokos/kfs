@@ -1,4 +1,4 @@
-const ft = @import("ft/ft.zig");
+const ft = @import("ft");
 
 pub const PrivilegeLevel = enum(u2) {
     Supervisor = 0,
