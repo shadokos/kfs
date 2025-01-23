@@ -1,6 +1,10 @@
 const vga = @import("../drivers/vga/text.zig");
 const themes = @import("themes/index.zig");
 const ft = @import("ft");
+const config = @import("config");
+const colors = @import("colors");
+
+// const vga_diff = @import("colors").vga_diff;
 
 pub const Theme = struct {
     palette: vga.Palette,
@@ -10,13 +14,6 @@ pub const Theme = struct {
     foreground_idx: u8 = 7,
 };
 
-/// compute the difference between two colors
-fn color_diff(l: vga.Color, r: vga.Color) usize {
-    return (@as(i32, @intCast(l.r)) - @as(i32, @intCast(r.r))) * (@as(i32, @intCast(l.r)) - @as(i32, @intCast(r.r))) +
-        (@as(i32, @intCast(l.g)) - @as(i32, @intCast(r.g))) * (@as(i32, @intCast(l.g)) - @as(i32, @intCast(r.g))) +
-        (@as(i32, @intCast(l.b)) - @as(i32, @intCast(r.b))) * (@as(i32, @intCast(l.b)) - @as(i32, @intCast(r.b)));
-}
-
 /// try to convert a gogh theme to a vga theme
 pub fn convert(theme: Theme) Theme {
     var ret: Theme = theme;
@@ -24,14 +21,44 @@ pub fn convert(theme: Theme) Theme {
     ft.mem.swap(vga.Color, &ret.palette[3], &ret.palette[6]);
     ft.mem.swap(vga.Color, &ret.palette[8 + 1], &ret.palette[8 + 4]);
     ft.mem.swap(vga.Color, &ret.palette[8 + 3], &ret.palette[8 + 6]);
+
+    // Get the color difference function
+    const delta_e = switch (config.theme.delta_e) {
+        .CIEDE2000 => colors.LAB(config.theme.profile).deltaE2000,
+        .CIE76 => colors.LAB(config.theme.profile).deltaE,
+    };
+
     for (ret.palette[0..16], 0..) |c, i| {
-        if (color_diff(theme.foreground, c) < color_diff(theme.foreground, theme.palette[ret.foreground_idx])) {
+        if (delta_e(theme.foreground, c) < delta_e(theme.foreground, theme.palette[ret.foreground_idx])) {
             ret.foreground_idx = i;
         }
-        if (color_diff(ret.background, c) < color_diff(ret.background, theme.palette[ret.background_idx])) {
+        if (delta_e(theme.background, c) < delta_e(theme.background, theme.palette[ret.background_idx])) {
             ret.background_idx = i;
         }
     }
+
+    // if foreground and background are still the same,
+    // then we iterate over the palette to find the next best color matching the default background
+    var min_diff: f32 = 1e9;
+    if (ret.background_idx % 8 == ret.foreground_idx % 8) {
+        for (ret.palette[0..16], 0..) |c, i| {
+            if (i % 8 == ret.foreground_idx % 8) continue;
+            const diff = theme.background.deltaE2000(c);
+            if (diff < min_diff) {
+                ret.background_idx = i;
+                min_diff = diff;
+            }
+        }
+    }
+
+    _ = ret.palette[ret.foreground_idx].blend(
+        theme.foreground,
+        config.theme.foreground_blend,
+    );
+    _ = ret.palette[ret.background_idx].blend(
+        theme.background,
+        config.theme.background_blend,
+    );
     return ret;
 }
 
