@@ -190,13 +190,15 @@ pub fn SinglyLinkedList(comptime T: type) type {
 
         // Remove a node from the list.
         pub fn remove(list: *Self, node: *Node) void {
-            if (list.first == node) list.first = node.next;
-
-            var current = list.first;
-            while (current) |n| : (current = n.next) {
-                if (n.next == node) {
-                    n.next = node.next;
-                    break;
+            if (list.first == node) {
+                list.first = node.next;
+            } else {
+                var current = list.first;
+                while (current) |n| : (current = n.next) {
+                    if (n.next == node) {
+                        n.next = node.next;
+                        break;
+                    }
                 }
             }
         }
