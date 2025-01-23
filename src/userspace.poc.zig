@@ -1,4 +1,4 @@
-const ft = @import("ft/ft.zig");
+const ft = @import("ft");
 const memory = @import("memory.zig");
 
 const VirtualSpace = @import("memory/virtual_space.zig").VirtualSpace;

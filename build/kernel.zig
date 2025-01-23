@@ -32,9 +32,15 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
     build_options.addOption(bool, "ci", context.ci);
     kernel.root_module.addOptions("build_options", build_options);
 
+    const ft_module = context.builder.createModule(
+        .{ .root_source_file = .{ .cwd_relative = "./src/ft/ft.zig" } },
+    );
+    kernel.root_module.addImport("ft", ft_module);
+
     const colors_module = context.builder.createModule(
         .{ .root_source_file = .{ .cwd_relative = "./src/misc/colors.zig" } },
     );
+    colors_module.addImport("ft", ft_module);
     kernel.root_module.addImport("colors", colors_module);
 
     kernel.addIncludePath(std.Build.LazyPath{ .cwd_relative = "./src/c_headers/" });

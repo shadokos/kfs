@@ -5,8 +5,8 @@ const pic = @import("../pic/pic.zig");
 const interrupts = @import("../../interrupts.zig");
 const Handler = interrupts.Handler;
 
-const math = @import("../../ft/ft.zig").math;
-const log = @import("../../ft/ft.zig").log;
+const math = @import("ft").math;
+const log = @import("ft").log;
 const pit_logger = log.scoped(.driver_pit);
 
 // The PIT driver (Intel 8254), implemented according to osdev.org

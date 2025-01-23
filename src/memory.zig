@@ -1,6 +1,6 @@
 const boot = @import("boot.zig");
 const interrupts = @import("interrupts.zig");
-const ft = @import("ft/ft.zig");
+const ft = @import("ft");
 const tty = @import("./tty/tty.zig");
 const printk = @import("./tty/tty.zig").printk;
 const PageFrameAllocator = @import("memory/page_frame_allocator.zig").PageFrameAllocator;
@@ -9,7 +9,7 @@ const paging = @import("memory/paging.zig");
 const multiboot = @import("multiboot.zig");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const mapping = @import("memory/mapping.zig");
-const logger = @import("ft/ft.zig").log.scoped(.memory);
+const logger = @import("ft").log.scoped(.memory);
 const VirtualSpace = @import("memory/virtual_space.zig").VirtualSpace;
 
 const StaticAllocator = @import("memory/object_allocators/static_allocator.zig").StaticAllocator;

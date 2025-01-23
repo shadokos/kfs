@@ -1,6 +1,6 @@
 const CmdError = @import("../Shell.zig").CmdError;
 const Packet = @import("packet.zig").Packet;
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 const utils = @import("../utils.zig");
 
 pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {

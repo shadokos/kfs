@@ -1,4 +1,4 @@
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 const Slab = @import("slab/slab.zig").Slab;
 const Cache = @import("slab/cache.zig").Cache;
 const PageAllocator = @import("../page_allocator.zig");

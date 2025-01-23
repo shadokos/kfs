@@ -1,5 +1,5 @@
 const tty = @import("../tty/tty.zig");
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const StackIterator = ft.debug.StackIterator;
 
 const c = @import("colors");

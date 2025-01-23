@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const keymap = @import("keyboard/keymap.zig");
 
 pub const NCCS = 11;

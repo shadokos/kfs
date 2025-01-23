@@ -1,4 +1,4 @@
-const logger = @import("ft/ft.zig").log.scoped(.gdt);
+const logger = @import("ft").log.scoped(.gdt);
 const cpu = @import("cpu.zig");
 
 const flag_type = packed struct(u4) {

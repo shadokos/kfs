@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const Monostate = @import("../misc/monostate.zig").Monostate;
 
 /// page index type

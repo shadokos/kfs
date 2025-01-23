@@ -1,6 +1,6 @@
 const cpu = @import("../../cpu.zig");
 
-const logger = @import("../../ft/ft.zig").log.scoped(.driver_pic);
+const logger = @import("ft").log.scoped(.driver_pic);
 
 pub const offset_master: u8 = 0x20;
 pub const offset_slave: u8 = 0x28;

@@ -1,4 +1,4 @@
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 
 /// LinearAllocator is a basic allocator, it allocate chunks linearly on the space designated by 'buffer'
 /// it does not support freeing

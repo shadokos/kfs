@@ -1,7 +1,7 @@
 const cpu = @import("cpu.zig");
 const gdt = @import("gdt.zig");
 const pic = @import("drivers/pic/pic.zig");
-const ft = @import("ft/ft.zig");
+const ft = @import("ft");
 const logger = ft.log.scoped(.intr);
 
 pub const InterruptFrame = extern struct {

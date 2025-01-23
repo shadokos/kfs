@@ -1,4 +1,4 @@
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 const paging = @import("../paging.zig");
 const logger = ft.log.scoped(.PageGrainedAllocator);
 const PageAllocator = @import("../page_allocator.zig");

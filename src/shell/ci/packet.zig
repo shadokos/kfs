@@ -1,4 +1,4 @@
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 const Shell = @import("shell.zig").Shell;
 
 const allocator = @import("../../memory.zig").physicalMemory.allocator();

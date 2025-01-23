@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const paging = @import("paging.zig");
 
 const Region = @import("regions.zig").Region;

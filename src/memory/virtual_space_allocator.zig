@@ -1,4 +1,4 @@
-const ft = @import("../ft/ft.zig");
+const ft = @import("ft");
 const paging = @import("paging.zig");
 const Cache = @import("object_allocators/slab/cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;

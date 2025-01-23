@@ -1,6 +1,6 @@
 const Serial = @import("../../drivers/serial_port/serial.zig");
 const pic = @import("../../drivers/pic/pic.zig");
-const ft = @import("../../ft/ft.zig");
+const ft = @import("ft");
 const Packet = @import("packet.zig").Packet;
 const interrupts = @import("../../interrupts.zig");
 

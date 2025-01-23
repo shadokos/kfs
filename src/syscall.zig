@@ -1,9 +1,9 @@
 const interrupts = @import("interrupts.zig");
 const tty = @import("./tty/tty.zig");
-const ft = @import("ft/ft.zig");
+const ft = @import("ft");
 const std = @import("std");
 const syscall_table = @import("syscall_table.zig");
-const log = @import("ft/ft.zig").log;
+const log = @import("ft").log;
 const errno = @import("errno.zig");
 
 const syscall_logger = log.scoped(.syscall);

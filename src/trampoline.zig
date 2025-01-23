@@ -1,5 +1,5 @@
 const paging = @import("memory/paging.zig");
-const ft = @import("ft/ft.zig");
+const ft = @import("ft");
 const cpu = @import("cpu.zig");
 
 pub const kernel_size = 0x10_000_000 + paging.direct_zone_size;
