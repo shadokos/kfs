@@ -1,27 +1,13 @@
 const cpu = @import("../../cpu.zig");
 const ft = @import("ft");
+const config = @import("config");
 
 /// screen width
 pub const width = 80;
 /// screen height
 pub const height = 25;
 
-pub const Color = packed struct(u24) {
-    b: u8,
-    g: u8,
-    r: u8,
-    /// convert from web color format to Color
-    pub fn convert(web: u24) Color {
-        var ret: Color = @bitCast(web);
-        ret.r = (ret.r >> 2) + ((ret.r >> 1) & 1);
-        ret.g = (ret.g >> 2) + ((ret.g >> 1) & 1);
-        ret.b = (ret.b >> 2) + ((ret.b >> 1) & 1);
-        if (ret.r == 64) ret.r = 63;
-        if (ret.g == 64) ret.g = 63;
-        if (ret.b == 64) ret.b = 63;
-        return ret;
-    }
-};
+pub const Color = @import("colors").LAB(config.theme.profile);
 
 /// A vga color palette
 pub const Palette = [16]Color;
@@ -70,12 +56,14 @@ pub fn set_cursor_pos(x: u8, y: u8) void {
 /// set the color palette
 pub fn set_palette(palette: Palette) void {
     for (palette, 0..) |c, i| {
+        const vga_color = c.to_vga();
+
         _ = cpu.inb(0x3da);
         cpu.outb(0x3c0, @intCast(i));
         cpu.outb(0x3c8, cpu.inb(0x3c1));
-        cpu.outb(0x3c9, c.r);
-        cpu.outb(0x3c9, c.g);
-        cpu.outb(0x3c9, c.b);
+        cpu.outb(0x3c9, vga_color.r);
+        cpu.outb(0x3c9, vga_color.g);
+        cpu.outb(0x3c9, vga_color.b);
         _ = cpu.inb(0x3da);
         cpu.outb(0x3c0, 0x20);
     }

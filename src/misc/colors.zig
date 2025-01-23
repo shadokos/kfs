@@ -20,3 +20,17 @@ pub const bg_blue = "\x1b[44m";
 pub const bg_magenta = "\x1b[45m";
 pub const bg_cyan = "\x1b[46m";
 pub const bg_white = "\x1b[47m";
+
+pub const rgb = @import("colors/rgb.zig");
+pub const cie = @import("colors/cie.zig");
+
+pub const RGB = rgb.RGB;
+pub const VGA_RGB = rgb.VGA_RGB;
+pub const XYZ = cie.XYZ;
+pub const LAB = cie.LAB;
+
+// CIE Color profile type
+pub const Profile = cie.Profile;
+
+// CIE-LAB delta E 2000 weights type
+pub const Kde2000 = cie.Kde2000;
