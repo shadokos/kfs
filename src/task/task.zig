@@ -93,6 +93,19 @@ pub const TaskDescriptor = struct {
         } else @panic("todo");
     }
 
+    pub fn init_vm(self: *Self) !void {
+        if (self.vm != null) {
+            @panic("task already has a vm");
+        }
+        const vm = try memory.bigAlloc.allocator().create(VirtualSpace);
+        try vm.init();
+        try vm.add_space(0, paging.high_half / paging.page_size);
+        try vm.add_space((paging.page_tables) / paging.page_size, 768);
+        vm.transfer();
+        try vm.fill_page_tables(paging.page_tables / paging.page_size, 768, false);
+        self.vm = vm;
+    }
+
     pub fn clone_vm(self: *Self, other: *Self) !void {
         if (self.vm != null) {
             @panic("task already has a vm");
