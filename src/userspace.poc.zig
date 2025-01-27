@@ -53,14 +53,12 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
 }
 
 export fn _userland() linksection(".userspace") void {
-    // while (true) {}
-    for (0..9) |_| {
-        // if (i % 3 == 0) _ = syscall(.poc_raise, .{&poc_signal});
-        _ = syscall(.write, &.{ "write from userspace\n", 21 });
-        _ = syscall(.sleep, .{1000});
-        // for (0..100000) |_| {
-        //     asm volatile ("nop");
-        // }
-    }
-    _ = syscall(.exit, .{});
+    _ = syscall(.write, &.{ "coucou\n", 7 });
+    _ = syscall(.fork, .{});
+    _ = syscall(.sleep, .{100});
+    _ = syscall(.write, &.{ "bonjour\n", 8 });
+    _ = syscall(.fork, .{});
+    _ = syscall(.sleep, .{100});
+    _ = syscall(.write, &.{ "salut\n", 8 });
+    _ = syscall(.exit, .{42});
 }
