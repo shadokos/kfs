@@ -162,9 +162,17 @@ pub fn sleep(ms: u64) void {
     sleep_n_ticks(ms * 1_000_000 / interval_ns);
 }
 
+pub fn get_time_since_boot() u64 {
+    return (ch0_ticks * interval_ns) / 1_000_000;
+}
+
+pub fn get_utime_since_boot() u64 {
+    return (ch0_ticks * interval_ns) / 1_000;
+}
+
 pub fn init() void {
     pit_logger.debug("Initializing PIT", .{});
-    init_channel(.Channel_0, 100);
+    init_channel(.Channel_0, 1000);
     interrupts.set_intr_gate(.Timer, Handler.create(pit_handler, false));
     pic.enable_irq(.Timer);
     pit_logger.info("PIT initialized", .{});
