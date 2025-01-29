@@ -33,10 +33,13 @@ pub const TaskDescriptor = struct {
 
     // scheduling
     rq_node: ready_queue.Node = .{ .data = null },
+    sleep_timeout: u64 = 0,
 
     pub const State = enum(u8) {
         Running,
+        Blocked,
         Ready,
+        Sleeping,
         Zombie,
     };
     pub const Pid = i32;
@@ -111,6 +114,23 @@ pub const TaskDescriptor = struct {
             return descriptor;
         } else return null;
     }
+
+    pub fn block(self: *Self, reason: State) void {
+        scheduler.lock();
+        defer scheduler.unlock();
+
+        self.state = reason;
+        ready_queue.remove(self);
+        scheduler.schedule();
+    }
+
+    pub fn unblock(self: *Self) void {
+        scheduler.lock();
+        defer scheduler.unlock();
+
+        self.state = .Ready;
+        ready_queue.append(self);
+    }
 };
 
 pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor) void {
@@ -166,12 +186,12 @@ pub fn exit(code: u8) noreturn {
     unreachable;
 }
 
-pub noinline fn start_task(function: *const fn () u8) noreturn {
+pub noinline fn start_task(function: *const fn (data: *usize) u8, data: *usize) noreturn {
     scheduler.unlock();
-    exit(function());
+    exit(function(data));
 }
 
-pub fn spawn(function: *const fn () u8) !*TaskDescriptor {
+pub fn spawn(function: *const fn (data: *usize) u8, data: *usize) !*TaskDescriptor {
     scheduler.lock();
     const descriptor = try task_set.create_task();
     var is_parent: bool = false;
@@ -182,7 +202,7 @@ pub fn spawn(function: *const fn () u8) !*TaskDescriptor {
         scheduler.set_current_task(descriptor);
         cpu.set_esp(@as(usize, @intFromPtr(&descriptor.stack)) + descriptor.stack.len);
         descriptor.state = .Running;
-        start_task(function);
+        start_task(function, data);
     }
     scheduler.unlock();
     return descriptor;

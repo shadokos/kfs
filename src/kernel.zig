@@ -44,7 +44,8 @@ fn test_tasks() void {
 }
 
 pub fn main() void {
-    test_tasks();
+    const kernel = task_set.create_task() catch @panic("Failed to create kernel task");
+    _ = kernel;
 
     var shell = DefaultShell.Shell.init(tty.get_reader(), tty.get_writer(), .{}, .{
         .on_init = DefaultShell.on_init,
