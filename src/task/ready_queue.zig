@@ -19,14 +19,13 @@ pub fn append(new_node: *TaskDescriptor) void {
     scheduler.lock();
     defer scheduler.unlock();
 
-    if (new_node.rq_node.data) |_| ft.log.err(
-        "Trying to append a task that is already in the ReadyQueue (rq: {*}, pid: {}, rq_node.data: {*})",
-        .{ &ready_queue, new_node.pid, new_node.rq_node.data },
-    );
+    defer {
+        new_node.rq_node.data = @ptrCast(&ready_queue);
+        new_node.state = .Ready;
+    }
 
-    new_node.rq_node.data = @ptrCast(&ready_queue);
+    if (new_node.rq_node.data) |_| return;
     ready_queue.append(&new_node.rq_node);
-    new_node.state = .Ready;
 }
 
 pub fn prepend(new_node: *TaskDescriptor) void {
