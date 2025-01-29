@@ -43,11 +43,14 @@ pub const TaskDescriptor = struct {
 
     // scheduling
     rq_node: ready_queue.Node = .{ .data = null },
+    sleep_timeout: u64 = 0,
 
     pub const State = enum(u8) {
         Running,
+        Blocked,
         Ready,
         Stopped,
+        Sleeping,
         Zombie,
     };
     pub const Pid = i32;
@@ -146,6 +149,23 @@ pub const TaskDescriptor = struct {
             const descriptor: *Self = @alignCast(@fieldParentPtr("status_stack_process_node", n));
             return descriptor;
         } else return null;
+    }
+
+    pub fn block(self: *Self, reason: State) void {
+        scheduler.lock();
+        defer scheduler.unlock();
+
+        self.state = reason;
+        ready_queue.remove(self);
+        scheduler.schedule();
+    }
+
+    pub fn unblock(self: *Self) void {
+        scheduler.lock();
+        defer scheduler.unlock();
+
+        self.state = .Ready;
+        ready_queue.append(self);
     }
 
     fn handle_default_action(self: *Self, sig: signal.siginfo_t) void {
