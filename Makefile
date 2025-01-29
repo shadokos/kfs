@@ -48,6 +48,11 @@ fast: .optimize-ReleaseFast .bootloader-$(BOOTLOADER)
 	rm -rf .bootloader-*
 	touch $@
 
+.PHONY: debug-server
+debug-server: debug
+	pkill -f 'qemu.* -[^ ]*s' || true
+	qemu-system-i386 -cdrom kfs.iso -s -S 1>/dev/null 2>/dev/null &
+
 .PHONY: clean
 clean:
 	rm -rf .zig-cache
