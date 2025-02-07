@@ -24,6 +24,17 @@ const Cr0 = packed struct(u32) {
     pg: bool = false,
 };
 
+pub const TableType = enum(u1) {
+    GDT = 0,
+    LDT = 1,
+};
+
+pub const Selector = packed struct(u16) {
+    privilege: PrivilegeLevel = .Supervisor,
+    table: TableType = .GDT,
+    index: u13 = 0,
+};
+
 pub const EFlags = packed struct(u32) {
     carry: bool = false,
     reserved1: u1 = 1,
@@ -223,7 +234,7 @@ pub inline fn load_gdt(gdtr: *const @import("gdt.zig").GDTR) void {
     );
 }
 
-pub inline fn load_tss(selector: u16) void {
+pub inline fn load_tss(selector: Selector) void {
     asm volatile (
         \\ ltr %[selector]
         :
@@ -232,10 +243,10 @@ pub inline fn load_tss(selector: u16) void {
 }
 
 // todo: non comptime code segment
-pub inline fn load_segments(comptime code: u16, data: u16, stack: u16) void {
+pub inline fn load_segments(comptime code: Selector, data: Selector, stack: Selector) void {
     comptime var code_selector_buf: [10]u8 = undefined;
     comptime var stream = ft.io.fixedBufferStream(code_selector_buf[0..]);
-    comptime stream.writer().print("0b{b}", .{code}) catch |e| @compileError(e);
+    comptime stream.writer().print("0b{b}", .{@as(u16, @bitCast(code))}) catch |e| @compileError(e);
     asm volatile ("jmp $" ++ stream.getWritten() ++ ", $.reload_CS\n" ++
             \\ .reload_CS:
             \\ movw %[data], %ax
