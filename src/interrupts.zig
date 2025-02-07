@@ -17,10 +17,10 @@ pub const InterruptFrame = extern struct {
 
     pub const IretFrame = extern struct {
         ip: u32,
-        cs: u32,
-        flags: u32,
+        cs: cpu.Selector,
+        flags: cpu.EFlags,
         sp: u32,
-        ss: u32,
+        ss: cpu.Selector,
     };
 
     pub inline fn debug(self: *InterruptFrame) void {
@@ -72,7 +72,7 @@ const GateType = enum(u5) {
 
 pub const InterruptDescriptor = packed struct {
     offset_1: u16 = undefined,
-    selector: u16 = undefined,
+    selector: cpu.Selector = undefined,
     unused: u8 = 0,
     gate: GateType = .Interrupt,
     privilege: cpu.PrivilegeLevel = cpu.PrivilegeLevel.Supervisor,
@@ -81,7 +81,7 @@ pub const InterruptDescriptor = packed struct {
 
     const Self = @This();
 
-    pub fn init(offset: Handler, gate: GateType, privilege: cpu.PrivilegeLevel, selector: u16) Self {
+    pub fn init(offset: Handler, gate: GateType, privilege: cpu.PrivilegeLevel, selector: cpu.Selector) Self {
         var interrupt_descriptor = Self{
             .gate = gate,
             .privilege = privilege,
@@ -201,7 +201,7 @@ pub fn set_trap_gate(id: anytype, handler: Handler) void {
         handler,
         .Trap,
         cpu.PrivilegeLevel.Supervisor,
-        gdt.get_selector(1, .GDT, cpu.PrivilegeLevel.Supervisor),
+        .{ .index = 1, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor },
     );
 }
 
@@ -210,7 +210,7 @@ pub fn set_intr_gate(id: anytype, handler: Handler) void {
         handler,
         .Interrupt,
         cpu.PrivilegeLevel.Supervisor,
-        gdt.get_selector(1, .GDT, cpu.PrivilegeLevel.Supervisor),
+        .{ .index = 1, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor },
     );
 }
 
@@ -219,7 +219,7 @@ pub fn set_system_gate(id: anytype, handler: Handler) void {
         handler,
         .Trap,
         cpu.PrivilegeLevel.User,
-        gdt.get_selector(1, .GDT, cpu.PrivilegeLevel.Supervisor),
+        .{ .index = 1, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor },
     );
 }
 
@@ -241,28 +241,40 @@ comptime {
         , .{@import("syscall/sigreturn.zig").Id}));
 }
 
+fn deliver_signal(frame: *InterruptFrame, pair: anytype) void {
+    frame_stack.?.append(frame.*) catch @panic("todo");
+    frame.iret.ip = @intFromPtr(pair.handler);
+    const rfi_sigreturn: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn" });
+    const rfi_sigreturn_end: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn_end" });
+
+    const bytecode = rfi_sigreturn[0 .. @as(usize, @intFromPtr(rfi_sigreturn_end)) - @as(
+        usize,
+        @intFromPtr(rfi_sigreturn),
+    )];
+    // ucontext.put_on_stack()
+    const bytecode_begin: [*]align(4) u8 = @ptrFromInt(
+        frame.iret.sp - 4 - ft.mem.alignForward(usize, bytecode.len, 4),
+    );
+    @memcpy(bytecode_begin[0..bytecode.len], bytecode);
+
+    const stack: [*]u32 = @as([*]u32, @ptrCast(bytecode_begin)) - 2;
+    stack[1] = pair.info.si_signo;
+    // stack[1] = @intFromPtr(siginfo_begin);
+    // stack[2] = 0;
+    stack[0] = @intFromPtr(bytecode_begin);
+    frame.iret.sp = @intFromPtr(stack);
+}
+
 pub fn setup_iret_frame(frame: *InterruptFrame) callconv(.C) void {
+    if (!scheduler.initialized)
+        return;
     if (frame_stack == null)
         frame_stack = @TypeOf(frame_stack.?).init(@import("memory.zig").smallAlloc.allocator());
-    if (@import("userspace.poc.zig").get_next_signal()) |handler_ptr| {
-        frame_stack.?.append(frame.*) catch @panic("todo");
-        frame.iret.ip = @intFromPtr(handler_ptr);
-        const rfi_sigreturn: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn" });
-        const rfi_sigreturn_end: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn_end" });
-
-        const bytecode = rfi_sigreturn[0 .. @as(usize, @intFromPtr(rfi_sigreturn_end)) - @as(
-            usize,
-            @intFromPtr(rfi_sigreturn),
-        )];
-        const bytecode_begin: [*]align(4) u8 = @ptrFromInt(
-            frame.iret.sp - 4 - ft.mem.alignForward(usize, bytecode.len, 4),
-        );
-        @memcpy(bytecode_begin[0..bytecode.len], bytecode);
-
-        const stack: [*]u32 = @as([*]u32, @ptrCast(bytecode_begin)) - 1;
-        stack[0] = @intFromPtr(bytecode_begin);
-        frame.iret.sp = @intFromPtr(stack);
-    }
+    scheduler.get_current_task().handle_signal();
+    _ = frame;
+    // if (scheduler.get_current_task().get_pending_signal()) |pair| {
+    //     deliver_signal(frame, pair);
+    // }
 }
 
 export fn wrapper(

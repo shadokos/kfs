@@ -55,10 +55,10 @@ pub fn clone(entrypoint: usize) noreturn {
         .code = 0,
         .iret = .{
             .ip = entrypoint,
-            .cs = @intCast(gdt.get_selector(4, .GDT, .User)),
+            .cs = .{ .index = 4, .table = .GDT, .privilege = .User },
             .flags = @bitCast(cpu.EFlags{ .interrupt_enable = true }),
             .sp = @as(u32, @intFromPtr(stack)) + (paging.page_size * stack_size),
-            .ss = @intCast(gdt.get_selector(6, .GDT, .User)),
+            .ss = .{ .index = 6, .table = .GDT, .privilege = .User },
         },
     };
 
