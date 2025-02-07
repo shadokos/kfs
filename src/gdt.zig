@@ -136,15 +136,6 @@ pub const GDTR = packed struct(u48) {
     base: u32,
 };
 
-const TableType = enum(u1) {
-    GDT = 0,
-    LDT = 1,
-};
-
-pub fn get_selector(selector: u12, table: TableType, privilege: cpu.PrivilegeLevel) u16 {
-    return (@as(u16, selector) << 3) | (@as(u16, @intFromEnum(table)) << 2) | @as(u16, @intFromEnum(privilege));
-}
-
 var gdtr: GDTR = undefined;
 
 pub fn flush() void {
@@ -171,30 +162,34 @@ pub fn init() void {
     });
 
     // Initialize TSS
-    tss.ss0 = comptime get_selector(3, .GDT, cpu.PrivilegeLevel.Supervisor);
-    tss.cs = comptime get_selector(4, .GDT, cpu.PrivilegeLevel.User);
-    tss.ss = comptime get_selector(5, .GDT, cpu.PrivilegeLevel.User);
+    tss.ss0 = .{ .index = 3, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor };
+    tss.cs = .{ .index = 4, .table = .GDT, .privilege = cpu.PrivilegeLevel.User };
+    tss.ss = .{ .index = 5, .table = .GDT, .privilege = cpu.PrivilegeLevel.User };
 
     flush();
     cpu.load_segments(
-        comptime get_selector(1, .GDT, cpu.PrivilegeLevel.Supervisor),
-        comptime get_selector(2, .GDT, cpu.PrivilegeLevel.Supervisor),
-        comptime get_selector(3, .GDT, cpu.PrivilegeLevel.Supervisor),
+        .{ .index = 1, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor },
+        .{ .index = 2, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor },
+        .{ .index = 3, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor },
     );
 
-    cpu.load_tss(comptime get_selector(7, .GDT, cpu.PrivilegeLevel.Supervisor));
+    cpu.load_tss(.{ .index = 7, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor });
 
     logger.info("Gdt initialized", .{});
 }
 
 pub const Tss = extern struct {
-    link: u16 = 0,
+    link: cpu.Selector = .{},
+    _unused1: u16 = 0,
     esp0: u32 = 0,
-    ss0: u16 = 0,
+    ss0: cpu.Selector = .{},
+    _unused2: u16 = 0,
     esp1: u32 = 0,
-    ss1: u16 = 0,
+    ss1: cpu.Selector = .{},
+    _unused3: u16 = 0,
     esp2: u32 = 0,
-    ss2: u16 = 0,
+    ss2: cpu.Selector = .{},
+    _unused4: u16 = 0,
     cr3: u32 = 0,
     eip: u32 = 0,
     eflags: u32 = 0,
@@ -206,12 +201,18 @@ pub const Tss = extern struct {
     ebp: u32 = 0,
     esi: u32 = 0,
     edi: u32 = 0,
-    es: u32 = 0,
-    cs: u32 = 0,
-    ss: u32 = 0,
-    ds: u32 = 0,
-    fs: u32 = 0,
-    gs: u32 = 0,
+    es: cpu.Selector = .{},
+    _unused5: u16 = 0,
+    cs: cpu.Selector = .{},
+    _unused6: u16 = 0,
+    ss: cpu.Selector = .{},
+    _unused7: u16 = 0,
+    ds: cpu.Selector = .{},
+    _unused8: u16 = 0,
+    fs: cpu.Selector = .{},
+    _unused9: u16 = 0,
+    gs: cpu.Selector = .{},
+    _unused10: u16 = 0,
     ldtr: u32 = 0,
     trap: u16 = 0,
     iopb: u16 = @sizeOf(Tss),
