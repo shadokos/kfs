@@ -98,8 +98,8 @@ pub const RGB = packed struct {
     pub fn to_vga(self: RGB) VGA_RGB {
         var vga = VGA_RGB{
             .r = (self.r >> 2) + ((self.r >> 1) & 1),
-            .g = (self.g >> 2) + ((self.r >> 1) & 1),
-            .b = (self.b >> 2) + ((self.r >> 1) & 1),
+            .g = (self.g >> 2) + ((self.g >> 1) & 1),
+            .b = (self.b >> 2) + ((self.b >> 1) & 1),
         };
         if (vga.r == 64) vga.r = 63;
         if (vga.g == 64) vga.g = 63;
