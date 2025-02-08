@@ -83,10 +83,9 @@ pub fn main() void {
     const new_task = task_set.create_task() catch @panic("c'est  la  panique 4");
     // new_task.spawn(task1, 3) catch @panic("c'est  la  panique 3");
     new_task.spawn(&@import("task/userspace.zig").switch_to_userspace, 3) catch @panic("c'est  la  panique 3");
-    const new_task2 = task_set.create_task() catch @panic("c'est  la  panique 4");
-    new_task2.spawn(&@import("task/userspace.zig").switch_to_userspace, 3) catch @panic("c'est  la  panique 3");
-    var stat: wait.Status = undefined;
-    _ = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("c'est  la  panique 4");
+    _ = kernel;
+    // var stat: wait.Status = undefined;
+    // _ = wait.wait(kernel.pid, .CHILD, &stat, .{}) catch @panic("c'est  la  panique 4");
     //     @import("drivers/pit/pit.zig").sleep(1000);
 
     // logger.info("coucou\n", .{});

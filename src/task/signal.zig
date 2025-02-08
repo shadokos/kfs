@@ -17,6 +17,11 @@ pub const DefaultAction = enum {
     Continue,
 };
 
+pub const Handler = *allowzero const fn (u32) callconv(.C) void;
+pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callconv(.C) void;
+pub const SIG_DFL: Handler = @ptrFromInt(0);
+pub const SIG_IGN: Handler = @ptrFromInt(1);
+
 pub const Id = enum(u32) {
     SIGABRT,
     SIGALRM,
@@ -62,11 +67,6 @@ pub const siginfo_t = extern struct {
     si_status: u32 = undefined,
     // si_value : sigval
 };
-
-pub const Handler = *allowzero const fn (u32) callconv(.C) void;
-pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callconv(.C) void;
-pub const SIG_DFL: Handler = @ptrFromInt(0);
-pub const SIG_IGN: Handler = @ptrFromInt(1);
 
 pub const SigSet = u32;
 
