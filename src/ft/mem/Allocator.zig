@@ -68,7 +68,7 @@ pub fn create(self: Allocator, comptime T: type) Error!*T {
 }
 
 pub fn destroy(self: Allocator, ptr: anytype) void {
-    const T = @typeInfo(@TypeOf(ptr)).Pointer.child;
+    const T = @typeInfo(@TypeOf(ptr)).pointer.child;
     return self.free(@as([*]T, @ptrCast(@alignCast(ptr)))[0..1]);
 }
 
