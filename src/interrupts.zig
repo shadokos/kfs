@@ -2,6 +2,9 @@ const cpu = @import("cpu.zig");
 const gdt = @import("gdt.zig");
 const pic = @import("drivers/pic/pic.zig");
 const ft = @import("ft");
+const signal = @import("task/signal.zig");
+const scheduler = @import("task/scheduler.zig");
+const ucontext = @import("task/ucontext.zig");
 const logger = ft.log.scoped(.intr);
 
 pub const InterruptFrame = extern struct {
@@ -168,7 +171,7 @@ pub fn init() void {
     idtr.offset = @intFromPtr(&idt);
     cpu.load_idt(&idtr);
     logger.info("Idt initialized", .{});
-    @import("task/scheduler.zig").unlock();
+    scheduler.unlock();
     logger.info("Interrupts enabled", .{});
 }
 
@@ -229,9 +232,6 @@ pub fn unset_gate(id: u8) void {
 
 pub const Stub = *const fn () callconv(.Naked) void;
 
-// TODO: Send this to the intergalactic void, it's a simple POC
-pub var frame_stack: ?ft.ArrayListAligned(InterruptFrame, 4) = null;
-
 comptime {
     asm (ft.fmt.comptimePrint(
             \\ _rfi_sigreturn:
@@ -241,53 +241,37 @@ comptime {
         , .{@import("syscall/sigreturn.zig").Id}));
 }
 
-fn deliver_signal(frame: *InterruptFrame, pair: anytype) void {
-    frame_stack.?.append(frame.*) catch @panic("todo");
-    frame.iret.ip = @intFromPtr(pair.handler);
-    const rfi_sigreturn: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn" });
-    const rfi_sigreturn_end: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn_end" });
-
-    const bytecode = rfi_sigreturn[0 .. @as(usize, @intFromPtr(rfi_sigreturn_end)) - @as(
-        usize,
-        @intFromPtr(rfi_sigreturn),
-    )];
-    // ucontext.put_on_stack()
-    const bytecode_begin: [*]align(4) u8 = @ptrFromInt(
-        frame.iret.sp - 4 - ft.mem.alignForward(usize, bytecode.len, 4),
-    );
-    @memcpy(bytecode_begin[0..bytecode.len], bytecode);
-
-    const stack: [*]u32 = @as([*]u32, @ptrCast(bytecode_begin)) - 2;
-    stack[1] = pair.info.si_signo;
-    // stack[1] = @intFromPtr(siginfo_begin);
-    // stack[2] = 0;
-    stack[0] = @intFromPtr(bytecode_begin);
-    frame.iret.sp = @intFromPtr(stack);
-}
-
 pub fn setup_iret_frame(frame: *InterruptFrame) callconv(.C) void {
     if (!scheduler.initialized)
         return;
-    if (frame_stack == null)
-        frame_stack = @TypeOf(frame_stack.?).init(@import("memory.zig").smallAlloc.allocator());
     scheduler.get_current_task().handle_signal();
     _ = frame;
-    // if (scheduler.get_current_task().get_pending_signal()) |pair| {
-    //     deliver_signal(frame, pair);
-    // }
 }
 
 export fn wrapper(
-    f: *const fn (frame: *InterruptFrame) callconv(.C) void,
+    f_ptr: *void,
     frame: *InterruptFrame,
 ) callconv(.C) noreturn {
+    const f: *const fn (frame: InterruptFrame) void = @ptrCast(f_ptr);
     const interrupt_enable = cpu.get_eflags().interrupt_enable;
+    const privilege_transition = frame.iret.cs.privilege == .User;
+
     if (!interrupt_enable)
-        @import("task/scheduler.zig").lock_count += 1;
-    f(frame);
+        scheduler.lock_count += 1;
+
+    if (privilege_transition)
+        scheduler.get_current_task().ucontext.uc_mcontext = frame.*;
+
+    f(frame.*);
+
     setup_iret_frame(frame);
+
+    if (privilege_transition)
+        frame.* = scheduler.get_current_task().ucontext.uc_mcontext;
+
     if (!interrupt_enable)
-        @import("task/scheduler.zig").lock_count -|= 1;
+        scheduler.lock_count -|= 1;
+
     ret_from_interrupt(frame);
 }
 
@@ -314,7 +298,7 @@ pub const Handler = extern union {
 
     const Self = @This();
 
-    pub fn create(comptime f: *const fn (frame: *InterruptFrame) callconv(.C) void, comptime has_error: bool) Self {
+    pub fn create(comptime f: *const fn (frame: InterruptFrame) void, comptime has_error: bool) Self {
         const factory = comptime struct {
             pub fn raw_stub() callconv(.Naked) void {
                 if (!has_error) asm volatile ("push $0");
@@ -348,15 +332,15 @@ pub fn default_handler(
     comptime t: enum { except, except_err, irq, interrupt },
 ) Handler {
     const handlers = struct {
-        pub fn exception(_: *InterruptFrame) callconv(.C) void {
+        pub fn exception(_: InterruptFrame) void {
             const e = @as(Exceptions, @enumFromInt(id));
             ft.log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
         }
-        pub fn exception_err(_: *InterruptFrame) callconv(.C) void {
+        pub fn exception_err(_: InterruptFrame) void {
             const e = @as(Exceptions, @enumFromInt(id));
             ft.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), 0 });
         }
-        pub fn irq(_: *InterruptFrame) callconv(.C) void {
+        pub fn irq(_: InterruptFrame) void {
             const _id = pic.get_irq_from_interrupt_id(id);
 
             // If the interrupt was a spurious interrupt,
@@ -367,7 +351,7 @@ pub fn default_handler(
             pic.ack(_id);
             ft.log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
         }
-        pub fn interrupt(_: *InterruptFrame) callconv(.C) void {
+        pub fn interrupt(_: InterruptFrame) void {
             ft.log.scoped(.interrupt).err("{d} unhandled", .{id});
         }
     };

@@ -21,7 +21,9 @@ fn map_userspace(vm: *VirtualSpace) void {
         (up_end - up_start) / paging.page_size,
     ) catch unreachable;
 }
-
+comptime {
+    _ = @import("../userspace.poc.zig");
+}
 extern fn _userland() void;
 
 pub fn switch_to_userspace(_: anytype) u8 {

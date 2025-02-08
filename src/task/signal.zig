@@ -40,10 +40,11 @@ pub const DefaultAction = enum {
 };
 
 pub const Handler = *allowzero (fn (u32) void);
+pub const SigactionHandler = *allowzero (fn (u32, *siginfo_t, *void) void);
 pub const SIG_DFL: Handler = @ptrFromInt(0);
 pub const SIG_IGN: Handler = @ptrFromInt(1);
 
-pub const Id = enum {
+pub const Id = enum(u32) {
     SIGABRT,
     SIGALRM,
     SIGBUS,
@@ -74,9 +75,25 @@ pub const Id = enum {
     SIGXFSZ,
 };
 
-// pub const Sigaction = struct {
-//     sa_handler: Handler,
-// };
+pub const Sigaction = extern struct {
+    sa_handler: Handler = SIG_DFL,
+    sa_sigaction: SigactionHandler,
+    sa_mask: u32 = 0,
+    sa_flags: packed struct(u32) {
+        SA_NOCLDSTOP: bool = false,
+        // SA_ONSTACK, : bool = false,
+        SA_RESETHAND: bool = false,
+        SA_RESTART: bool = false,
+        SA_SIGINFO: bool = false,
+        // SA_NOCLDWAIT : bool = false,
+        SA_NODEFER: bool = false,
+        // SS_ONSTACK : bool = false,
+        // SS_DISABLE : bool = false,
+        // MINSIGSTKSZ : bool = false,
+        // SIGSTKSZ : bool = false,
+        _unused: u27 = 0,
+    },
+};
 
 pub const SignalQueue = struct {
     default_handler: DefaultAction,
@@ -97,12 +114,17 @@ pub const SignalQueue = struct {
             "signal node",
             @import("../memory.zig").virtually_contiguous_page_allocator.page_allocator(),
             @sizeOf(QueueType.Node),
+            @alignOf(QueueType.Node),
             3,
         );
     }
 
+    fn is_ignored(self: Self) bool {
+        return self.handler == SIG_IGN or (self.handler == SIG_DFL and self.default_handler == .Ignore); // todo
+    }
+
     pub fn queue_signal(self: *Self, signal: siginfo_t) void {
-        if (self.handler == SIG_IGN or (self.handler == SIG_DFL and self.default_handler == .Ignore)) { // todo
+        if (self.is_ignored()) {
             return;
         }
         const node = cache.allocator().create(QueueType.Node) catch @panic("out of space");
@@ -121,7 +143,7 @@ pub const SignalQueue = struct {
     pub fn set_handler(self: *Self, handler: Handler) !void {
         // todo
         self.handler = handler;
-        if (handler.type == SIG_IGN) {
+        if (self.is_ignored()) {
             while (self.queue.len != 0) {
                 _ = self.queue.pop();
             }
@@ -137,6 +159,7 @@ pub const SignalManager = struct {
     fn init_queue(self: *Self, id: Id, default_action: DefaultAction, ignorable: bool) void {
         self.queues[@intFromEnum(id)] = SignalQueue.init(default_action, ignorable);
     }
+
     pub fn init() Self {
         var self = Self{};
         self.init_queue(.SIGABRT, .Terminate, true);

@@ -1,15 +1,18 @@
 const memory = @import("../memory.zig");
+const interrupts = @import("../interrupts.zig");
 const paging = @import("../memory/paging.zig");
 const VirtualSpace = @import("../memory/virtual_space.zig").VirtualSpace;
 const cpu = @import("../cpu.zig");
 const gdt = @import("../gdt.zig");
 const task_set = @import("task_set.zig");
 const signal = @import("signal.zig");
+const ucontext = @import("ucontext.zig");
 const Cache = @import("../memory/object_allocators/slab/cache.zig").Cache;
 const scheduler = @import("scheduler.zig");
 const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
-const logger = @import("ft").log.scoped(.task);
+const ft = @import("ft");
+const logger = ft.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
 pub const TaskDescriptor = struct {
@@ -33,6 +36,8 @@ pub const TaskDescriptor = struct {
     signalManager: signal.SignalManager = signal.SignalManager.init(),
 
     esp: u32 = undefined,
+
+    ucontext: ucontext.ucontext_t = undefined,
 
     // scheduling
     prev: *TaskDescriptor = undefined,
@@ -141,37 +146,104 @@ pub const TaskDescriptor = struct {
         } else return null;
     }
 
+    fn handle_default_action(self: *Self, sig: signal.siginfo_t) void {
+        switch (self.signalManager.get_defaultAction(@enumFromInt(sig.si_signo))) {
+            .Ignore => {},
+            .Terminate => {
+                self.state = .Zombie;
+                self.update_status(.{
+                    .transition = .Terminated,
+                    .signaled = true,
+                    .siginfo = sig,
+                });
+                scheduler.schedule();
+                unreachable;
+            },
+            .Stop => if (self.state == .Running) {
+                self.state = .Stopped;
+                self.update_status(.{
+                    .transition = .Stopped,
+                    .signaled = true,
+                    .siginfo = sig,
+                });
+            },
+            .Continue => if (self.state == .Stopped) {
+                self.state = .Running;
+                self.update_status(.{
+                    .transition = .Continued,
+                    .signaled = true,
+                    .siginfo = sig,
+                });
+            },
+        }
+    }
+
+    fn add_signal_frame(self: *Self, info: signal.siginfo_t) void {
+        const id: signal.Id = @enumFromInt(info.si_signo);
+        const handler = self.signalManager.get_action(id);
+
+        // push ucontext on stack
+        self.ucontext.uc_link = ucontext.put_on_stack(&self.ucontext, self.ucontext);
+
+        // put trampoline on stack
+        const rfi_sigreturn: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn" });
+        const rfi_sigreturn_end: [*]u8 = @extern([*]u8, .{ .name = "_rfi_sigreturn_end" });
+
+        const bytecode = rfi_sigreturn[0 .. @as(usize, @intFromPtr(rfi_sigreturn_end)) - @as(
+            usize,
+            @intFromPtr(rfi_sigreturn),
+        )];
+        const bytecode_begin = ucontext.put_data_on_stack(&self.ucontext, bytecode).ptr;
+
+        // push signo and return address
+        const stack_frame = [_]u32{
+            @intFromPtr(bytecode_begin),
+            info.si_signo,
+        };
+        const stack_frame_begin = ucontext.put_on_stack(&self.ucontext, stack_frame);
+
+        // setup sp
+        self.ucontext.uc_mcontext.iret.sp = @intFromPtr(stack_frame_begin);
+
+        // setup ip
+        self.ucontext.uc_mcontext.iret.ip = @intFromPtr(handler);
+    }
+
     pub fn handle_signal(self: *Self) void {
         while (self.signalManager.get_pending_signal_for_handler(signal.SIG_DFL)) |sig| {
-            switch (self.signalManager.get_defaultAction(@enumFromInt(sig.si_signo))) {
-                .Ignore => {},
-                .Terminate => {
-                    self.state = .Zombie;
-                    self.update_status(.{
-                        .transition = .Terminated,
-                        .signaled = true,
-                        .siginfo = sig,
-                    });
-                    scheduler.schedule();
-                    unreachable;
-                },
-                .Stop => if (self.state == .Running) {
-                    self.state = .Stopped;
-                    self.update_status(.{
-                        .transition = .Stopped,
-                        .signaled = true,
-                        .siginfo = sig,
-                    });
-                },
-                .Continue => if (self.state == .Stopped) {
-                    self.state = .Running;
-                    self.update_status(.{
-                        .transition = .Continued,
-                        .signaled = true,
-                        .siginfo = sig,
-                    });
-                },
+            self.handle_default_action(sig);
+        }
+        while (self.signalManager.get_pending_signal()) |info| {
+            const id: signal.Id = @enumFromInt(info.si_signo);
+            const handler = self.signalManager.get_action(id);
+            if (handler == signal.SIG_IGN) {} else if (handler == signal.SIG_DFL) {
+                self.handle_default_action(info);
+            } else {
+                self.add_signal_frame(info);
             }
+        }
+    }
+
+    pub fn get_pending_signal(self: *Self) ?struct { handler: signal.Handler, info: signal.siginfo_t } {
+        while (self.signalManager.get_pending_signal_for_handler(signal.SIG_DFL)) |sig| {
+            self.handle_default_action(sig);
+        }
+        if (self.signalManager.get_pending_signal()) |info| {
+            const id: signal.Id = @enumFromInt(info.si_signo);
+            const handler = self.signalManager.get_action(id);
+            if (handler == signal.SIG_IGN) {
+                return null;
+            } else if (handler == signal.SIG_DFL) {
+                self.handle_default_action(info);
+                return null;
+            } else {
+                return .{
+                    .handler = handler,
+                    .info = info,
+                };
+            }
+        } else {
+            return null;
         }
     }
 

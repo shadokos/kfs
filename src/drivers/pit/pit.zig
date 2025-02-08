@@ -143,7 +143,7 @@ pub fn init_channel(comptime channel: SelectChannel, frequency: u32) void {
     pit_logger.debug("{s} initialized", .{@tagName(channel)});
 }
 
-pub fn pit_handler(_: *interrupts.InterruptFrame) callconv(.C) void {
+pub fn pit_handler(_: interrupts.InterruptFrame) void {
     ch0_ticks +%= 1;
     pic.ack(.Timer);
     @import("../../task/scheduler.zig").schedule();

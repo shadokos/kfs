@@ -14,8 +14,10 @@ pub fn get_next_signal() ?SigHandler {
     return current_signal;
 }
 
-fn poc_signal() linksection("userspace") void {
+fn poc_signal(id: u32) linksection("userspace") callconv(.C) void {
     const str = "Signal handled\n";
+    const c = id + '0';
+    _ = syscall(.write, .{ &c, 1 });
     _ = syscall(.write, .{ str, str.len });
 }
 
@@ -53,12 +55,15 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
 }
 
 export fn _userland() linksection(".userspace") void {
+    _ = syscall(.signal, &.{ 2, &poc_signal });
+    _ = syscall(.poc_raise, &.{2});
+    // while (true) {}
     _ = syscall(.write, &.{ "coucou\n", 7 });
     _ = syscall(.fork, .{});
     _ = syscall(.sleep, .{100});
     _ = syscall(.write, &.{ "bonjour\n", 8 });
     _ = syscall(.fork, .{});
     _ = syscall(.sleep, .{100});
-    _ = syscall(.write, &.{ "salut\n", 8 });
+    _ = syscall(.write, &.{ "salut\n", 6 });
     _ = syscall(.exit, .{42});
 }

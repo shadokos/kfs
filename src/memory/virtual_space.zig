@@ -12,7 +12,7 @@ const RegionSet = @import("region_set.zig").RegionSet;
 
 const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
 
-fn page_fault_handler(frame: *InterruptFrame) callconv(.C) void {
+fn page_fault_handler(frame: InterruptFrame) void {
     const ErrorType = packed struct(u32) {
         present: bool,
         type: enum(u1) {
