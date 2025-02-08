@@ -51,7 +51,7 @@ pub fn divCeil(comptime T: type, numerator: T, denominator: T) !T {
 /// Simple implementation of the power function using the zig builtins exp and log
 /// This implementaiton is based on the identity x^n = e^(n * log(x))
 pub fn pow(comptime T: type, x: T, n: T) T {
-    if (x == 0) return if (n > 0) 0 else @panic("0^0 is undefined");
+    if (x == 0) return if (n > 0) 0 else 1;
     if (x == 1 or n == 0) return 1;
     if (x < 0 and @mod(n, 1) != 0) @panic("Negative base with non-integer exponent");
 
