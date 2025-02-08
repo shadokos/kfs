@@ -16,6 +16,13 @@ fn poc_sigaction(id: u32, _: *signal.siginfo_t, _: *void) linksection("userspace
     _ = syscall(.write, .{ str, str.len });
 }
 
+fn poc_sigaction(id: u32, _: *signal.siginfo_t, _: *void) linksection("userspace") callconv(.C) void {
+    const str = " Signal handled with sigaction\n";
+    const c = id + '0';
+    _ = syscall(.write, .{ &c, 1 });
+    _ = syscall(.write, .{ str, str.len });
+}
+
 pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
     const _code: u32 = switch (@typeInfo(@TypeOf(code))) {
         .@"enum", .enum_literal => @intFromEnum(@as(@import("syscall.zig").Code, code)),
