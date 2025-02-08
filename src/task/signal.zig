@@ -10,39 +10,12 @@ const globalCache = &@import("../memory.zig").globalCache;
 const Errno = @import("../errno.zig").Errno;
 const logger = @import("ft").log.scoped(.signal);
 
-pub const siginfo_t = extern struct {
-    si_signo: u32 = undefined,
-    si_code: u32 = undefined,
-    si_errno: u32 = undefined,
-    si_pid: TaskDescriptor.Pid = undefined, // todo pid type
-    // si_uid
-    si_addr: paging.VirtualPtr = undefined,
-    si_status: u32 = undefined,
-    // si_value : sigval
-};
-//
-// pub const Handler = struct {
-//     type: Type,
-//     func: ?*(fn (u32) void) = null,
-//     const Type = enum {
-//         Function,
-//         Ignore,
-//         Terminate,
-//         Stop,
-//         Continue,
-//     };
-// };
 pub const DefaultAction = enum {
     Ignore,
     Terminate,
     Stop,
     Continue,
 };
-
-pub const Handler = *allowzero (fn (u32) void);
-pub const SigactionHandler = *allowzero (fn (u32, *siginfo_t, *void) void);
-pub const SIG_DFL: Handler = @ptrFromInt(0);
-pub const SIG_IGN: Handler = @ptrFromInt(1);
 
 pub const Id = enum(u32) {
     SIGABRT,
@@ -75,29 +48,49 @@ pub const Id = enum(u32) {
     SIGXFSZ,
 };
 
+pub const Code = enum(u32) {
+    SI_USER,
+};
+
+pub const siginfo_t = extern struct {
+    si_signo: Id = undefined,
+    si_code: Code = undefined,
+    si_errno: u32 = undefined,
+    si_pid: TaskDescriptor.Pid = undefined, // todo pid type
+    // si_uid
+    si_addr: paging.VirtualPtr = undefined,
+    si_status: u32 = undefined,
+    // si_value : sigval
+};
+
+pub const Handler = *allowzero const fn (u32) callconv(.C) void;
+pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callconv(.C) void;
+pub const SIG_DFL: Handler = @ptrFromInt(0);
+pub const SIG_IGN: Handler = @ptrFromInt(1);
+
 pub const Sigaction = extern struct {
     sa_handler: Handler = SIG_DFL,
-    sa_sigaction: SigactionHandler,
+    sa_sigaction: SigactionHandler = undefined,
     sa_mask: u32 = 0,
     sa_flags: packed struct(u32) {
-        SA_NOCLDSTOP: bool = false,
+        SA_NOCLDSTOP: bool = false, // todo
         // SA_ONSTACK, : bool = false,
-        SA_RESETHAND: bool = false,
-        SA_RESTART: bool = false,
+        SA_RESETHAND: bool = false, // todo
+        SA_RESTART: bool = false, // todo
         SA_SIGINFO: bool = false,
         // SA_NOCLDWAIT : bool = false,
-        SA_NODEFER: bool = false,
+        SA_NODEFER: bool = false, // todo
         // SS_ONSTACK : bool = false,
         // SS_DISABLE : bool = false,
         // MINSIGSTKSZ : bool = false,
         // SIGSTKSZ : bool = false,
         _unused: u27 = 0,
-    },
+    } = .{},
 };
 
 pub const SignalQueue = struct {
     default_handler: DefaultAction,
-    handler: Handler,
+    action: Sigaction,
     queue: QueueType = .{},
     ignorable: bool = true,
 
@@ -106,7 +99,11 @@ pub const SignalQueue = struct {
     const Self = @This();
 
     pub fn init(default_handler: DefaultAction, ignorable: bool) Self {
-        return Self{ .default_handler = default_handler, .handler = SIG_DFL, .ignorable = ignorable };
+        return Self{
+            .default_handler = default_handler,
+            .action = .{ .sa_handler = SIG_DFL },
+            .ignorable = ignorable,
+        };
     }
 
     pub fn init_cache() !void {
@@ -120,7 +117,9 @@ pub const SignalQueue = struct {
     }
 
     fn is_ignored(self: Self) bool {
-        return self.handler == SIG_IGN or (self.handler == SIG_DFL and self.default_handler == .Ignore); // todo
+        return !self.action.sa_flags.SA_SIGINFO and
+            (self.action.sa_handler == SIG_IGN or
+            (self.action.sa_handler == SIG_DFL and self.default_handler == .Ignore)); // todo
     }
 
     pub fn queue_signal(self: *Self, signal: siginfo_t) void {
@@ -140,9 +139,9 @@ pub const SignalQueue = struct {
         } else return null;
     }
 
-    pub fn set_handler(self: *Self, handler: Handler) !void {
+    pub fn set_action(self: *Self, action: Sigaction) !void {
         // todo
-        self.handler = handler;
+        self.action = action;
         if (self.is_ignored()) {
             while (self.queue.len != 0) {
                 _ = self.queue.pop();
@@ -193,12 +192,12 @@ pub const SignalManager = struct {
         return self;
     }
 
-    pub fn change_action(self: *Self, id: Id, action: Handler) !void {
-        return self.queues[@intFromEnum(id)].set_handler(action);
+    pub fn change_action(self: *Self, id: Id, action: Sigaction) !void {
+        return self.queues[@intFromEnum(id)].set_action(action);
     }
 
-    pub fn get_action(self: *Self, id: Id) Handler {
-        return self.queues[@intFromEnum(id)].handler;
+    pub fn get_action(self: *Self, id: Id) Sigaction {
+        return self.queues[@intFromEnum(id)].action;
     }
 
     pub fn get_defaultAction(self: *Self, id: Id) DefaultAction {
@@ -206,12 +205,12 @@ pub const SignalManager = struct {
     }
 
     pub fn queue_signal(self: *Self, signal: siginfo_t) void {
-        if (signal.si_signo > self.queues.len) {
+        if (@intFromEnum(signal.si_signo) > self.queues.len) {
             @panic("todo");
         }
-        self.queues[signal.si_signo].queue_signal(signal);
-        if (self.queues[signal.si_signo].queue.len != 0) { // todo
-            self.pending |= @as(u32, 1) << @intCast(signal.si_signo);
+        self.queues[@intFromEnum(signal.si_signo)].queue_signal(signal);
+        if (self.queues[@intFromEnum(signal.si_signo)].queue.len != 0) { // todo
+            self.pending |= @as(u32, 1) << @as(u5, @intCast(@intFromEnum(signal.si_signo)));
         }
     }
 
@@ -229,33 +228,24 @@ pub const SignalManager = struct {
         return null;
     }
 
-    pub fn get_pending_signal_for_handler(self: *Self, handler: Handler) ?siginfo_t {
-        var signo = @ctz(self.pending);
-        while (signo < 32) {
-            const q = &self.queues[signo];
-            if (q.handler == handler) {
-                if (q.pop()) |s| {
-                    if (q.queue.len == 0) { // todo
-                        self.pending &= ~(@as(u32, 1) << @intCast(signo));
-                    }
-                    return s;
-                } else unreachable;
-            }
-            signo = @ctz((self.pending >> @intCast(signo)) >> 1) + signo;
-        }
-        return null;
-    }
+    // pub fn get_pending_signal_for_handler(self: *Self, handler: Handler) ?siginfo_t {
+    //     var signo = @ctz(self.pending);
+    //     while (signo < 32) {
+    //         const q = &self.queues[signo];
+    //         if (q.action.sa_handler == handler) {
+    //             if (q.pop()) |s| {
+    //                 if (q.queue.len == 0) { // todo
+    //                     self.pending &= ~(@as(u32, 1) << @intCast(signo));
+    //                 }
+    //                 return s;
+    //             } else unreachable;
+    //         }
+    //         signo = @ctz((self.pending >> @intCast(signo)) >> 1) + signo;
+    //     }
+    //     return null;
+    // }
 
     pub fn has_pending(self: Self) bool {
         return self.pending != 0;
     }
 };
-
-pub fn kill(pid: TaskDescriptor.Pid, signal: Id) !void {
-    const descriptor = task_set.get_task_descriptor(pid) orelse return Errno.ESRCH;
-    // todo permisssion
-    descriptor.signalManager.queue_signal(.{
-        .si_signo = @intFromEnum(signal),
-        // todo set more fields of siginfo
-    });
-}

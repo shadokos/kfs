@@ -50,7 +50,9 @@ fn get_fn_proto_tuple(comptime proto: std.builtin.Type.Fn) type {
 }
 
 fn convert_param(comptime T: type, reg: usize) T {
-    if (@typeInfo(T) == .pointer) {
+    if (@typeInfo(T) == .pointer or
+        (@typeInfo(T) == .optional and @typeInfo(@typeInfo(T).optional.child) == .pointer))
+    {
         return @ptrFromInt(reg);
     } else if (@typeInfo(T) == .@"enum") {
         return @enumFromInt(@as(
@@ -66,7 +68,9 @@ fn convert_param(comptime T: type, reg: usize) T {
 }
 
 fn convert_ret(comptime T: type, val: T) usize {
-    if (@typeInfo(T) == .pointer) {
+    if (@typeInfo(T) == .pointer or
+        (@typeInfo(T) == .optional and @typeInfo(@typeInfo(T).optional.child) == .Pointer))
+    {
         return @intFromPtr(val);
     } else {
         return @intCast(@as(
