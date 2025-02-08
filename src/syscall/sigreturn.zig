@@ -1,10 +1,12 @@
 const interrupt = @import("../interrupts.zig");
 const InterruptFrame = interrupt.InterruptFrame;
-const frame_stack = &interrupt.frame_stack;
 
 pub const Id = 4;
 
-pub fn do_raw(frame: *InterruptFrame) void {
-    if (frame_stack.* == null) return;
-    if (frame_stack.*.?.popOrNull()) |v| frame.* = v;
+pub fn do_raw() void {
+    const task = @import("../task/scheduler.zig").get_current_task();
+    // todo: prevent the petit malins from altering the frame and changing the segments.
+    if (task.ucontext.uc_link) |old| {
+        task.ucontext = old.*;
+    }
 }
