@@ -54,9 +54,56 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
     return res;
 }
 
+const signal = @import("task/signal.zig");
+
+var byte: u8 linksection("userspace") = 0;
+var byte_index: u5 linksection("userspace") = 0;
+
+fn server_handler(id: u32) linksection("userspace") callconv(.C) void {
+    byte |= @truncate((id - @intFromEnum(signal.Id.SIGUSR1)) << byte_index);
+    byte_index += 1;
+    if (byte_index == 8) {
+        _ = syscall(.write, &.{ &byte, 1 });
+        byte_index = 0;
+        byte = 0;
+    }
+}
+
+fn server() linksection(".userspace") void {
+    _ = syscall(.signal, &.{ @intFromEnum(signal.Id.SIGUSR1), &server_handler });
+    _ = syscall(.signal, &.{ @intFromEnum(signal.Id.SIGUSR2), &server_handler });
+    while (true) {}
+}
+
+fn send_byte(pid: u32, c: u8) linksection(".userspace") void {
+    for (0..8) |index| {
+        _ = syscall(.kill, &.{ pid, @intFromEnum(signal.Id.SIGUSR1) + ((c >> @as(u3, @intCast(index))) & 1) });
+        _ = syscall(.sleep, .{10});
+    }
+}
+
+fn send(pid: u32, msg: []const u8) linksection(".userspace") void {
+    for (msg) |c| {
+        send_byte(pid, c);
+    }
+}
+
+fn client(server_pid: u32) linksection(".userspace") void {
+    send(server_pid, "le minitalk\n");
+}
+
 export fn _userland() linksection(".userspace") void {
+    const pid = syscall(.fork, .{});
+    if (pid == 0) {
+        server();
+    } else {
+        client(@bitCast(pid));
+    }
+
+    _ = syscall(.exit, .{0});
+
     _ = syscall(.signal, &.{ 2, &poc_signal });
-    _ = syscall(.poc_raise, &.{2});
+    _ = syscall(.kill, &.{ syscall(.getpid, &.{}), 2 });
     // while (true) {}
     _ = syscall(.write, &.{ "coucou\n", 7 });
     _ = syscall(.fork, .{});
