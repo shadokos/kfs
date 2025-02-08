@@ -34,7 +34,7 @@ pub const Status = packed struct(u32) {
         return switch (si.transition) {
             status_informations.Status.Transition.Stopped => .{
                 .type = Type.Stopped,
-                .value = @truncate(si.siginfo.si_signo),
+                .value = @intCast(@intFromEnum(si.siginfo.si_signo)),
             },
             status_informations.Status.Transition.Continued => .{
                 .type = Type.Continued,
@@ -42,7 +42,7 @@ pub const Status = packed struct(u32) {
             },
             status_informations.Status.Transition.Terminated => if (si.signaled) .{
                 .type = Type.Signaled,
-                .value = @truncate(si.siginfo.si_signo),
+                .value = @intCast(@intFromEnum(si.siginfo.si_signo)),
             } else .{
                 .type = Type.Exited,
                 .value = @truncate(si.siginfo.si_status),

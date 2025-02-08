@@ -308,7 +308,7 @@ pub fn kill(_: anytype, args: [][]u8) CmdError!void {
     const pid = ft.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter;
     const signal = ft.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
     for (0..10) |_| {
-        @import("../../task/signal.zig").kill(pid, @enumFromInt(signal)) catch @panic("ono");
+        @import("../../syscall/kill.zig").do(pid, @enumFromInt(signal)) catch @panic("ono");
     }
 }
 
