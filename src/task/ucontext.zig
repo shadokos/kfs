@@ -25,11 +25,11 @@ pub fn put_on_stack(context: *ucontext_t, elem: anytype) *@TypeOf(elem) { // tod
     return @ptrFromInt(sp);
 }
 
-pub fn makecontext(context: *ucontext_t, f: usize, args: anytype) void {
+pub fn makecontext(context: *ucontext_t, ret_address: usize, f: usize, args: anytype) void {
     const tinfo = @typeInfo(@TypeOf(args));
     inline for (0..tinfo.Struct.fields.len) |i| {
-        _ = put_on_stack(context, @field(args, tinfo.Struct.fields.len - i - 1));
+        _ = put_on_stack(context, args[tinfo.Struct.fields.len - i - 1]);
     }
-    _ = put_on_stack(context, context.uc_link);
+    context.uc_mcontext.iret.sp = @intFromPtr(put_on_stack(context, ret_address));
     context.uc_mcontext.iret.ip = f;
 }

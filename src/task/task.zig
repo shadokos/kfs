@@ -147,7 +147,7 @@ pub const TaskDescriptor = struct {
     }
 
     fn handle_default_action(self: *Self, sig: signal.siginfo_t) void {
-        switch (self.signalManager.get_defaultAction(@enumFromInt(sig.si_signo))) {
+        switch (self.signalManager.get_defaultAction(sig.si_signo)) {
             .Ignore => {},
             .Terminate => {
                 self.state = .Zombie;
@@ -178,10 +178,7 @@ pub const TaskDescriptor = struct {
         }
     }
 
-    fn add_signal_frame(self: *Self, info: signal.siginfo_t) void {
-        const id: signal.Id = @enumFromInt(info.si_signo);
-        const handler = self.signalManager.get_action(id);
-
+    fn add_signal_frame(self: *Self, action: signal.Sigaction, info: signal.siginfo_t) void {
         // push ucontext on stack
         self.ucontext.uc_link = ucontext.put_on_stack(&self.ucontext, self.ucontext);
 
@@ -195,55 +192,42 @@ pub const TaskDescriptor = struct {
         )];
         const bytecode_begin = ucontext.put_data_on_stack(&self.ucontext, bytecode).ptr;
 
-        // push signo and return address
-        const stack_frame = [_]u32{
-            @intFromPtr(bytecode_begin),
-            info.si_signo,
-        };
-        const stack_frame_begin = ucontext.put_on_stack(&self.ucontext, stack_frame);
+        if (action.sa_flags.SA_SIGINFO) {
+            const siginfo_address = ucontext.put_on_stack(&self.ucontext, info);
+            ucontext.makecontext(
+                &self.ucontext,
+                @intFromPtr(bytecode_begin),
+                @intFromPtr(action.sa_sigaction),
+                .{ info.si_signo, siginfo_address, self.ucontext.uc_link },
+            );
+        } else {
+            ucontext.makecontext(
+                &self.ucontext,
+                @intFromPtr(bytecode_begin),
+                @intFromPtr(action.sa_handler),
+                .{info.si_signo},
+            );
+        }
+    }
 
-        // setup sp
-        self.ucontext.uc_mcontext.iret.sp = @intFromPtr(stack_frame_begin);
-
-        // setup ip
-        self.ucontext.uc_mcontext.iret.ip = @intFromPtr(handler);
+    pub fn do_action(self: *Self, action: signal.Sigaction, info: signal.siginfo_t) void {
+        if (action.sa_flags.SA_SIGINFO) {
+            self.add_signal_frame(action, info);
+        } else if (action.sa_handler == signal.SIG_DFL) {
+            self.handle_default_action(info);
+        } else if (action.sa_handler != signal.SIG_IGN) {
+            self.add_signal_frame(action, info);
+        }
     }
 
     pub fn handle_signal(self: *Self) void {
-        while (self.signalManager.get_pending_signal_for_handler(signal.SIG_DFL)) |sig| {
-            self.handle_default_action(sig);
-        }
+        // while (self.signalManager.get_pending_signal_for_handler(signal.SIG_DFL)) |sig| {
+        //     self.handle_default_action(sig);
+        // }
         while (self.signalManager.get_pending_signal()) |info| {
-            const id: signal.Id = @enumFromInt(info.si_signo);
-            const handler = self.signalManager.get_action(id);
-            if (handler == signal.SIG_IGN) {} else if (handler == signal.SIG_DFL) {
-                self.handle_default_action(info);
-            } else {
-                self.add_signal_frame(info);
-            }
-        }
-    }
-
-    pub fn get_pending_signal(self: *Self) ?struct { handler: signal.Handler, info: signal.siginfo_t } {
-        while (self.signalManager.get_pending_signal_for_handler(signal.SIG_DFL)) |sig| {
-            self.handle_default_action(sig);
-        }
-        if (self.signalManager.get_pending_signal()) |info| {
-            const id: signal.Id = @enumFromInt(info.si_signo);
-            const handler = self.signalManager.get_action(id);
-            if (handler == signal.SIG_IGN) {
-                return null;
-            } else if (handler == signal.SIG_DFL) {
-                self.handle_default_action(info);
-                return null;
-            } else {
-                return .{
-                    .handler = handler,
-                    .info = info,
-                };
-            }
-        } else {
-            return null;
+            const id: signal.Id = info.si_signo;
+            const action = self.signalManager.get_action(id);
+            self.do_action(action, info);
         }
     }
 

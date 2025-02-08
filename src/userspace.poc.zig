@@ -1,21 +1,16 @@
 const ft = @import("ft");
 const paging = @import("memory/paging.zig");
-
-pub const SigHandler = *fn () void;
-
-var current_signal: ?SigHandler = null;
-
-pub fn queue_signal(handler: SigHandler) void {
-    current_signal = handler;
-}
-
-pub fn get_next_signal() ?SigHandler {
-    defer current_signal = null;
-    return current_signal;
-}
+const signal = @import("task/signal.zig");
 
 fn poc_signal(id: u32) linksection("userspace") callconv(.C) void {
-    const str = "Signal handled\n";
+    const str = " Signal handled\n";
+    const c = id + '0';
+    _ = syscall(.write, .{ &c, 1 });
+    _ = syscall(.write, .{ str, str.len });
+}
+
+fn poc_sigaction(id: u32, _: *signal.siginfo_t, _: *void) linksection("userspace") callconv(.C) void {
+    const str = " Signal handled with sigaction\n";
     const c = id + '0';
     _ = syscall(.write, .{ &c, 1 });
     _ = syscall(.write, .{ str, str.len });
@@ -35,6 +30,11 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
         @field(_args, regs[i]) = switch (@typeInfo(@TypeOf(arg))) {
             .Int, .ComptimeInt => @intCast(arg),
             .Pointer => @bitCast(@as(u32, @intFromPtr(arg))),
+            .Optional => |child| switch (@typeInfo(child)) {
+                .Pointer => @bitCast(@as(u32, @intFromPtr(arg))),
+                else => @compileError("Invalid syscall argument type"),
+            },
+            .Null => 0,
             else => @compileError("Invalid syscall argument type"),
         };
     }
@@ -53,8 +53,6 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
     if (ebx != 0) return -1;
     return res;
 }
-
-const signal = @import("task/signal.zig");
 
 var byte: u8 linksection("userspace") = 0;
 var byte_index: u5 linksection("userspace") = 0;
@@ -93,6 +91,13 @@ fn client(server_pid: u32) linksection(".userspace") void {
 }
 
 export fn _userland() linksection(".userspace") void {
+    const sigaction = @import("task/signal.zig").Sigaction{ .sa_sigaction = &poc_sigaction, .sa_flags = .{
+        .SA_SIGINFO = true,
+    } };
+    _ = syscall(.sigaction, &.{ 2, &sigaction, null });
+    // _ = syscall(.signal, &.{ 2, &poc_signal });
+    _ = syscall(.kill, &.{ syscall(.getpid, &.{}), 2 });
+
     const pid = syscall(.fork, .{});
     if (pid == 0) {
         server();
@@ -102,8 +107,6 @@ export fn _userland() linksection(".userspace") void {
 
     _ = syscall(.exit, .{0});
 
-    _ = syscall(.signal, &.{ 2, &poc_signal });
-    _ = syscall(.kill, &.{ syscall(.getpid, &.{}), 2 });
     // while (true) {}
     _ = syscall(.write, &.{ "coucou\n", 7 });
     _ = syscall(.fork, .{});
