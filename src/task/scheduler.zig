@@ -4,7 +4,7 @@ const task_set = @import("task_set.zig");
 
 pub var lock_count: u32 = 0;
 var current_task: *task.TaskDescriptor = undefined;
-var initialized: bool = false;
+pub var initialized: bool = false;
 
 pub fn init(new_task: *task.TaskDescriptor) void {
     @This().lock();

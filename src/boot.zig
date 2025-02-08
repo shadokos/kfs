@@ -87,6 +87,8 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("task/task.zig").TaskDescriptor.init_cache() catch @panic("Failed to initialized task_descriptor cache");
 
+    @import("task/signal.zig").SignalQueue.init_cache() catch @panic("Failed to initialized SignalQueue cache");
+
     if (!@import("build_options").ci) {
         kernel.main();
     } else {
