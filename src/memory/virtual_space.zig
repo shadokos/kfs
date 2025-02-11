@@ -7,7 +7,8 @@ const cpu = @import("../cpu.zig");
 const Cache = @import("object_allocators/slab/cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;
 
-const Region = @import("regions.zig").Region;
+const regions = @import("regions.zig");
+const Region = regions.Region;
 const RegionSet = @import("region_set.zig").RegionSet;
 
 const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
@@ -164,11 +165,7 @@ pub const VirtualSpace = struct {
     pub fn map(self: *Self, physical: paging.PhysicalPtr, virtual: paging.VirtualPagePtr, npages: usize) !void {
         const region = try self.reserve_region(@intFromPtr(virtual) >> 12, npages);
         if (region) |r| {
-            r.value = .{
-                .physical_mapping = .{
-                    .offset = physical - @intFromPtr(virtual),
-                },
-            };
+            regions.PhysicalMapping.init(r, physical - @intFromPtr(virtual));
             self.commit(r, true);
         } else return error.TODO;
     }
@@ -182,17 +179,14 @@ pub const VirtualSpace = struct {
         }
         if (page != region.begin) {
             const left = try self.create_region(region.begin, page - region.begin);
-            left.value = region.value;
+            left.operations = region.operations;
+            left.data = region.data;
             self.commit(left, false);
         }
         if (page + npages != region.begin + region.len) {
             const right = try self.create_region(page + npages, region.begin + region.len - (page + npages));
-            right.value = region.value;
-            switch (right.value) {
-                .virtually_contiguous_allocation => {},
-                .physically_contiguous_allocation => {},
-                .physical_mapping => {},
-            }
+            right.operations = region.operations;
+            right.data = region.data;
             self.commit(right, false);
         }
         self.destroy_region(region);
@@ -211,14 +205,13 @@ pub const VirtualSpace = struct {
         npages: usize,
     ) !paging.VirtualPagePtr {
         const region = try self.alloc_region(npages);
-        region.value = .{
-            .physical_mapping = .{
-                .offset = (@as(paging.PhysicalPtrDiff, @intCast(physical_pages)) - @as(
-                    paging.PhysicalPtrDiff,
-                    @intCast(region.begin),
-                ) * paging.page_size),
-            },
-        };
+        regions.PhysicalMapping.init(
+            region,
+            @as(paging.PhysicalPtrDiff, @intCast(physical_pages)) - @as(
+                paging.PhysicalPtrDiff,
+                @intCast(region.begin),
+            ) * paging.page_size,
+        );
         self.commit(region, true);
         return @ptrFromInt(region.begin << 12);
     }
@@ -267,14 +260,12 @@ pub const VirtualSpace = struct {
         var region = try self.alloc_region(npages);
         if (options.physically_contiguous) {
             const physical = try pageFrameAllocator.alloc_pages(npages);
-            region.value = .{ .physically_contiguous_allocation = .{
-                .offset = (@as(paging.PhysicalPtrDiff, @intCast(physical)) - @as(
-                    paging.PhysicalPtrDiff,
-                    @intCast(region.begin),
-                ) * paging.page_size),
-            } };
+            regions.PhysicallyContiguousRegion.init(region, @as(paging.PhysicalPtrDiff, @intCast(physical)) - @as(
+                paging.PhysicalPtrDiff,
+                @intCast(region.begin),
+            ) * paging.page_size);
         } else {
-            region.value = .{ .virtually_contiguous_allocation = .{} };
+            regions.VirtuallyContiguousRegion.init(region);
         }
         self.commit(region, true);
         if (options.immediate_mapping) {
@@ -297,27 +288,7 @@ pub const VirtualSpace = struct {
         if (region.begin + region.len < page + npages) {
             return Error.InvalidPointer;
         }
-        switch (region.value) {
-            .physically_contiguous_allocation => {
-                const page_address: paging.VirtualPagePtr = @ptrFromInt(page * paging.page_size);
-                const physical_ptr = mapping.get_physical_ptr(@ptrCast(page_address)) catch @panic("todo");
-                @import("../memory.zig").pageFrameAllocator.free_pages(physical_ptr, npages) catch @panic("todo2");
-            },
-            .virtually_contiguous_allocation => {
-                for (0..npages) |p| // todo overflow (physical can be 64 bit)
-                {
-                    const page_address: paging.VirtualPagePtr = @ptrFromInt((page + p) * paging.page_size);
-                    const entry = mapping.get_entry(page_address);
-                    if (mapping.is_page_present(entry)) {
-                        const physical_ptr = mapping.get_physical_ptr(@ptrCast(page_address)) catch @panic("todo");
-                        @import("../memory.zig").pageFrameAllocator.free_pages(physical_ptr, 1) catch @panic("todo3");
-                    }
-                }
-            },
-            else => {
-                return Error.InvalidPointer;
-            },
-        }
+        region.operations.free(region, address, npages);
         return self.unmap(@ptrFromInt(page * paging.page_size), npages);
     }
 
@@ -347,7 +318,7 @@ pub const VirtualSpace = struct {
 
         self.directory_region = region;
 
-        region.value = .{ .virtually_contiguous_allocation = .{} };
+        regions.VirtuallyContiguousRegion.init(region);
         self.commit(region, false);
         if (map_now) {
             try region.map_now();

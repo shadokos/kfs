@@ -54,38 +54,7 @@ fn GPE_handler(frame: InterruptFrame) void {
     logger.err("general protection fault 0b{b:0>32}", .{frame.code});
 }
 
-pub fn init() void {
-    logger.debug("Initializing memory", .{});
-
-    const total_space: u64 = get_max_mem();
-    logger.debug("\ttotal_space: {x}", .{total_space});
-
-    const direct_begin: paging.PhysicalPtr = ft.mem.alignForward(
-        paging.PhysicalPtr,
-        @intFromPtr(boot.kernel_end),
-        paging.page_size,
-    );
-    const direct_end: paging.PhysicalUsize = @max(direct_begin, ft.mem.alignBackward(
-        paging.PhysicalPtr,
-        @min(
-            total_space,
-            direct_begin + paging.direct_zone_size,
-        ),
-        paging.page_size,
-    ));
-    const direct_size: paging.PhysicalUsize = direct_end - direct_begin;
-
-    const medium_begin: paging.PhysicalPtr = ft.mem.alignForward(paging.PhysicalPtr, direct_end, paging.page_size);
-    const medium_end: paging.PhysicalPtr = @max(medium_begin, ft.mem.alignBackward(
-        paging.PhysicalPtr,
-        @min(
-            total_space,
-            paging.kernel_virtual_space_top,
-        ),
-        paging.page_size,
-    ));
-    const medium_size: paging.PhysicalUsize = medium_end - medium_begin;
-
+fn init_PFA(direct_begin: paging.PhysicalPtr, direct_size: paging.PhysicalUsize, total_space: u64) void {
     logger.debug("\tInitializing page frame allocator...", .{});
     pageFrameAllocator = PageFrameAllocatorType.init(total_space);
     pageFrameAllocator.init_zone(
@@ -95,18 +64,24 @@ pub fn init() void {
         boot_allocator.allocator(),
     );
     logger.debug("\tPage frame allocator initialized", .{});
+}
 
-    logger.debug("\tCheck ram availability", .{});
-    check_mem_availability(direct_begin, direct_end); // todo: maybe find a faster way
+fn init_medium(medium_begin: paging.PhysicalPtr, medium_size: paging.PhysicalUsize) void {
+    logger.debug("\tInitializing medium physical memory (from 0x{x:0>8} to 0x{x:0>8})...", .{
+        medium_begin,
+        medium_begin + medium_size,
+    });
+    pageFrameAllocator.init_zone(
+        .Medium,
+        medium_begin,
+        medium_size,
+        bigAlloc.allocator(),
+    );
+    check_mem_availability(medium_begin, medium_begin + medium_size); // todo: maybe find a faster way
+    logger.debug("\tMedium physical memory initialized...", .{});
+}
 
-    logger.debug("\tInitializing direct page allocator...", .{});
-    directPageAllocator = DirectPageAllocator.init(paging.high_half);
-
-    logger.debug("\tInitializing slab allocator's global cache...", .{});
-    const GlobalCache = @import("memory/object_allocators/slab/cache.zig").GlobalCache;
-    globalCache = GlobalCache.init(directPageAllocator.page_allocator()) catch @panic("cannot init globalCache");
-    logger.debug("\tGlobal cache initialized", .{});
-
+fn init_physical_memory() void {
     logger.debug("\tInitializing physical memory allocator...", .{});
     directMemory = MultipoolAllocator.init("dma_kmalloc", directPageAllocator.page_allocator()) catch {
         @panic("cannot cache_init MultipoolAllocator");
@@ -115,7 +90,9 @@ pub fn init() void {
         @panic("cannot cache_init MultipoolAllocator");
     };
     logger.debug("\tPhysical memory allocator initialized", .{});
+}
 
+fn init_kernel_vm() void {
     logger.debug("\tInitializing kernel virtual space...", .{});
     VirtualSpace.global_init() catch @panic("unable to init VirtualSpace");
     kernel_virtual_space.init() catch @panic("unable to init kernel virtual space");
@@ -142,6 +119,50 @@ pub fn init() void {
         @panic("not enough space to boot");
     };
     logger.debug("\tKernel virtual space activated", .{});
+}
+
+pub fn init() void {
+    logger.debug("Initializing memory", .{});
+
+    const total_space: u64 = get_max_mem();
+    logger.debug("\ttotal_space: {x}", .{total_space});
+
+    const direct_begin: paging.PhysicalPtr = ft.mem.alignForward(
+        paging.PhysicalPtr,
+        @intFromPtr(boot.kernel_end),
+        paging.page_size,
+    );
+    const direct_end: paging.PhysicalUsize = @max(direct_begin, ft.mem.alignBackward(
+        paging.PhysicalPtr,
+        @min(total_space, direct_begin + paging.direct_zone_size),
+        paging.page_size,
+    ));
+    const direct_size: paging.PhysicalUsize = direct_end - direct_begin;
+
+    const medium_begin: paging.PhysicalPtr = ft.mem.alignForward(paging.PhysicalPtr, direct_end, paging.page_size);
+    const medium_end: paging.PhysicalPtr = @max(medium_begin, ft.mem.alignBackward(
+        paging.PhysicalPtr,
+        @min(total_space, paging.kernel_virtual_space_top),
+        paging.page_size,
+    ));
+    const medium_size: paging.PhysicalUsize = medium_end - medium_begin;
+
+    init_PFA(direct_begin, direct_size, total_space);
+
+    logger.debug("\tCheck ram availability", .{});
+    check_mem_availability(direct_begin, direct_end); // todo: maybe find a faster way
+
+    logger.debug("\tInitializing direct page allocator...", .{});
+    directPageAllocator = DirectPageAllocator.init(paging.high_half);
+
+    logger.debug("\tInitializing slab allocator's global cache...", .{});
+    const GlobalCache = @import("memory/object_allocators/slab/cache.zig").GlobalCache;
+    globalCache = GlobalCache.init(directPageAllocator.page_allocator()) catch @panic("cannot init globalCache");
+    logger.debug("\tGlobal cache initialized", .{});
+
+    init_physical_memory();
+
+    init_kernel_vm();
 
     // logger.debug("\tRemapping kernel...", .{});
     // map_kernel(); // todo shrink kernel
@@ -152,18 +173,7 @@ pub fn init() void {
     logger.debug("\tVirtual memory allocator initialized", .{});
 
     if (medium_size != 0) {
-        logger.debug("\tInitializing medium physical memory (from 0x{x:0>8} to 0x{x:0>8})...", .{
-            medium_begin,
-            medium_end,
-        });
-        pageFrameAllocator.init_zone(
-            .Medium,
-            medium_begin,
-            medium_size,
-            bigAlloc.allocator(),
-        );
-        check_mem_availability(medium_begin, medium_end); // todo: maybe find a faster way
-        logger.debug("\tMedium physical memory initialized...", .{});
+        init_medium(medium_begin, medium_size);
     }
 
     logger.info("Memory initialized", .{});
