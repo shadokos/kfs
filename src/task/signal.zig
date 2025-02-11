@@ -68,10 +68,12 @@ pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callco
 pub const SIG_DFL: Handler = @ptrFromInt(0);
 pub const SIG_IGN: Handler = @ptrFromInt(1);
 
+pub const SigSet = u32;
+
 pub const Sigaction = extern struct {
     sa_handler: Handler = SIG_DFL,
     sa_sigaction: SigactionHandler = undefined,
-    sa_mask: u32 = 0,
+    sa_mask: SigSet = 0,
     sa_flags: packed struct(u32) {
         SA_NOCLDSTOP: bool = false, // todo
         // SA_ONSTACK, : bool = false,
@@ -140,7 +142,8 @@ pub const SignalQueue = struct {
     }
 
     pub fn set_action(self: *Self, action: Sigaction) !void {
-        // todo
+        if (!self.ignorable)
+            return Errno.EINVAL;
         self.action = action;
         if (self.is_ignored()) {
             while (self.queue.len != 0) {
@@ -152,8 +155,11 @@ pub const SignalQueue = struct {
 
 pub const SignalManager = struct {
     queues: [32]SignalQueue = undefined,
-    pending: u32 = 0,
+    pending: SigSet = 0,
     const Self = @This();
+
+    const non_maskable: SigSet = (@as(SigSet, 1) << @intFromEnum(Id.SIGKILL)) |
+        (@as(SigSet, 1) << @intFromEnum(Id.SIGSTOP));
 
     fn init_queue(self: *Self, id: Id, default_action: DefaultAction, ignorable: bool) void {
         self.queues[@intFromEnum(id)] = SignalQueue.init(default_action, ignorable);
@@ -210,40 +216,24 @@ pub const SignalManager = struct {
         }
         self.queues[@intFromEnum(signal.si_signo)].queue_signal(signal);
         if (self.queues[@intFromEnum(signal.si_signo)].queue.len != 0) { // todo
-            self.pending |= @as(u32, 1) << @as(u5, @intCast(@intFromEnum(signal.si_signo)));
+            self.pending |= @as(SigSet, 1) << @as(u5, @intCast(@intFromEnum(signal.si_signo)));
         }
     }
 
-    pub fn get_pending_signal(self: *Self) ?siginfo_t {
-        if (self.pending != 0) {
-            const signo = @ctz(self.pending);
+    pub fn get_pending_signal(self: *Self, mask: SigSet) ?siginfo_t {
+        const real_mask: SigSet = mask & ~non_maskable;
+        if ((self.pending & ~real_mask) != 0) {
+            const signo = @ctz(self.pending & ~real_mask);
             const q = &self.queues[signo];
             if (q.pop()) |s| {
                 if (q.queue.len == 0) { // todo
-                    self.pending &= ~(@as(u32, 1) << @intCast(signo));
+                    self.pending ^= @as(SigSet, 1) << @intCast(signo);
                 }
                 return s;
             } else unreachable;
         }
         return null;
     }
-
-    // pub fn get_pending_signal_for_handler(self: *Self, handler: Handler) ?siginfo_t {
-    //     var signo = @ctz(self.pending);
-    //     while (signo < 32) {
-    //         const q = &self.queues[signo];
-    //         if (q.action.sa_handler == handler) {
-    //             if (q.pop()) |s| {
-    //                 if (q.queue.len == 0) { // todo
-    //                     self.pending &= ~(@as(u32, 1) << @intCast(signo));
-    //                 }
-    //                 return s;
-    //             } else unreachable;
-    //         }
-    //         signo = @ctz((self.pending >> @intCast(signo)) >> 1) + signo;
-    //     }
-    //     return null;
-    // }
 
     pub fn has_pending(self: Self) bool {
         return self.pending != 0;
