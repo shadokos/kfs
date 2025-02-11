@@ -1,13 +1,14 @@
 const interrupts = @import("../interrupts.zig");
+const signal = @import("signal.zig");
 const ft = @import("ft");
 
 pub const mcontext_t = interrupts.InterruptFrame;
 
 pub const ucontext_t = extern struct {
     uc_link: ?*ucontext_t = null,
-    // uc_sigmask : sigset_t,
+    uc_sigmask: signal.SigSet = 0,
     // uc_stack : stack_t,
-    uc_mcontext: mcontext_t,
+    uc_mcontext: mcontext_t = undefined,
 };
 
 pub fn put_data_on_stack(context: *ucontext_t, data: []u8) []u8 {
