@@ -79,8 +79,8 @@ pub fn Shell(comptime _builtins: anytype) type {
                 shell: *Self,
                 args: [][]u8,
 
-                fn start_cmd(data: anytype) u8 {
-                    const self: *cmd_arguments(function) = data;
+                fn start_cmd(data: usize) u8 {
+                    const self: *@This() = @ptrFromInt(data);
                     const ret: u8 = if (function(self.shell, self.args)) |_| 0 else |e| @truncate(
                         @intFromError(e),
                     ); //todo
@@ -101,7 +101,7 @@ pub fn Shell(comptime _builtins: anytype) type {
                 .args = args,
             };
             const descriptor = task_set.create_task() catch @panic("c'est  la  panique 5"); // todo
-            descriptor.spawn(&CmdStruct.start_cmd, arg_struct) catch @panic("c'est  la  panique 5");
+            descriptor.spawn(&CmdStruct.start_cmd, @intFromPtr(arg_struct)) catch @panic("c'est  la  panique 5");
             return descriptor.pid;
         }
 
