@@ -10,7 +10,7 @@ const mapping = @import("../memory/mapping.zig");
 
 pub const Id = 7;
 
-fn exec_child(_: anytype) u8 {
+fn exec_child(_: usize) u8 {
     const current_task = scheduler.get_current_task();
     if (current_task.vm) |vm|
         vm.transfer();
@@ -40,6 +40,6 @@ pub fn do_raw() void {
     current_task.ucontext.uc_mcontext.ebx = 0;
 
     scheduler.lock();
-    new_task.spawn(&exec_child, {}) catch @panic("todo errno");
+    new_task.spawn(&exec_child, undefined) catch @panic("todo errno");
     scheduler.unlock();
 }
