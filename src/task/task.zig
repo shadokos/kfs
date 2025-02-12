@@ -234,7 +234,7 @@ pub const TaskDescriptor = struct {
         }
     }
 
-    pub fn spawn(self: *Self, function: *const fn (anytype) u8, data: anytype) !void {
+    pub noinline fn spawn(self: *Self, function: *const fn (usize) u8, data: usize) !void {
         scheduler.lock();
         var is_parent: bool = false;
         const is_parent_ptr: *volatile bool = &is_parent;
@@ -247,7 +247,7 @@ pub const TaskDescriptor = struct {
         scheduler.unlock();
     }
 
-    pub noinline fn start_task(self: *Self, function: *const fn (anytype) u8, data: anytype) noreturn {
+    pub noinline fn start_task(self: *Self, function: *const fn (usize) u8, data: usize) noreturn {
         scheduler.add_task(self);
         scheduler.set_current_task(self);
         gdt.tss.esp0 = @as(usize, @intFromPtr(&self.stack)) + self.stack.len;

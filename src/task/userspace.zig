@@ -26,7 +26,7 @@ comptime {
 }
 extern fn _userland() void;
 
-pub fn switch_to_userspace(_: anytype) u8 {
+pub fn switch_to_userspace(_: usize) u8 {
     clone(@intFromPtr(&_userland));
     return 0;
 }
