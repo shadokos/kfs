@@ -25,7 +25,7 @@ pub fn kernel_log(
         args,
     );
     if (message_level == .err and scope == .default) {
-        @import("cpu.zig").disable_interrupts();
+        @import("task/scheduler.zig").lock();
         if (@import("build_options").ci) {
             var com_port = @import("shell/ci/shell.zig").com_port_1;
             var packet = @import("shell/ci/packet.zig").Packet([]u8).init(com_port.get_writer().any());
