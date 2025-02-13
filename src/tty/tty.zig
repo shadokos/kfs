@@ -99,7 +99,7 @@ pub fn TtyN(comptime history_size: u32) type {
         /// current theme
         theme: ?themes.Theme = themes.default,
 
-        const input_buffer_pos_t = ft.meta.Int(.unsigned, ft.math.log2(MAX_INPUT)); // todo
+        const input_buffer_pos_t = ft.meta.Int(.unsigned, ft.math.log2(MAX_INPUT)); // todo: is this the right type?
 
         /// Writer object type
         pub const Writer = ft.io.Writer(*Self, Self.WriteError, Self.write);

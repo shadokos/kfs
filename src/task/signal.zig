@@ -75,13 +75,13 @@ pub const Sigaction = extern struct {
     sa_sigaction: SigactionHandler = undefined,
     sa_mask: SigSet = 0,
     sa_flags: packed struct(u32) {
-        SA_NOCLDSTOP: bool = false, // todo
+        SA_NOCLDSTOP: bool = false, // todo: implement this option
         // SA_ONSTACK, : bool = false,
-        SA_RESETHAND: bool = false, // todo
-        SA_RESTART: bool = false, // todo
+        SA_RESETHAND: bool = false, // todo: implement this option
+        SA_RESTART: bool = false, // todo: implement this option
         SA_SIGINFO: bool = false,
         // SA_NOCLDWAIT : bool = false,
-        SA_NODEFER: bool = false, // todo
+        SA_NODEFER: bool = false,
         // SS_ONSTACK : bool = false,
         // SS_DISABLE : bool = false,
         // MINSIGSTKSZ : bool = false,
@@ -121,7 +121,7 @@ pub const SignalQueue = struct {
     fn is_ignored(self: Self) bool {
         return !self.action.sa_flags.SA_SIGINFO and
             (self.action.sa_handler == SIG_IGN or
-            (self.action.sa_handler == SIG_DFL and self.default_handler == .Ignore)); // todo
+            (self.action.sa_handler == SIG_DFL and self.default_handler == .Ignore));
     }
 
     pub fn queue_signal(self: *Self, signal: siginfo_t) void {
@@ -215,7 +215,7 @@ pub const SignalManager = struct {
             @panic("todo");
         }
         self.queues[@intFromEnum(signal.si_signo)].queue_signal(signal);
-        if (self.queues[@intFromEnum(signal.si_signo)].queue.len != 0) { // todo
+        if (self.queues[@intFromEnum(signal.si_signo)].queue.len != 0) { // todo: there may be a better way to do this
             self.pending |= @as(SigSet, 1) << @as(u5, @intCast(@intFromEnum(signal.si_signo)));
         }
     }
@@ -226,7 +226,7 @@ pub const SignalManager = struct {
             const signo = @ctz(self.pending & ~real_mask);
             const q = &self.queues[signo];
             if (q.pop()) |s| {
-                if (q.queue.len == 0) { // todo
+                if (q.queue.len == 0) {
                     self.pending ^= @as(SigSet, 1) << @intCast(signo);
                 }
                 return s;

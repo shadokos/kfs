@@ -239,11 +239,16 @@ const Specifier = enum {
     any,
 };
 
-pub const FormatOptions = struct { precision: ?usize = null, width: ?usize = null, alignment: enum {
-    left,
-    center,
-    right,
-} = .right, fill: u8 = ' ' };
+pub const FormatOptions = struct {
+    precision: ?usize = null,
+    width: ?usize = null,
+    alignment: enum {
+        left,
+        center,
+        right,
+    } = .right,
+    fill: u8 = ' ',
+};
 
 pub const Case = enum { lower, upper };
 
@@ -357,7 +362,7 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
                     argument = Argument{ .index = current_arg - 1 };
                 }
                 const specifier: Specifier = comptime try get_specifier(&fmt_copy) orelse Specifier.any;
-                comptime var options = FormatOptions{}; // todo
+                comptime var options = FormatOptions{};
                 if (comptime accept(":", &fmt_copy) catch null) |_| {
                     if (fmt_copy.len >= 2 and (fmt_copy[1] == '<' or fmt_copy[1] == '^' or fmt_copy[1] == '>')) {
                         options.fill = (comptime accept(null, &fmt_copy) catch {}).?;
