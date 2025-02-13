@@ -175,7 +175,7 @@ fn get_tag_type(comptime n: comptime_int) type {
             framebuffer_bpp: u8,
             framebuffer_type: u8,
             reserved: u8,
-            first_color_info: u8, // todo
+            first_color_info: u8,
         },
         extern struct { // MULTIBOOT_TAG_TYPE_ELF_SECTIONS
             num: u32,

@@ -183,7 +183,7 @@ pub const Cache = struct {
 
     pub fn get_page_frame_descriptor(_: *Self, obj: *usize) *page_frame_descriptor {
         const addr = ft.mem.alignBackward(usize, @intFromPtr(obj), paging.page_size);
-        return mapping.get_page_frame_descriptor(@ptrFromInt(addr)) catch unreachable; // todo
+        return mapping.get_page_frame_descriptor(@ptrFromInt(addr)) catch @panic("todo");
     }
 
     pub fn has_obj(self: *Self, obj: *usize) bool {
@@ -232,7 +232,7 @@ pub const Cache = struct {
         const self: *Self = @ptrCast(@alignCast(ctx));
         if (buf_align > self.align_obj)
             @panic("Invalid alignment for slab allocator cache");
-        _ = ret_addr; // todo
+        _ = ret_addr; // todo: take this variable into account
 
         self.free(@alignCast(@ptrCast(buf))) catch @panic("invalid free");
     }
@@ -241,7 +241,7 @@ pub const Cache = struct {
         const self: *Self = @ptrCast(@alignCast(ctx));
         if (ptr_align > self.align_obj)
             @panic("Invalid alignment for slab allocator cache");
-        _ = ret_addr; // todo
+        _ = ret_addr; // todo: take this variable into account
         if (len != self.size_obj) {
             return null;
         }
@@ -252,8 +252,8 @@ pub const Cache = struct {
         const self: *Self = @ptrCast(@alignCast(ctx));
         if (buf_align > self.align_obj)
             @panic("Invalid alignment for slab allocator cache");
-        _ = ret_addr; // todo
-        _ = buf;
+        _ = ret_addr; // todo: take this variable into account
+        _ = buf; // todo: take this variable into account
         return new_len == self.size_obj;
     }
 

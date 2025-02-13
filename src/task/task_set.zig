@@ -3,7 +3,7 @@ const task = @import("task.zig");
 const TaskDescriptor = task.TaskDescriptor;
 const scheduler = @import("scheduler.zig");
 
-const NTASK = 100; // todo
+const NTASK = 100; // todo: get this value from config
 
 var list: [NTASK]?*TaskDescriptor = [1]?*TaskDescriptor{null} ** NTASK;
 var head: TaskDescriptor.Pid = 0;

@@ -8,7 +8,7 @@ pub fn log2(x: anytype) @TypeOf(x) {
             while ((absolute >> @intCast(i)) > 1) : (i += 1) {}
             return i;
         },
-        else => unreachable, // todo
+        else => unreachable, // todo: implement for other types
     }
 }
 
@@ -21,7 +21,7 @@ pub fn IntFittingRange(comptime from: comptime_int, comptime to: comptime_int) t
     }
 
     const absolute_max = if (-from > to) -from else to;
-    const bits = @max(log2(absolute_max), 1) + 1; // todo
+    const bits = @max(log2(absolute_max), 1) + 1; // todo: this is not right
     const signedness: @import("std").builtin.Signedness = if (from < 0 or to < 0) .signed else .unsigned;
     return ft.meta.Int(signedness, bits + (if (signedness == .signed) 1 else 0));
 }
