@@ -1,60 +1,12 @@
 const tty = @import("tty/tty.zig");
 const c = @import("colors");
 
-const logo =
-    "    +   .                                   \n" ++
-    "    :  :                                    \n" ++
-    "     . ;                                    \n" ++
-    " -..   +$                                   \n" ++
-    "    `+_ .$                                  \n" ++
-    "      _ +;$;  $$+                           \n" ++
-    "   +`    +$$$$$$$$$$$$x.                    \n" ++
-    " x`         X$$$$$$$$$$$$x                  \n" ++
-    ";          $$$+$$$$$$$$$$$$.                \n" ++
-    ":         +$$$+;$$$$$$$$$$$$$$$$x.          \n" ++
-    "        .o;-----.$$$$$$$$$$$$$$$$$$x.       \n" ++
-    "       $$ $$;-'`   ;X$$$$$$$$$$$$$$$$$+     \n" ++
-    "      $$ $X $$$$$;;$x $$.$   :$$$$$$$$$$    \n" ++
-    "      . $$ $$  $ $ .$  $        $$$$$$$$$   \n" ++
-    "     .  : $$  $; $  $ $           $$;$$$$x  \n" ++
-    "      ..  :   $x $  $$ $x          .  $$$$  \n" ++
-    "        : :    + +   $$  X            .$$$+ \n" ++
-    "               .  ;    x              $$$$  \n" ++
-    "                   ;                .$$$$X  \n" ++
-    "       $&&&  &&&  &&&&&&  ;&&&&;   $$$$$$.  \n" ++
-    "       .&&x &&.   x&&:   &&&     :$$$$$$$   \n" ++
-    "       .&&x&&     x&&&&  x&&&&$  $$$$$$     \n" ++
-    "       .&&x&&&    x&&:      &&&&;           \n" ++
-    "       .&&x &&&   x&&:   x   .&&;           \n" ++
-    "       $&&&  &&&; &&&&   ;&&&&&             \n";
+const logo = @embedFile("misc/ascii_art/logo.ascii");
+const letter_o = @embedFile("misc/ascii_art/letters/o.ascii");
+const letter_h = @embedFile("misc/ascii_art/letters/h.ascii");
+const letter_n = @embedFile("misc/ascii_art/letters/n.ascii");
 
-const letter_o =
-    "\x20\xb3\xb3\xb3\x20\n" ++
-    "\xb3\x20\x20\x20\xb3\n" ++
-    "\xb3\x20\x20\x20\xb3\n" ++
-    "\xb3\x20\x20\x20\xb3\n" ++
-    "\x20\xb3\xb3\xb3\x20\n";
-
-const letter_h =
-    "\xb3\x20\x20\x20\xb3\n" ++
-    "\xb3\x20\x20\x20\xb3\n" ++
-    "\xb3\xb3\xb3\xb3\xb3\n" ++
-    "\xb3\x20\x20\x20\xb3\n" ++
-    "\xb3\x20\x20\x20\xb3\n";
-
-const letter_n =
-    "\xb3\x20\x20\x20\xb3\n" ++
-    "\xb3\xb3\x20\x20\xb3\n" ++
-    "\xb3\x20\xb3\x20\xb3\n" ++
-    "\xb3\x20\x20\xb3\xb3\n" ++
-    "\xb3\x20\x20\x20\xb3\n";
-
-const letter_exclamation =
-    "\x20\x20\xb3\x20\x20\n" ++
-    "\x20\x20\xb3\x20\x20\n" ++
-    "\x20\x20\xb3\x20\x20\n" ++
-    "\x20\x20\x20\x20\x20\n" ++
-    "\x20\x20\xb3\x20\x20\n";
+const letter_exclamation = @embedFile("misc/ascii_art/letters/exclamation_mark.ascii");
 
 pub fn print_ascii_art(
     image: []const u8,
@@ -70,6 +22,8 @@ pub fn print_ascii_art(
             _coord.y += 1;
         },
         else => {
+            if (_coord.x >= 80 or _coord.y >= 25)
+                continue;
             tty.printk(
                 "\x1b[{d};{d}H{s}",
                 .{ _coord.y, _coord.x, [1]u8{char} },
