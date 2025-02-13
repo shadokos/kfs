@@ -27,11 +27,11 @@ fn FixedBufferStream(comptime Buffer: type) type {
         }
 
         // pub fn read(self: *Self, dest: []u8) ReadError!usize {
-        //  unreachable; //todo
+        //  unreachable; //todo: implement read
         // }
 
         // pub fn reader(self: *Self) Reader {
-        //  unreachable; //todo
+        //  unreachable; //todo: implement reader
         // }
 
         pub fn reset(self: *Self) void {
@@ -55,7 +55,7 @@ fn FixedBufferStream(comptime Buffer: type) type {
         }
 
         // pub fn seekableStream(self: *Self) SeekableStream {
-        //  unreachable; //todo
+        //  unreachable; //todo: implement seekableStream
         // }
 
         pub fn write(self: *Self, bytes: []const u8) WriteError!usize {
