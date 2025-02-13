@@ -132,7 +132,7 @@ pub const VirtualSpace = struct {
     }
 
     fn clone_region(self: *Self, region: *Region) !void {
-        _ = self; // todo
+        _ = self; // todo: maybe stateless (can we do this operation while this virtual space is not active)
         for (region.begin..region.begin + region.len) |p| {
             const pagePtr: paging.VirtualPagePtr = @ptrFromInt(p << paging.page_bits);
             var entry = mapping.get_entry(pagePtr);
@@ -300,7 +300,7 @@ pub const VirtualSpace = struct {
         switch (region.value) {
             .physically_contiguous_allocation => {
                 const page_address: paging.VirtualPagePtr = @ptrFromInt(page * paging.page_size);
-                const physical_ptr = mapping.get_physical_ptr(@ptrCast(page_address)) catch unreachable; // todo
+                const physical_ptr = mapping.get_physical_ptr(@ptrCast(page_address)) catch @panic("todo");
                 @import("../memory.zig").pageFrameAllocator.free_pages(physical_ptr, npages) catch @panic("todo2");
             },
             .virtually_contiguous_allocation => {
@@ -309,7 +309,7 @@ pub const VirtualSpace = struct {
                     const page_address: paging.VirtualPagePtr = @ptrFromInt((page + p) * paging.page_size);
                     const entry = mapping.get_entry(page_address);
                     if (mapping.is_page_present(entry)) {
-                        const physical_ptr = mapping.get_physical_ptr(@ptrCast(page_address)) catch unreachable; //todo
+                        const physical_ptr = mapping.get_physical_ptr(@ptrCast(page_address)) catch @panic("todo");
                         @import("../memory.zig").pageFrameAllocator.free_pages(physical_ptr, 1) catch @panic("todo3");
                     }
                 }

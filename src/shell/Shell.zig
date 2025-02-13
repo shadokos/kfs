@@ -83,7 +83,7 @@ pub fn Shell(comptime _builtins: anytype) type {
                     const self: *@This() = @ptrFromInt(data);
                     const ret: u8 = if (function(self.shell, self.args)) |_| 0 else |e| @truncate(
                         @intFromError(e),
-                    ); //todo
+                    ); //todo: this may not be correct
                     allocator.destroy(self);
                     return ret;
                 }
@@ -100,8 +100,8 @@ pub fn Shell(comptime _builtins: anytype) type {
                 .shell = self,
                 .args = args,
             };
-            const descriptor = task_set.create_task() catch @panic("c'est  la  panique 5"); // todo
-            descriptor.spawn(&CmdStruct.start_cmd, @intFromPtr(arg_struct)) catch @panic("c'est  la  panique 5");
+            const descriptor = task_set.create_task() catch @panic("todo");
+            descriptor.spawn(&CmdStruct.start_cmd, @intFromPtr(arg_struct)) catch @panic("todo");
             return descriptor.pid;
         }
 
