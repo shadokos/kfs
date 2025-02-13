@@ -84,14 +84,15 @@ pub fn wait(
     stat_loc: *Status,
     options: WaitOptions,
 ) Errno!?TaskDescriptor.Pid {
-    const descriptor = task_set.get_task_descriptor(pid) orelse return Errno.ECHILD; // todo
+    // todo: check if this is the right errno
+    const descriptor = task_set.get_task_descriptor(pid) orelse return Errno.ECHILD;
     if (options._unused != 0) {
         return Errno.EINVAL;
     }
     // todo ESRCH
     // const current_task = scheduler.get_current_task();
     // if (descriptor.parent != current_task) {
-    //     return error.InvalidPid; // todo
+    //     return error.InvalidPid; // todo: check perm
     // }
     while (true) {
         if (try wait_transition(descriptor, selector, options)) |d| {
@@ -99,7 +100,7 @@ pub fn wait(
             stat_loc.* = Status.from_status_info(status_info);
             const ret = d.pid;
             if (status_info.transition == .Terminated) {
-                task_set.destroy_task(d.pid) catch @panic("je panique la");
+                task_set.destroy_task(d.pid) catch @panic("todo");
             }
             return ret;
         }
