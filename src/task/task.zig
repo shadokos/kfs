@@ -16,7 +16,8 @@ const logger = ft.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
 pub const TaskDescriptor = struct {
-    stack: [16 * 1024]u8 align(4096) = undefined, // todo
+    // todo: define the appropriate size for a kernelspace stack or get this value from config
+    stack: [16 * 1024]u8 align(4096) = undefined,
     pid: Pid,
     pgid: Pid,
 

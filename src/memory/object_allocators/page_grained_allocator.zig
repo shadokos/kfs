@@ -51,8 +51,8 @@ pub const PageGrainedAllocator = struct {
 
     fn vtable_free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        _ = buf_align; // todo
-        _ = ret_addr; // todo
+        _ = buf_align; // todo: take this variable into account
+        _ = ret_addr; // todo: take this variable into account
         const chunk: *ChunkHeader = @ptrFromInt(ft.mem.alignForward(
             usize,
             @intFromPtr(buf.ptr) - paging.page_size,
@@ -64,7 +64,7 @@ pub const PageGrainedAllocator = struct {
 
     fn vtable_alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        _ = ret_addr; // todo
+        _ = ret_addr; // todo: take this variable into account
         const alignment: usize = @as(usize, 1) << @intCast(ptr_align);
         if (alignment > paging.page_size)
             return null;
@@ -85,8 +85,8 @@ pub const PageGrainedAllocator = struct {
 
     fn vtable_resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        _ = buf_align; // todo
-        _ = ret_addr; // todo
+        _ = buf_align; // todo: take this variable into account
+        _ = ret_addr; // todo: take this variable into account
         const actual_size = self.obj_size(buf.ptr) catch return false;
         if (new_len <= actual_size) return true;
         return false;

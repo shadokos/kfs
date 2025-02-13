@@ -97,7 +97,7 @@ pub fn init() void {
     logger.debug("\tPage frame allocator initialized", .{});
 
     logger.debug("\tCheck ram availability", .{});
-    check_mem_availability(direct_begin, direct_end); // todo
+    check_mem_availability(direct_begin, direct_end); // todo: maybe find a faster way
 
     logger.debug("\tInitializing direct page allocator...", .{});
     directPageAllocator = DirectPageAllocator.init(paging.high_half);
@@ -162,7 +162,7 @@ pub fn init() void {
             medium_size,
             bigAlloc.allocator(),
         );
-        check_mem_availability(medium_begin, medium_end); // todo
+        check_mem_availability(medium_begin, medium_end); // todo: maybe find a faster way
         logger.debug("\tMedium physical memory initialized...", .{});
     }
 
