@@ -1,72 +1,71 @@
 const ft = @import("ft");
 const paging = @import("paging.zig");
-
+const memory = @import("../memory.zig");
+const globalCache = &memory.globalCache;
+const Cache = @import("object_allocators/slab/cache.zig").Cache;
 const Region = @import("regions.zig").Region;
 
 pub const RegionSet = struct {
-    size: usize = 0,
-    list: ?*Region = null,
+    list: ListType = .{},
+
+    const ListType = ft.DoublyLinkedList(Region);
+    var nodeCache: ?*Cache = null;
     const Self = @This();
 
+    pub fn init_cache() !void {
+        nodeCache = try globalCache.create(
+            "regions",
+            memory.directPageAllocator.page_allocator(),
+            @sizeOf(ListType.Node),
+            @alignOf(ListType.Node),
+            4,
+        );
+    }
+
     pub fn clear(self: *Self) !void {
-        while (self.list) |first| {
-            try self.destroy_region(first);
+        while (self.list.first) |first| {
+            try self.destroy_region(&first.data);
         }
     }
 
     pub fn clone(self: Self) !Self {
         var ret = Self{};
-        var current = self.list;
         errdefer ret.clear() catch unreachable;
-        while (current) |n| : (current = n.next) {
-            _ = try ret.create_region(n.*);
+
+        var head = self.list.first;
+        while (head) |node| : (head = node.next) {
+            _ = try ret.create_region(node.data);
         }
+
         return ret;
     }
 
     pub fn create_region(self: *Self, content: Region) !*Region {
-        const new_region = try Region.create();
-        new_region.* = content;
-        new_region.prev = null;
-        new_region.next = null;
-        self.size += 1;
-        if (self.list) |first| {
-            first.prev = new_region;
-            new_region.next = first;
-        }
-        self.list = new_region;
-        new_region.prev = null;
-        return new_region;
+        const new_node: *ListType.Node = if (nodeCache) |c|
+            @ptrCast(try c.alloc_one())
+        else
+            @panic("region cache is not initialized");
+        new_node.data = content;
+        self.list.append(new_node);
+        return &new_node.data;
     }
 
     pub fn destroy_region(self: *Self, to_remove: *Region) !void {
-        if (to_remove.prev) |prev| {
-            prev.next = to_remove.next;
+        const node: *ListType.Node = @fieldParentPtr("data", to_remove);
+        self.list.remove(node);
+        if (nodeCache) |c| {
+            return c.free(@ptrCast(node));
         } else {
-            self.list = to_remove.next;
+            @panic("region cache is not initialized");
         }
-        if (to_remove.next) |next| {
-            next.prev = to_remove.prev;
-        }
-        self.size -= 1;
-        try Region.destroy(to_remove);
-    }
-
-    pub fn copy(self: *Self) !Self {
-        var ret = Self{};
-        var head: ?*Region = self.list;
-        while (head) |node| : (head = node.next) {
-            _ = try ret.create_region(node.*);
-        }
-        return ret;
     }
 
     pub fn find(self: *Self, ptr: paging.VirtualPtr) ?*Region {
-        var current = self.list;
         const page: usize = @intFromPtr(ptr) / paging.page_size;
+        var current = self.list.first;
         return while (current) |node| : (current = node.next) {
-            if (page >= node.begin and page < node.begin + node.len) {
-                break node;
+            if (page >= node.data.begin and page < node.data.begin + node.data.len) {
+                break &node.data;
             }
         } else null;
     }
