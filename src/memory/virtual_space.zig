@@ -103,7 +103,7 @@ pub const VirtualSpace = struct {
 
     pub fn global_init() !void {
         try init_cache();
-        try Region.init_cache();
+        try RegionSet.init_cache();
         try VirtualSpaceAllocator.global_init();
     }
 
@@ -124,10 +124,10 @@ pub const VirtualSpace = struct {
         const directory_region = ret.directory_region orelse @panic("todo");
         try ret.clone_region(directory_region);
 
-        var current = ret.regions.list;
+        var current = ret.regions.list.first;
         while (current) |r| : (current = r.next) {
-            if (r == directory_region) continue;
-            try ret.clone_region(r);
+            if (&r.data == directory_region) continue;
+            try ret.clone_region(&r.data);
         }
         return ret;
     }
