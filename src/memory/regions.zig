@@ -14,39 +14,10 @@ pub const RegionOperations = struct {
 };
 
 pub const Region = struct {
-    prev: ?*@This() = null,
-    next: ?*@This() = null,
     begin: usize,
     len: usize,
     operations: *const RegionOperations = undefined,
     data: usize = undefined,
-
-    pub var cache: ?*Cache = null;
-    pub fn init_cache() !void {
-        cache = try globalCache.create(
-            "regions",
-            memory.directPageAllocator.page_allocator(),
-            @sizeOf(@This()),
-            @alignOf(@This()),
-            4,
-        );
-    }
-
-    pub fn create() !*Region {
-        if (cache) |c| {
-            return @ptrCast(try c.alloc_one());
-        } else {
-            @panic("region cache is not initialized");
-        }
-    }
-
-    pub fn destroy(r: *Region) !void {
-        if (cache) |c| {
-            return c.free(@ptrCast(r));
-        } else {
-            @panic("region cache is not initialized");
-        }
-    }
 
     pub fn map_now(self: *Region) !void {
         for (self.begin..self.begin + self.len) |p| {
