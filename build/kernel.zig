@@ -17,7 +17,7 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
     const kernel = context.builder.addExecutable(.{
         .name = context.name,
         .root_source_file = .{ .cwd_relative = "src/boot.zig" },
-        .target = context.builder.resolveTargetQuery(CrossTarget{
+        .target = context.builder.resolveTargetQuery(Target.Query{
             .cpu_arch = Target.Cpu.Arch.x86,
             .os_tag = Target.Os.Tag.freestanding,
             .abi = Target.Abi.none,
@@ -57,7 +57,7 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
 
     kernel.addIncludePath(std.Build.LazyPath{ .cwd_relative = "./src/c_headers/" });
 
-    kernel.setLinkerScriptPath(.{ .cwd_relative = "src/linker.ld" });
+    kernel.setLinkerScript(.{ .cwd_relative = "src/linker.ld" });
     kernel.entry = .{ .symbol_name = "_entry" };
 
     return context.builder.addInstallArtifact(kernel, .{

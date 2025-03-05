@@ -10,7 +10,7 @@ const page_count = ft.math.divCeil(
     paging.page_size,
 ) catch unreachable;
 
-pub const table_count linksection(".bootstrap") = ft.math.divCeil(
+pub const table_count = ft.math.divCeil(
     comptime_int,
     page_count,
     paging.page_table_size,

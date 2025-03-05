@@ -236,7 +236,7 @@ fn get_tag_type(comptime n: comptime_int) type {
         size: u32,
     };
     var tmp = @typeInfo(ret);
-    tmp.Struct.fields = @typeInfo(ret).Struct.fields ++ @typeInfo(array[n]).Struct.fields;
+    tmp.@"struct".fields = @typeInfo(ret).@"struct".fields ++ @typeInfo(array[n]).@"struct".fields;
     return @Type(tmp);
 }
 

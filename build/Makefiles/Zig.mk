@@ -1,4 +1,4 @@
-ZIG_VERSION ?= 0.13.0
+ZIG_VERSION ?= 0.14.0
 ZIG_LOCAL = zig-linux-x86_64-$(ZIG_VERSION)/zig
 
 ifeq ($(shell which zig),)

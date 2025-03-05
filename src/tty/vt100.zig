@@ -149,9 +149,9 @@ pub fn vt100(comptime history_size: u32) type {
             }
             const off_v: i32 = -@as(i32, @intCast(terminal.pos.line)) +
                 @mod(@as(i32, @intCast(terminal.head_line)) -
-                @as(i32, @intCast(terminal.scroll_offset)) -
-                @as(i32, @intCast(tty.height - 1)) +
-                @as(i32, @intCast(v)), history_size);
+                    @as(i32, @intCast(terminal.scroll_offset)) -
+                    @as(i32, @intCast(tty.height - 1)) +
+                    @as(i32, @intCast(v)), history_size);
             const off_h: i32 = -@as(i32, @intCast(terminal.pos.col)) + @as(i32, @intCast(h));
             terminal.move_cursor(off_v, off_h);
         }

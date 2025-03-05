@@ -9,13 +9,13 @@ const errno = @import("errno.zig");
 const syscall_logger = log.scoped(.syscall);
 
 pub fn syscall_enum(comptime T: type) type {
-    const decls: []const std.builtin.Type.Declaration = @typeInfo(T).Struct.decls;
+    const decls: []const std.builtin.Type.Declaration = @typeInfo(T).@"struct".decls;
     comptime var enumFields: [decls.len]std.builtin.Type.EnumField = undefined;
     for (decls, enumFields[0..]) |d, *f| {
         f.name = d.name;
         f.value = @field(T, d.name).Id;
     }
-    return @Type(.{ .Enum = .{
+    return @Type(.{ .@"enum" = .{
         .tag_type = usize,
         .fields = enumFields[0..],
         .decls = &.{},
@@ -34,12 +34,12 @@ fn get_fn_proto_tuple(comptime proto: std.builtin.Type.Fn) type {
         f.* = .{
             .name = &.{'0' + i},
             .type = p.type.?,
-            .default_value = null,
+            .default_value_ptr = null,
             .is_comptime = false,
             .alignment = @alignOf(p.type.?),
         };
     }
-    return @Type(.{ .Struct = .{
+    return @Type(.{ .@"struct" = .{
         .layout = .auto,
         .backing_integer = null,
         .fields = fields[0..],
@@ -49,7 +49,7 @@ fn get_fn_proto_tuple(comptime proto: std.builtin.Type.Fn) type {
 }
 
 fn convert_param(comptime T: type, reg: usize) T {
-    if (@typeInfo(T) == .Pointer) {
+    if (@typeInfo(T) == .pointer) {
         return @ptrFromInt(reg);
     } else {
         return @bitCast(@as(
@@ -60,7 +60,7 @@ fn convert_param(comptime T: type, reg: usize) T {
 }
 
 fn convert_ret(comptime T: type, val: T) usize {
-    if (@typeInfo(T) == .Pointer) {
+    if (@typeInfo(T) == .pointer) {
         return @intFromPtr(val);
     } else {
         return @intCast(@as(
@@ -99,7 +99,7 @@ fn call_syscall(comptime code: Code, fr: *interrupts.InterruptFrame) void {
     switch (comptime syscall_type) {
         .do => {
             const ret = @call(.auto, sys_struct.do, get_params(
-                @typeInfo(@TypeOf(sys_struct.do)).Fn,
+                @typeInfo(@TypeOf(sys_struct.do)).@"fn",
                 fr,
             ));
             if (ret) |v| {
