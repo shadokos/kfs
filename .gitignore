@@ -9,3 +9,4 @@ src/tty/themes
 .bootloader-*
 themes
 zig-linux-x86_64-[0-9]*.[0-9]*.[0-9]*
+src/syscall_table.zig
