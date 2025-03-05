@@ -347,3 +347,24 @@ pub fn tic(shell: anytype, args: [][]u8) CmdError!void {
         if (n) |*nv| nv.* -= 1;
     }
 }
+
+pub fn philo(_: anytype, args: [][]u8) CmdError!void {
+    // arg 1: nb philosophers
+    // arg 2: time to die
+    // arg 3: time to eat
+    // arg 4: time to sleep
+
+    if (args.len < 5) return CmdError.InvalidNumberOfArguments;
+
+    const nb_philosophers = ft.fmt.parseInt(u8, args[1], 0) catch return CmdError.InvalidParameter;
+    const time_to_die = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+    const time_to_eat = ft.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
+    const time_to_sleep = ft.fmt.parseInt(usize, args[4], 0) catch return CmdError.InvalidParameter;
+
+    @import("../../task/philosophers.zig").main(
+        nb_philosophers,
+        time_to_die,
+        time_to_eat,
+        time_to_sleep,
+    );
+}
