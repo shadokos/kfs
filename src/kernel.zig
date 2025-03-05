@@ -14,7 +14,6 @@ fn test_tasks() void {
 
     const new_task = task_set.create_task() catch @panic("Failed to create new_task");
     new_task.spawn(&@import("task/userspace.zig").switch_to_userspace, undefined) catch @panic("Failed to spawn new_task");
-
 }
 
 pub fn main() void {

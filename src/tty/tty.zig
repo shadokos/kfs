@@ -613,11 +613,12 @@ var ttyBufferWriter = init: {
     break :init array;
 };
 
+var write_lock = @import("../task/scheduler.zig").Mutex{};
+
 /// print a formatted string to the current terminal using WriterBuffers
 pub inline fn printk(comptime fmt: []const u8, args: anytype) void {
-    // TODO: replace the scheduler lock with a semaphore when implemented
-    @import("../task/scheduler.zig").lock();
-    defer @import("../task/scheduler.zig").unlock();
+    write_lock.acquire();
+    defer write_lock.release();
 
     ttyBufferWriter[current_tty].print(fmt, args) catch {};
     ttyBufferWriter[current_tty].flush() catch {};
