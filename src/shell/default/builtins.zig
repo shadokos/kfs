@@ -20,7 +20,7 @@ pub fn stack(shell: anytype, _: anytype) CmdError!void {
 
 fn _help_available_commands() void {
     printk(colors.blue ++ "Available commands:\n" ++ colors.reset, .{});
-    inline for (@typeInfo(@This()).Struct.decls) |decl| {
+    inline for (@typeInfo(@This()).@"struct".decls) |decl| {
         printk("  - {s}\n", .{decl.name});
     }
 }
@@ -30,7 +30,7 @@ pub fn help(shell: anytype, data: [][]u8) CmdError!void {
         _help_available_commands();
         return;
     }
-    inline for (@typeInfo(helpers).Struct.decls) |decl| {
+    inline for (@typeInfo(helpers).@"struct".decls) |decl| {
         if (ft.mem.eql(u8, decl.name, data[1])) {
             @field(helpers, decl.name)();
             return;

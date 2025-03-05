@@ -17,14 +17,14 @@
 //
 // 20.2.4 Package Length Encoding
 // PkgLength :=
-// 	PkgLeadByte |
-// 	<pkgleadbyte bytedata> |
-// 	<pkgleadbyte bytedata bytedata> |
-// 	<pkgleadbyte bytedata bytedata bytedata>
+//  PkgLeadByte |
+//  <pkgleadbyte bytedata> |
+//  <pkgleadbyte bytedata bytedata> |
+//  <pkgleadbyte bytedata bytedata bytedata>
 // PkgLeadByte :=
-// 	<bit 7-6: bytedata count that follows (0-3)>
-// 	<bit 5-4: only used if pkglength < 63>
-// 	<bit 3-0: least significant package length nybble>
+//  <bit 7-6: bytedata count that follows (0-3)>
+//  <bit 5-4: only used if pkglength < 63>
+//  <bit 3-0: least significant package length nybble>
 
 pub const S5Object = extern struct {
     package_op: u8,

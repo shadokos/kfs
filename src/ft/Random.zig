@@ -40,10 +40,10 @@ pub fn bytes(r: Random, buf: []u8) void {
 // fn floatNorm(r: Random, comptime T: type) T
 
 pub fn intRangeAtMost(r: Random, comptime T: type, at_least: T, at_most: T) T {
-    const T2 = ft.meta.Int(.signed, @typeInfo(T).Int.bits + 2);
+    const T2 = ft.meta.Int(.signed, @typeInfo(T).int.bits + 2);
     return @truncate(
         @as(
-            ft.meta.Int(.unsigned, @typeInfo(T).Int.bits + 2),
+            ft.meta.Int(.unsigned, @typeInfo(T).int.bits + 2),
             @intCast(
                 @mod(
                     @as(T2, @intCast(r.int(T))),

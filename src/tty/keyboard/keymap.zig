@@ -57,7 +57,7 @@ pub inline fn L(comptime scancode: u16) u16 {
 
 /// set the keymap to use
 pub fn set_keymap(name: []const u8) error{KeymapNotFound}!void {
-    inline for (@typeInfo(keymaps).Struct.decls) |decl| {
+    inline for (@typeInfo(keymaps).@"struct".decls) |decl| {
         if (ft.mem.eql(u8, decl.name, name)) {
             current_map = &@field(keymaps, decl.name);
             return;
@@ -66,10 +66,10 @@ pub fn set_keymap(name: []const u8) error{KeymapNotFound}!void {
     return error.KeymapNotFound;
 }
 
-fn get_keymap_list() [@typeInfo(keymaps).Struct.decls.len][]const u8 {
+fn get_keymap_list() [@typeInfo(keymaps).@"struct".decls.len][]const u8 {
     comptime {
-        var ret: [@typeInfo(keymaps).Struct.decls.len][]const u8 = undefined;
-        for (@typeInfo(keymaps).Struct.decls, 0..) |decl, i| {
+        var ret: [@typeInfo(keymaps).@"struct".decls.len][]const u8 = undefined;
+        for (@typeInfo(keymaps).@"struct".decls, 0..) |decl, i| {
             ret[i] = decl.name;
         }
         return ret;

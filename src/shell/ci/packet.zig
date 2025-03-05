@@ -37,12 +37,12 @@ pub fn Packet(comptime T: type) type {
         pub fn printValue(self: *Self, data: anytype) void {
             const type_info = @typeInfo(@TypeOf(data));
             switch (type_info) {
-                .Int, .ComptimeInt => {
+                .int, .comptime_int => {
                     self.writer.print("{d}", .{data}) catch {};
                 },
-                .Pointer => switch (type_info.Pointer.size) {
-                    .Slice => {
-                        if (type_info.Pointer.child == u8) {
+                .pointer => switch (type_info.pointer.size) {
+                    .slice => {
+                        if (type_info.pointer.child == u8) {
                             _ = self.writer.print("\"{s}\"", .{data}) catch {};
                         } else {
                             _ = self.writer.write("[") catch {};
@@ -57,29 +57,32 @@ pub fn Packet(comptime T: type) type {
                         self.writer.print("{*}", .{data}) catch {};
                     },
                 },
-                .Struct => {
+                .@"struct" => {
                     var nb_fields: u8 = 0;
-                    inline for (type_info.Struct.fields) |_| nb_fields += 1;
+                    inline for (type_info.@"struct".fields) |_| nb_fields += 1;
                     _ = self.writer.write("{ ") catch {};
-                    inline for (type_info.Struct.fields, 0..) |field, i| if (!ft.mem.eql(u8, field.name, "writer")) {
+                    inline for (
+                        type_info.@"struct".fields,
+                        0..,
+                    ) |field, i| if (!ft.mem.eql(u8, field.name, "writer")) {
                         _ = self.writer.print("\"{s}\": ", .{field.name}) catch {};
                         self.printValue(@field(data, field.name));
                         self.writer.print("{s} ", .{if (i + 1 < nb_fields) "," else ""}) catch {};
                     };
                     _ = self.writer.write("}") catch {};
                 },
-                .Optional => if (data) |value| {
+                .optional => if (data) |value| {
                     self.printValue(value);
                 } else {
                     self.writer.print("null", .{}) catch {};
                 },
-                .ErrorSet => {
+                .error_set => {
                     self.writer.print("\"{s}\"", .{@errorName(data)}) catch {};
                 },
-                .Enum => {
+                .@"enum" => {
                     self.writer.print("\"{s}\"", .{@tagName(data)}) catch {};
                 },
-                .Void => {
+                .void => {
                     self.writer.print("null", .{}) catch {};
                 },
                 else => {

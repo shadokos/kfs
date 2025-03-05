@@ -8,10 +8,10 @@ const max_order = 10;
 
 pub fn PageFrameAllocator(comptime _Zones: type) type {
     switch (@typeInfo(_Zones)) {
-        .Enum => {},
+        .@"enum" => {},
         else => @compileError("zones must be an enum"),
     }
-    const nzones = @typeInfo(_Zones).Enum.fields.len;
+    const nzones = @typeInfo(_Zones).@"enum".fields.len;
     return struct {
         total_space: u64 = undefined,
 

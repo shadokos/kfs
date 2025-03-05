@@ -81,7 +81,7 @@ pub fn dupe(allocator: Allocator, comptime T: type, m: []const T) Error![]T {
 // fn dupeZ(allocator: Allocator, comptime T: type, m: []const T) Error![:0]T
 
 pub fn free(self: Allocator, memory: anytype) void {
-    const T = @typeInfo(@TypeOf(memory)).Pointer.child;
+    const T = @typeInfo(@TypeOf(memory)).pointer.child;
     self.rawFree(
         @as([*]u8, @ptrCast(@alignCast(memory.ptr)))[0 .. memory.len * @sizeOf(T)],
         ft.math.log2(@alignOf(T)),
