@@ -64,7 +64,7 @@ pub fn convert(theme: Theme) Theme {
 
 /// return a theme by its name
 pub fn get_theme(name: []const u8) ?Theme {
-    inline for (@typeInfo(themes).Struct.decls) |decl| {
+    inline for (@typeInfo(themes).@"struct".decls) |decl| {
         if (ft.mem.eql(u8, decl.name, name)) {
             return @field(themes, decl.name).theme;
         }
@@ -73,10 +73,10 @@ pub fn get_theme(name: []const u8) ?Theme {
 }
 
 /// return a list of the available themes
-fn get_theme_list() [@typeInfo(themes).Struct.decls.len][]const u8 {
+fn get_theme_list() [@typeInfo(themes).@"struct".decls.len][]const u8 {
     comptime {
-        var ret: [@typeInfo(themes).Struct.decls.len][]const u8 = undefined;
-        for (@typeInfo(themes).Struct.decls, 0..) |decl, i| {
+        var ret: [@typeInfo(themes).@"struct".decls.len][]const u8 = undefined;
+        for (@typeInfo(themes).@"struct".decls, 0..) |decl, i| {
             ret[i] = decl.name;
         }
         return ret;

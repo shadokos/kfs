@@ -39,7 +39,7 @@ pub fn defaultLog(
 }
 
 pub const ScopeLevel = struct {
-    scope: @Type(.EnumLiteral),
+    scope: @Type(.enum_literal),
     level: Level,
 };
 
@@ -62,7 +62,7 @@ pub fn log(comptime message_level: Level, comptime scope: anytype, comptime form
 }
 
 pub fn err(comptime format: []const u8, args: anytype) void {
-    @setCold(true);
+    @branchHint(.cold);
     log(.err, default_log_scope, format, args);
 }
 
@@ -81,7 +81,7 @@ pub fn debug(comptime format: []const u8, args: anytype) void {
 pub fn scoped(comptime scope: anytype) type {
     return struct {
         pub fn err(comptime format: []const u8, args: anytype) void {
-            @setCold(true);
+            @branchHint(.cold);
             log(.err, scope, format, args);
         }
 

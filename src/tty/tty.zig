@@ -269,7 +269,7 @@ pub fn TtyN(comptime history_size: u32) type {
                 while (self.current_line_end != self.read_head) {
                     if (self.config.c_lflag.ECHO or
                         (self.input_buffer[self.current_line_end] == '\n' and
-                        self.config.c_lflag.ECHONL))
+                            self.config.c_lflag.ECHONL))
                         self.putchar(self.input_buffer[self.current_line_end]);
                     self.current_line_end +%= 1;
                 }
@@ -428,8 +428,8 @@ pub fn TtyN(comptime history_size: u32) type {
                     .line = @intCast(@mod(
                         @as(i32, @intCast(self.pos.line)) -
                             (@as(i32, @intCast(self.head_line)) -
-                            @as(i32, @intCast(self.scroll_offset)) -
-                            @as(i32, @intCast(height - 1))),
+                                @as(i32, @intCast(self.scroll_offset)) -
+                                @as(i32, @intCast(height - 1))),
                         history_size,
                     )),
                     .col = self.pos.col,
@@ -571,7 +571,7 @@ pub const Tty = TtyN(1000);
 /// maximum tty index for tty_array
 pub const max_tty = 9;
 
-///	array of all the available ttys
+/// array of all the available ttys
 pub var tty_array: [max_tty + 1]Tty = [1]Tty{Tty{}} ** (max_tty + 1);
 
 /// index of the active tty

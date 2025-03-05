@@ -27,11 +27,11 @@ fn FixedBufferStream(comptime Buffer: type) type {
         }
 
         // pub fn read(self: *Self, dest: []u8) ReadError!usize {
-        // 	unreachable; //todo
+        //  unreachable; //todo
         // }
 
         // pub fn reader(self: *Self) Reader {
-        // 	unreachable; //todo
+        //  unreachable; //todo
         // }
 
         pub fn reset(self: *Self) void {
@@ -55,7 +55,7 @@ fn FixedBufferStream(comptime Buffer: type) type {
         }
 
         // pub fn seekableStream(self: *Self) SeekableStream {
-        // 	unreachable; //todo
+        //  unreachable; //todo
         // }
 
         pub fn write(self: *Self, bytes: []const u8) WriteError!usize {
@@ -84,20 +84,20 @@ pub fn fixedBufferStream(buffer: anytype) FixedBufferStream(Slice(@TypeOf(buffer
 
 pub fn Slice(comptime T: type) type {
     switch (@typeInfo(T)) {
-        .Pointer => |p| {
+        .pointer => |p| {
             var new_p = p;
             switch (p.size) {
-                .Slice => {}, // ok
-                .One => switch (@typeInfo(p.child)) {
-                    .Array => |a| {
+                .slice => {}, // ok
+                .one => switch (@typeInfo(p.child)) {
+                    .array => |a| {
                         new_p.child = a.child;
                     },
                     else => @compileError("invalid type"),
                 },
                 else => @compileError("invalid type"),
             }
-            new_p.size = .Slice;
-            return @Type(.{ .Pointer = new_p });
+            new_p.size = .slice;
+            return @Type(.{ .pointer = new_p });
         },
         else => @compileError("invalid type"),
     }

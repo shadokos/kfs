@@ -76,8 +76,8 @@ pub fn switch_to_userspace() void {
 
 pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
     const _code: u32 = switch (@typeInfo(@TypeOf(code))) {
-        .Enum, .EnumLiteral => @intFromEnum(@as(@import("syscall.zig").Code, code)),
-        .Int, .ComptimeInt => @intCast(code),
+        .@"enum", .enum_literal => @intFromEnum(@as(@import("syscall.zig").Code, code)),
+        .int, .comptime_int => @intCast(code),
         else => @compileError("Invalid syscall code type"),
     };
 
@@ -86,8 +86,8 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
     const regs = .{ "ebx", "ecx", "edx", "esi", "edi" };
     inline for (args, 0..) |arg, i| {
         @field(_args, regs[i]) = switch (@typeInfo(@TypeOf(arg))) {
-            .Int, .ComptimeInt => @intCast(arg),
-            .Pointer => @bitCast(@as(u32, @intFromPtr(arg))),
+            .int, .comptime_int => @intCast(arg),
+            .pointer => @bitCast(@as(u32, @intFromPtr(arg))),
             else => @compileError("Invalid syscall argument type"),
         };
     }

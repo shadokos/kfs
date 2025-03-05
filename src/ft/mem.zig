@@ -4,19 +4,19 @@ pub const Allocator = @import("mem/Allocator.zig");
 
 pub fn len(value: anytype) usize {
     switch (@typeInfo(@TypeOf(value))) {
-        .Pointer => |info| switch (info.size) {
-            .Many => {
+        .pointer => |info| switch (info.size) {
+            .many => {
                 const sentinel: *const info.child = @as(
                     *const info.child,
                     @ptrCast(
-                        info.sentinel orelse @compileError(
+                        info.sentinel_ptr orelse @compileError(
                             "Invalid type for mem.len: " ++ @typeName(@TypeOf(value)) ++ " type has no sentinel",
                         ),
                     ),
                 );
                 return indexOfSentinel(info.child, sentinel.*, value);
             },
-            .C => {
+            .c => {
                 return indexOfSentinel(info.child, 0, value);
             },
             else => @compileError("Invalid type for mem.len: " ++ @typeName(@TypeOf(value))),

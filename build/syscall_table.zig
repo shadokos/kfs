@@ -5,8 +5,7 @@ const BuildContext = @import("../build.zig").BuildContext;
 const syscall_dir = "src/syscall";
 const output_file_path = "src/syscall_table.zig";
 
-fn build_syscall_table(step: *std.Build.Step, prog_node: std.Progress.Node) anyerror!void {
-    _ = prog_node;
+fn build_syscall_table(step: *std.Build.Step, _: std.Build.Step.MakeOptions) anyerror!void {
     var output_file = try std.fs.cwd().createFile(output_file_path, .{});
     defer output_file.close();
 

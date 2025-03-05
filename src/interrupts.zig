@@ -175,17 +175,17 @@ pub fn init() void {
 /// return the numeric id of an interrupt (which can be an Exception, pic.IRQ or an int)
 fn get_id(obj: anytype) u8 {
     return switch (@typeInfo(@TypeOf(obj))) {
-        .Int => |i| if (i.signedness == .unsigned and i.bits <= 8)
+        .int => |i| if (i.signedness == .unsigned and i.bits <= 8)
             @intCast(obj)
         else
             @compileError("Invalid interrupt type: " ++ @typeName(@TypeOf(obj))),
-        .ComptimeInt => comptime if (obj >= 0 and obj < 256) obj else @compileError("Invalid interrupt value"),
-        .Enum => switch (@TypeOf(obj)) {
+        .comptime_int => comptime if (obj >= 0 and obj < 256) obj else @compileError("Invalid interrupt value"),
+        .@"enum" => switch (@TypeOf(obj)) {
             Exceptions => @intFromEnum(obj),
             pic.IRQ => pic.get_interrupt_id_from_irq(obj) catch unreachable,
             else => @compileError("Invalid interrupt type: " ++ @typeName(@TypeOf(obj))),
         },
-        .EnumLiteral => b: {
+        .enum_literal => b: {
             if (@hasField(Exceptions, @tagName(obj))) {
                 break :b @intFromEnum(@as(Exceptions, obj));
             } else if (@hasField(pic.IRQ, @tagName(obj))) {

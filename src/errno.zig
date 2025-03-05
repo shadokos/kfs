@@ -101,7 +101,7 @@ pub fn error_num(e: Errno) usize {
     @setEvalBranchQuota(10_000);
     return switch (e) {
         inline else => |ce| comptime b: {
-            const errors = @typeInfo(Errno).ErrorSet orelse unreachable;
+            const errors = @typeInfo(Errno).error_set orelse unreachable;
             for (errors, 1..) |err, n| {
                 if (ft.mem.eql(u8, err.name, @errorName(ce))) break :b n;
             }

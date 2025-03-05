@@ -295,10 +295,10 @@ pub fn init() void {
         @panic("PS/2 Controller interface tests failed, first port not working");
     // TODO: When we'll have interrupt support: Remove the above line and uncomment the following lines
     // if (@as(u2, @bitCast(available_ports)) == 0)
-    // 	@panic("PS/2 Controller interface tests failed, no working ports detected");
+    //   @panic("PS/2 Controller interface tests failed, no working ports detected");
 
     // if (available_ports.p2)
-    // 	enable_second_port();
+    //  enable_second_port();
     if (available_ports.p1) {
         enable_translation();
         set_first_port_interrupts(true);
