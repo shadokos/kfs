@@ -150,7 +150,7 @@ var gdtr: GDTR = undefined;
 pub fn init() void {
     logger.debug("Initializing gdt...", .{});
     gdtr = .{
-        .size = GDT.len * @sizeOf(@typeInfo(@TypeOf(GDT)).Array.child) - 1,
+        .size = GDT.len * @sizeOf(@typeInfo(@TypeOf(GDT)).array.child) - 1,
         .base = @intFromPtr(&GDT),
     };
 

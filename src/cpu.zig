@@ -110,8 +110,8 @@ pub const Ports = enum(u16) {
 
 inline fn _get_port(port: anytype) u16 {
     return switch (@typeInfo(@TypeOf(port))) {
-        .Enum, .EnumLiteral => @intFromEnum(@as(Ports, port)),
-        .Int, .ComptimeInt => @truncate(port),
+        .@"enum", .enum_literal => @intFromEnum(@as(Ports, port)),
+        .int, .comptime_int => @truncate(port),
         else => @compileError("Invalid port type"),
     };
 }

@@ -42,7 +42,7 @@ pub fn parseInt(comptime T: type, buf: []const u8, _base: u8) ParseIntError!T {
     if (buf.len <= index or buf[index] == '_')
         return ParseIntError.InvalidCharacter;
 
-    const U = ft.meta.Int(@typeInfo(T).Int.signedness, @max(8, @typeInfo(T).Int.bits));
+    const U = ft.meta.Int(@typeInfo(T).int.signedness, @max(8, @typeInfo(T).int.bits));
     var ret: U = 0;
 
     while (index < buf.len) : (index += 1) {
@@ -380,7 +380,7 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
                     .name => |n| ft.meta.fieldIndex(@TypeOf(args), n) orelse @compileError("bonjour"),
                 };
 
-                const arg_object = @field(args, @typeInfo(@TypeOf(args)).Struct.fields[arg_pos].name);
+                const arg_object = @field(args, @typeInfo(@TypeOf(args)).@"struct".fields[arg_pos].name);
                 try formatObj(arg_object, specifier, options, writer);
             }
         } else if (comptime accept("}", &fmt_copy) catch unreachable) |_| {
@@ -405,10 +405,10 @@ pub fn format(writer: anytype, comptime fmt: []const u8, args: anytype) !void {
 
 pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: FormatOptions, writer: anytype) !void {
     switch (@typeInfo(@TypeOf(obj))) {
-        .Bool => |_| {
+        .bool => |_| {
             try formatBuf(if (obj) "true" else "false", options, writer);
         },
-        .Int, .ComptimeInt => {
+        .int, .comptime_int => {
             switch (specifier) {
                 .decimal => try formatInt(obj, 10, Case.lower, options, writer),
                 .lower_hexa, .upper_hexa => try formatInt(
@@ -423,9 +423,9 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
                 else => try formatInt(obj, 10, Case.lower, options, writer),
             }
         },
-        .Pointer => |pointer| {
+        .pointer => |pointer| {
             switch (pointer.size) {
-                .One => {
+                .one => {
                     switch (specifier) {
                         .address => {
                             _ = try writer.write(@typeName(pointer.child));
@@ -441,7 +441,7 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
                         },
                     }
                 },
-                .Many, .C, .Slice => {
+                .many, .c, .slice => {
                     switch (specifier) {
                         .string => {
                             try formatBuf(obj, options, writer);
@@ -462,7 +462,7 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
                 },
             }
         },
-        .Array => |_| {
+        .array => |_| {
             switch (specifier) {
                 .string => {
                     try formatBuf(obj[0..], options, writer);
@@ -475,7 +475,7 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
         // .Struct,
         // .ComptimeFloat,
         // .Float,
-        .Optional, .Null => {
+        .optional, .null => {
             if (obj) |value| {
                 try formatObj(value, specifier, options, writer);
             } else {
@@ -484,12 +484,12 @@ pub fn formatObj(obj: anytype, comptime specifier: Specifier, comptime options: 
         },
         // .ErrorUnion,
         // .ErrorSet,
-        .Enum => {
+        .@"enum" => {
             _ = try writer.write(@typeName(@TypeOf(obj)));
             _ = try writer.write(&.{'.'});
             try formatBuf(@tagName(obj), options, writer);
         },
-        .EnumLiteral => {
+        .enum_literal => {
             _ = try writer.write(&.{'.'});
             try formatBuf(@tagName(obj), options, writer);
         },
@@ -528,13 +528,13 @@ pub fn formatBuf(buf: []const u8, options: FormatOptions, writer: anytype) !void
 pub fn formatInt(value: anytype, base: u8, case: Case, options: FormatOptions, writer: anytype) !void {
     var index: usize = 0;
     const Int = switch (@typeInfo(@TypeOf(value))) {
-        .ComptimeInt => |_| ft.math.IntFittingRange(value, value),
-        .Int => |_| @TypeOf(value),
+        .comptime_int => |_| ft.math.IntFittingRange(value, value),
+        .int => |_| @TypeOf(value),
         else => unreachable, // hopefully
     };
-    const U = ft.meta.Int(.unsigned, @max(8, @typeInfo(Int).Int.bits));
+    const U = ft.meta.Int(.unsigned, @max(8, @typeInfo(Int).int.bits));
 
-    var buffer: [@typeInfo(U).Int.bits + 1]u8 = undefined;
+    var buffer: [@typeInfo(U).int.bits + 1]u8 = undefined;
     @memset(&buffer, 0);
 
     var value_cpy: U = 0;

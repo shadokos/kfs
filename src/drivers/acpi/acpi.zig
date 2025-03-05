@@ -75,7 +75,7 @@ fn _entry_type(comptime name: []const u8) type {
             header: ACPISDT_Header,
         };
         var tmp = @typeInfo(ret);
-        tmp.Struct.fields = @typeInfo(ret).Struct.fields ++ @typeInfo(array[i]).Struct.fields;
+        tmp.@"struct".fields = @typeInfo(ret).@"struct".fields ++ @typeInfo(array[i]).@"struct".fields;
         return @Type(tmp);
     } else @compileError("ACPI: Unknown entry type: '" ++ name ++ "'");
 }

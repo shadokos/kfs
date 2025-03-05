@@ -5,7 +5,7 @@ const AddDirectoryStep = struct {
     run_step: *std.Build.Step.Run,
     dir_path: std.Build.LazyPath,
 
-    fn make(step: *std.Build.Step, _: std.Progress.Node) !void {
+    fn make(step: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
         const self: *AddDirectoryStep = @alignCast(@fieldParentPtr("step", step));
         const b = step.owner;
 
@@ -21,10 +21,9 @@ const AddDirectoryStep = struct {
 
         while (try iter.next()) |entry| {
             if (entry.kind != .file) continue;
-            try filepaths.append(try std.fs.path.join(b.allocator, &.{ dir_path, entry.path }));
+            const f = try std.fs.path.join(b.allocator, &.{ dir_path, entry.path });
+            self.run_step.addFileInput(.{ .cwd_relative = f });
         }
-
-        self.run_step.extra_file_dependencies = try filepaths.toOwnedSlice();
     }
 };
 

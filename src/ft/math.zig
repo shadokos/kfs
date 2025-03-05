@@ -10,7 +10,7 @@ pub const deg_per_rad = 57.29577951308232087679815481410517033240547246656432154
 
 pub fn log2(x: anytype) @TypeOf(x) {
     switch (@typeInfo(@TypeOf(x))) {
-        .Int, .ComptimeInt => {
+        .int, .comptime_int => {
             var i: @TypeOf(x) = 0;
             const absolute = abs(@TypeOf(x), x);
             while ((absolute >> @intCast(i)) > 1) : (i += 1) {}
@@ -36,7 +36,7 @@ pub fn IntFittingRange(comptime from: comptime_int, comptime to: comptime_int) t
 
 pub fn abs(comptime T: type, n: T) T {
     return switch (@typeInfo(T)) {
-        .Int => |int| if (int.signedness == .signed and n < 0) -n else n,
+        .int => |int| if (int.signedness == .signed and n < 0) -n else n,
         else => if (n < 0) -n else n,
     };
 }

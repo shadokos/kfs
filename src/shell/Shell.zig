@@ -67,7 +67,7 @@ pub fn Shell(comptime _builtins: anytype) type {
 
         fn exec_cmd(self: *Self, args: [][]u8) CmdError!void {
             // Search for a builtin command by iterating over those defined in shell/builtins.zig
-            inline for (@typeInfo(builtins).Struct.decls) |decl| {
+            inline for (@typeInfo(builtins).@"struct".decls) |decl| {
                 if (ft.mem.eql(u8, decl.name, args[0])) {
                     return @field(builtins, decl.name)(self, args);
                 }

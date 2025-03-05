@@ -1,13 +1,13 @@
 const k = @import("../keymap.zig");
 
 pub const keymap = [_][6]u16{
-    //			!SHIFT		SHIFT		ALT1		ALT2		ALT+SHIFT 	CTRL		//
-    // ================================================================================	//
+    // !SHIFT, SHIFT, ALT1, ALT2, ALT+SHIFT, CTRL //
+    // ========================================== //
     [6]u16{ 0, 0, 0, 0, 0, 0 }, // 0x0  NONE
     [6]u16{ 0, 0, 0, 0, 0, 0 }, // 0x1  NONE
     [6]u16{ 0, 0, 0, 0, 0, 0 }, // 0x2  NONE
     [6]u16{ 0, 0, 0, 0, 0, 0 }, // 0x3  NONE
-    [6]u16{ k.L('q'), 'Q', k.A('q'), 'q', 'Q', k.C('Q') }, // 0x4	Key Q
+    [6]u16{ k.L('q'), 'Q', k.A('q'), 'q', 'Q', k.C('Q') }, // 0x4  Key Q
     [6]u16{ k.L('b'), 'B', k.A('b'), 'b', 'B', k.C('B') }, // 0x5  Key B
     [6]u16{ k.L('c'), 'C', k.A('c'), 'c', 'C', k.C('C') }, // 0x6  Key C
     [6]u16{ k.L('d'), 'D', k.A('d'), 'd', 'D', k.C('D') }, // 0x7  Key D
@@ -114,12 +114,12 @@ pub const keymap = [_][6]u16{
     0,
 }} ** 122 ++
     [_][6]u16{
-    [6]u16{ k.LCTRL, k.LCTRL, k.LCTRL, k.LCTRL, k.LCTRL, k.LCTRL }, // 0xe0 Key LEFT_CTRL
-    [6]u16{ k.LSHIFT, k.LSHIFT, k.LSHIFT, k.LSHIFT, k.LSHIFT, k.LSHIFT }, // 0xe1 Key LEFT_SHIFT
-    [6]u16{ k.LALT, k.LALT, k.LALT, k.LALT, k.LALT, k.LALT }, // 0xe2 Key LEFT_ALT
-    [6]u16{ k.LEFT, '<', k.ALEFT, k.ALEFT, k.A('<'), k.CLEFT }, // 0xe3 Key LEFT_GUI
-    [6]u16{ k.RCTRL, k.RCTRL, k.RCTRL, k.RCTRL, k.RCTRL, k.RCTRL }, // 0xe4 Key RIGHT_CTRL
-    [6]u16{ k.RSHIFT, k.RSHIFT, k.RSHIFT, k.RSHIFT, k.RSHIFT, k.RSHIFT }, // 0xe5 Key RIGHT_SHIFT
-    [6]u16{ k.RALT, k.RALT, k.RALT, k.RALT, k.RALT, k.RALT }, // 0xe6 Key RIGHT_ALT
-    [6]u16{ k.RIGHT, '>', k.ARIGHT, k.ARIGHT, k.A('>'), k.CRIGHT }, // 0xe7 Key RIGHT_GUI
-};
+        [6]u16{ k.LCTRL, k.LCTRL, k.LCTRL, k.LCTRL, k.LCTRL, k.LCTRL }, // 0xe0 Key LEFT_CTRL
+        [6]u16{ k.LSHIFT, k.LSHIFT, k.LSHIFT, k.LSHIFT, k.LSHIFT, k.LSHIFT }, // 0xe1 Key LEFT_SHIFT
+        [6]u16{ k.LALT, k.LALT, k.LALT, k.LALT, k.LALT, k.LALT }, // 0xe2 Key LEFT_ALT
+        [6]u16{ k.LEFT, '<', k.ALEFT, k.ALEFT, k.A('<'), k.CLEFT }, // 0xe3 Key LEFT_GUI
+        [6]u16{ k.RCTRL, k.RCTRL, k.RCTRL, k.RCTRL, k.RCTRL, k.RCTRL }, // 0xe4 Key RIGHT_CTRL
+        [6]u16{ k.RSHIFT, k.RSHIFT, k.RSHIFT, k.RSHIFT, k.RSHIFT, k.RSHIFT }, // 0xe5 Key RIGHT_SHIFT
+        [6]u16{ k.RALT, k.RALT, k.RALT, k.RALT, k.RALT, k.RALT }, // 0xe6 Key RIGHT_ALT
+        [6]u16{ k.RIGHT, '>', k.ARIGHT, k.ARIGHT, k.A('>'), k.CRIGHT }, // 0xe7 Key RIGHT_GUI
+    };
