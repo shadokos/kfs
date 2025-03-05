@@ -6,15 +6,26 @@ const wait = @import("task/wait.zig");
 const task_set = @import("task/task_set.zig");
 const scheduler = @import("task/scheduler.zig");
 
-
 fn test_tasks() void {
     task.TaskDescriptor.init_cache() catch @panic("Failed to initialized kernel_task cache");
     const kernel = task_set.create_task() catch @panic("Failed to create kernel task");
     _ = kernel;
 
     const new_task = task_set.create_task() catch @panic("Failed to create new_task");
-    new_task.spawn(&@import("task/userspace.zig").switch_to_userspace, undefined) catch @panic("Failed to spawn new_task");
+    new_task.spawn(
+        &@import("task/userspace.zig").switch_to_userspace,
+        undefined,
+    ) catch @panic("Failed to spawn new_task");
 
+    var status: wait.Status = undefined;
+    const ret = wait.wait(
+        new_task.pid,
+        .SELF,
+        &status,
+        .{},
+    ) catch @panic("Failed to wait for new_task");
+
+    tty.printk("Task ({}) returned {}\n", .{ new_task.pid, ret });
 }
 
 pub fn main() void {
