@@ -106,3 +106,11 @@ pub fn spurious() void {
         .usage = null,
     });
 }
+
+pub fn philo() void {
+    print_helper(Help{
+        .name = "philo",
+        .description = "A simple philosopher implemented to test Semaphore / Mutex",
+        .usage = "philo <n> <time_to_die> <time_to_eat> <time_to_sleep>",
+    });
+}
