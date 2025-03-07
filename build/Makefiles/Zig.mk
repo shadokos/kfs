@@ -8,7 +8,7 @@ ifeq ($(shell which zig),)
     release: install_zig
     fast: install_zig
     format: install_zig
-    clean: uninstall_zig
+    fclean: uninstall_zig
 
     ZIG ?= $(ZIG_LOCAL)
 endif
