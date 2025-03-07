@@ -50,12 +50,11 @@ fast: .optimize-ReleaseFast .bootloader-$(BOOTLOADER)
 
 .PHONY: clean
 clean:
-    # || true forces the makefile to ignore the error
-	$(ZIG) build uninstall $(BUILD_ARGS) || true
+	rm -rf .zig-cache
 
 .PHONY: fclean
 fclean: clean
-	rm -rf .zig-cache zig-out .optimize-* .bootloader-*
+	rm -rf .zig-out .optimize-* .bootloader-* kfs.iso
 
 .PHONY: format
 format:
