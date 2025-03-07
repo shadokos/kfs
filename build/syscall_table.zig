@@ -37,6 +37,5 @@ pub fn build_syscall_table_step(context: *BuildContext) *std.Build.Step {
 pub fn uninstall_syscall_table_step(context: *BuildContext) *std.Build.Step {
     const uninstall_theme = context.builder.addSystemCommand(&.{ "rm", output_file_path });
     uninstall_theme.setName("uninstall syscall table");
-    context.builder.getUninstallStep().dependOn(&uninstall_theme.step);
     return &uninstall_theme.step;
 }
