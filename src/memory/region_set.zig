@@ -66,7 +66,6 @@ pub const RegionSet = struct {
         while (head) |node| : (head = node.next) {
             const new_region = try create_region();
             new_region.* = node.data;
-            new_region.active = false;
             ret.add_region(new_region);
         }
 
@@ -92,19 +91,13 @@ pub const RegionSet = struct {
     }
 
     pub fn add_region(self: *Self, region: *Region) void {
-        if (region.active)
-            @panic("todo 2");
         const node: *ListType.Node = @fieldParentPtr("data", region);
         self.list.append(node);
-        region.active = true;
     }
 
     pub fn remove_region(self: *Self, region: *Region) void {
-        if (!region.active)
-            @panic("todo 3");
         const node: *ListType.Node = @fieldParentPtr("data", region);
         self.list.remove(node);
-        region.active = false;
     }
 
     pub fn find(self: *Self, page: usize) ?*Region {
