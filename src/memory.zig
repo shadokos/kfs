@@ -109,7 +109,7 @@ fn init_kernel_vm() void {
     logger.debug("\tKernel virtual space initialized", .{});
 
     logger.debug("\tEnabling interrupts...", .{});
-    VirtualSpace.set_handler();
+    @import("memory/page_fault.zig").set_handler();
     interrupts.set_intr_gate(.GeneralProtectionFault, interrupts.Handler.create(&GPE_handler, true));
     logger.debug("\tInterrupts enabled...", .{});
 

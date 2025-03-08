@@ -11,58 +11,6 @@ const regions = @import("regions.zig");
 const Region = regions.Region;
 const RegionSet = @import("region_set.zig").RegionSet;
 
-const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
-
-fn page_fault_handler(frame: InterruptFrame) void {
-    const ErrorType = packed struct(u32) {
-        present: bool,
-        type: enum(u1) {
-            Read = 0,
-            Write = 1,
-        },
-        mode: enum(u1) {
-            Supervisor = 0,
-            User = 1,
-        },
-        unused: u29 = undefined,
-    };
-    const error_object: ErrorType = @bitCast(frame.code);
-    const address: paging.VirtualPtr = @ptrFromInt(cpu.get_cr2());
-    const page_address: paging.VirtualPagePtr = @ptrFromInt(
-        ft.mem.alignBackward(usize, cpu.get_cr2(), paging.page_size),
-    );
-    const entry: paging.TableEntry = mapping.get_entry(page_address);
-    if (mapping.is_page_present(entry)) {
-        @panic("page fault on a present page! (entry is not invalidated)");
-    } else if (mapping.is_page_mapped(entry)) {
-        @import("regions.zig").make_present(page_address) catch |e| {
-            ft.log.err("PAGE FAULT!\n\tcannot map address 0x{x:0>8}:\n\t{s}", .{
-                @intFromPtr(address),
-                @errorName(e),
-            });
-        };
-    } else {
-        ft.log.err(
-            \\PAGE FAULT!
-            \\  address 0x{x:0>8} is not mapped
-            \\  action type: {s}
-            \\  mode: {s}
-            \\  error: {s}
-            \\  ip: 0x{x:0>8}
-            \\  current task: {d}
-        ,
-            .{
-                @intFromPtr(address),
-                @tagName(error_object.type),
-                @tagName(error_object.mode),
-                if (error_object.present) "page-level protection violation" else "page not present",
-                frame.iret.ip,
-                @import("../task/scheduler.zig").get_current_task().pid,
-            },
-        );
-    }
-}
-
 pub const VirtualSpace = struct {
     spaceAllocator: VirtualSpaceAllocator,
     regions: RegionSet = .{},
@@ -115,7 +63,7 @@ pub const VirtualSpace = struct {
         ret.directory.userspace = self.directory.userspace;
 
         if (self.directory_region) |dr| {
-            ret.directory_region = ret.regions.find(@ptrFromInt(dr.begin << paging.page_bits));
+            ret.directory_region = ret.regions.find(dr.begin);
         }
 
         ret.transfer();
@@ -142,7 +90,10 @@ pub const VirtualSpace = struct {
                 errdefer pageFrameAllocator.free_pages(physical, 1) catch unreachable;
                 const memory = @import("../memory.zig");
                 const virtual = try memory.kernel_virtual_space.map_anywhere(physical, 1);
-                defer memory.kernel_virtual_space.unmap(virtual, 1) catch unreachable;
+                defer memory.kernel_virtual_space.unmap(
+                    @as(usize, @intFromPtr(virtual)) / paging.page_size,
+                    1,
+                ) catch unreachable;
                 @memcpy(virtual[0..], pagePtr[0..]);
                 entry.present.address_fragment = @intCast(physical >> paging.page_bits);
             } else {
@@ -152,50 +103,51 @@ pub const VirtualSpace = struct {
         }
     }
 
-    pub fn set_handler() void {
-        const interrupts = @import("../interrupts.zig");
-        interrupts.set_intr_gate(.PageFault, interrupts.Handler.create(&page_fault_handler, true));
-    }
-
     pub fn add_space(self: *Self, begin: usize, len: usize) !void {
         try self.spaceAllocator.add_space(begin, len);
     }
 
     /// map a virtual page to a physical page
     pub fn map(self: *Self, physical: paging.PhysicalPtr, virtual: paging.VirtualPagePtr, npages: usize) !void {
-        const region = try self.reserve_region(@intFromPtr(virtual) >> 12, npages);
-        if (region) |r| {
-            regions.PhysicalMapping.init(r, physical - @intFromPtr(virtual));
-            self.commit(r, true);
-        } else return error.TODO;
+        const region = try RegionSet.create_region();
+        errdefer RegionSet.destroy_region(region) catch unreachable;
+        regions.PhysicalMapping.init(region, physical - @intFromPtr(virtual));
+        try self.add_region_at(region, @intFromPtr(virtual) >> 12, npages, false);
+    }
+
+    /// split a region and return the newly allocated right part
+    fn split_region(self: *Self, region: *Region, page: usize) Cache.AllocError!*Region {
+        if (page <= region.begin or page >= region.begin + region.len) {
+            @panic("todo");
+        }
+        const ret_len = region.begin + region.len - page;
+        const ret = try RegionSet.create_region();
+        ret.operations = region.operations;
+        ret.data = region.data;
+        ret.flags = region.flags;
+        region.len -= ret_len;
+        self.spaceAllocator.free_space(page, ret_len) catch @panic("todo");
+        self.add_region_at(ret, page, ret_len, false) catch unreachable;
+        return ret;
+    }
+
+    /// isolate a part of a region by splitting the region zero, one or two times
+    pub fn isolate_region(self: *Self, region: *Region, first_page: usize, npage: usize) Cache.AllocError!*Region {
+        var ret = region;
+        if (first_page + npage < ret.begin + ret.len) {
+            _ = try self.split_region(ret, first_page + npage);
+        }
+        if (first_page > ret.begin) {
+            ret = try self.split_region(ret, first_page);
+        }
+        return ret;
     }
 
     /// unmap a zone previously mapped
-    pub fn unmap(self: *Self, virtual_pages: paging.VirtualPagePtr, npages: usize) !void {
-        const region = self.find_region(@ptrCast(virtual_pages)) orelse return Error.InvalidPointer;
-        const page: usize = @intFromPtr(virtual_pages) / paging.page_size;
-        if (region.begin + region.len < page + npages) {
-            @panic("todo invalid region 2");
+    pub fn unmap(self: *Self, first_page: usize, npage: usize) !void {
+        while (self.regions.find_any_in_range(first_page, npage)) |region| {
+            self.close_region(try self.isolate_region(region, first_page, npage));
         }
-        if (page != region.begin) {
-            const left = try self.create_region(region.begin, page - region.begin);
-            left.operations = region.operations;
-            left.data = region.data;
-            self.commit(left, false);
-        }
-        if (page + npages != region.begin + region.len) {
-            const right = try self.create_region(page + npages, region.begin + region.len - (page + npages));
-            right.operations = region.operations;
-            right.data = region.data;
-            self.commit(right, false);
-        }
-        self.destroy_region(region);
-        for (0..npages) |p| {
-            const ptr: paging.VirtualPagePtr = @ptrFromInt((page + p) * paging.page_size);
-            mapping.set_entry(ptr, .{ .not_mapped = .{} });
-        }
-        cpu.reload_cr3();
-        self.spaceAllocator.free_space(page, npages) catch unreachable;
     }
 
     /// allocate virtual space and map the area pointed by physical to this space
@@ -204,7 +156,9 @@ pub const VirtualSpace = struct {
         physical_pages: paging.PhysicalPtr,
         npages: usize,
     ) !paging.VirtualPagePtr {
-        const region = try self.alloc_region(npages);
+        const region = try RegionSet.create_region();
+        errdefer RegionSet.destroy_region(region) catch unreachable;
+        try self.add_region(region, npages);
         regions.PhysicalMapping.init(
             region,
             @as(paging.PhysicalPtrDiff, @intCast(physical_pages)) - @as(
@@ -212,7 +166,6 @@ pub const VirtualSpace = struct {
                 @intCast(region.begin),
             ) * paging.page_size,
         );
-        self.commit(region, true);
         return @ptrFromInt(region.begin << 12);
     }
 
@@ -238,18 +191,15 @@ pub const VirtualSpace = struct {
 
     /// unmap an object previously mapped
     pub fn unmap_object(self: *Self, virtual: paging.VirtualPtr, n: usize) !void {
-        const virtual_pages: paging.VirtualPagePtr = @ptrFromInt(ft.mem.alignBackward(
-            usize,
-            @as(usize, @intFromPtr(virtual)),
-            paging.page_size,
-        ));
+        const first_page: usize = @as(usize, @intFromPtr(virtual)) / paging.page_size;
 
-        const npages = (ft.mem.alignForward(
+        const npage = ft.math.divCeil(
             usize,
-            @as(usize, @intFromPtr(virtual)) + n,
+            @as(usize, @intFromPtr(virtual)) % paging.page_size + n,
             paging.page_size,
-        ) - @intFromPtr(virtual_pages)) / paging.page_size;
-        return self.unmap(virtual_pages, npages);
+        ) catch unreachable;
+
+        return self.unmap(first_page, npage);
     }
 
     pub fn alloc_pages_opt(
@@ -257,7 +207,9 @@ pub const VirtualSpace = struct {
         npages: usize,
         options: AllocOptions,
     ) !paging.VirtualPagePtr {
-        var region = try self.alloc_region(npages);
+        var region = try RegionSet.create_region();
+        errdefer RegionSet.destroy_region(region) catch unreachable;
+        try self.add_region(region, npages);
         if (options.physically_contiguous) {
             const physical = try pageFrameAllocator.alloc_pages(npages);
             regions.PhysicallyContiguousRegion.init(region, @as(paging.PhysicalPtrDiff, @intCast(physical)) - @as(
@@ -265,9 +217,8 @@ pub const VirtualSpace = struct {
                 @intCast(region.begin),
             ) * paging.page_size);
         } else {
-            regions.VirtuallyContiguousRegion.init(region);
+            regions.VirtuallyContiguousRegion.init(region, .{});
         }
-        self.commit(region, true);
         if (options.immediate_mapping) {
             try region.map_now();
         }
@@ -288,8 +239,7 @@ pub const VirtualSpace = struct {
         if (region.begin + region.len < page + npages) {
             return Error.InvalidPointer;
         }
-        region.operations.free(region, address, npages);
-        return self.unmap(@ptrFromInt(page * paging.page_size), npages);
+        return self.unmap(page, npages);
     }
 
     pub fn make_present(address: paging.VirtualPagePtr, npages: usize) !void {
@@ -314,54 +264,66 @@ pub const VirtualSpace = struct {
     }
 
     pub fn fill_page_tables(self: *Self, begin: usize, len: usize, map_now: bool) !void {
-        var region = try self.reserve_region(begin, len) orelse unreachable;
+        const region = try RegionSet.create_region();
+        errdefer RegionSet.destroy_region(region) catch unreachable;
+
+        region.flags = .{
+            .read = true,
+            .write = true,
+            .may_read = true,
+            .may_write = true,
+        };
+
+        regions.VirtuallyContiguousRegion.init(region, .{});
 
         self.directory_region = region;
 
-        regions.VirtuallyContiguousRegion.init(region);
-        self.commit(region, false);
+        self.add_region_at(region, begin, len, false) catch unreachable;
+
+        region.flush();
+
         if (map_now) {
             try region.map_now();
         }
-        cpu.reload_cr3();
     }
 
-    fn find_region(self: *Self, ptr: paging.VirtualPtr) ?*Region {
-        return self.regions.find(ptr);
+    pub fn find_region(self: *Self, ptr: paging.VirtualPtr) ?*Region {
+        return self.regions.find(@intFromPtr(ptr) / paging.page_size);
     }
 
-    fn alloc_region(self: *Self, npages: usize) !*Region {
-        const begin = try self.spaceAllocator.alloc_space(npages);
-        const ret = try self.create_region(begin, npages);
-        return ret;
-    }
-
-    fn reserve_region(self: *Self, begin: usize, len: usize) !?*Region {
-        self.spaceAllocator.set_used(begin, len) catch |e| switch (e) {
-            error.NoSpaceFound => return null,
-            else => return e,
-        };
-        const ret = try self.create_region(begin, len);
-        return ret;
-    }
-
-    fn commit(self: *Self, region: *Region, hard: bool) void {
-        _ = self;
-        for (region.begin..region.begin + region.len) |p| {
-            const entry = mapping.get_entry(@ptrFromInt(p << 12));
-            if (!mapping.is_page_present(entry) or hard) {
-                mapping.set_entry(@ptrFromInt(p << 12), .{ .not_present = @ptrCast(region) });
+    pub fn add_region_at(self: *Self, region: *Region, first_page: usize, npages: usize, replace: bool) !void {
+        if (self.spaceAllocator.set_used(first_page, npages)) |_| {
+            region.begin = first_page;
+            region.len = npages;
+            self.regions.add_region(region);
+            region.flush();
+        } else |e| {
+            if (replace) {
+                self.unmap(first_page, npages) catch @panic("todo");
+                return self.add_region_at(region, first_page, npages, replace);
+            } else {
+                return e;
             }
         }
-        cpu.reload_cr3();
     }
 
-    fn create_region(self: *Self, begin: usize, len: usize) !*Region {
-        return self.regions.create_region(.{ .begin = begin, .len = len });
+    pub fn add_region(self: *Self, region: *Region, npages: usize) !void {
+        region.begin = try self.spaceAllocator.alloc_space(npages);
+        region.len = npages;
+        self.regions.add_region(region);
+        region.flush();
     }
 
-    fn destroy_region(self: *Self, region: *Region) void {
-        self.regions.destroy_region(region) catch @panic("double freed region");
+    fn close_region(self: *Self, region: *Region) void {
+        region.operations.close(region);
+
+        region.unmap();
+
+        self.regions.remove_region(region);
+
+        self.spaceAllocator.free_space(region.begin, region.len) catch unreachable;
+
+        RegionSet.destroy_region(region) catch @panic("double freed region");
     }
 
     pub fn generate_page_allocator(self: *Self, _options: AllocOptions) PageAllocatorWithOpt {
