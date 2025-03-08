@@ -237,18 +237,44 @@ pub const TaskDescriptor = struct {
 
     pub noinline fn spawn(self: *Self, function: *const fn (usize) u8, data: usize) !void {
         scheduler.lock();
-        var is_parent: bool = false;
-        const is_parent_ptr: *volatile bool = &is_parent;
-        scheduler.checkpoint();
-        if (is_parent_ptr.*) {} else {
-            is_parent_ptr.* = true;
-            cpu.set_esp(@as(usize, @intFromPtr(&self.stack)) + self.stack.len);
-            self.start_task(function, data);
-        }
+        var is_parent: u8 = 0;
+        asm volatile (
+            \\ movb $0, (%[is_parent])
+            \\ push %[function]
+            \\ push %[data]
+            \\ push %[new_stack]
+            \\ push %[is_parent]
+            \\ push %[self]
+            \\ call checkpoint
+            \\ pop %[self]
+            \\ pop %[is_parent]
+            \\ pop %[new_stack]
+            \\ pop %[data]
+            \\ pop %[function]
+            \\ movb (%[is_parent]), %[tmp:b]
+            \\ cmpb $0, %[tmp:b]
+            \\ jne child
+            \\ parent:
+            \\ movb $1, (%[is_parent])
+            \\ mov %[new_stack], %esp
+            \\ push %[data]
+            \\ push %[function]
+            \\ push %[self]
+            \\ call start_task
+            \\ child:
+            :
+            : [function] "r" (function),
+              [data] "r" (data),
+              [is_parent] "r" (&is_parent),
+              [new_stack] "r" (@as(usize, @intFromPtr(&self.stack)) + self.stack.len),
+              [self] "r" (self),
+              [tmp] "q" (0),
+        );
         scheduler.unlock();
     }
 
-    pub noinline fn start_task(self: *Self, function: *const fn (usize) u8, data: usize) noreturn {
+    pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.C) noreturn {
+        const function: *const fn (usize) u8 = @ptrCast(function_ptr);
         scheduler.add_task(self);
         scheduler.set_current_task(self);
         gdt.tss.esp0 = @as(usize, @intFromPtr(&self.stack)) + self.stack.len;
