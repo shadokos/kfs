@@ -56,7 +56,7 @@ pub fn schedule() void {
     @This().unlock();
 }
 
-pub fn checkpoint() void {
+pub export fn checkpoint() void {
     @This().lock();
     task.switch_to_task(current_task, current_task);
     @This().unlock();
