@@ -23,18 +23,22 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
         else => @compileError("Invalid syscall code type"),
     };
 
-    var _args: struct { ebx: i32 = 0, ecx: i32 = 0, edx: i32 = 0, esi: i32 = 0, edi: i32 = 0 } = .{};
+    var _args: struct { ebx: i32 = 0, ecx: i32 = 0, edx: i32 = 0, esi: i32 = 0, edi: i32 = 0, ebp: i32 = 0 } = .{};
 
-    const regs = .{ "ebx", "ecx", "edx", "esi", "edi" };
+    const regs = .{ "ebx", "ecx", "edx", "esi", "edi", "ebp" };
     inline for (args, 0..) |arg, i| {
         @field(_args, regs[i]) = switch (@typeInfo(@TypeOf(arg))) {
             .int, .comptime_int => @intCast(arg),
             .pointer => @bitCast(@as(u32, @intFromPtr(arg))),
-            .optional => |child| switch (@typeInfo(child)) {
+            .optional => |opt| switch (@typeInfo(opt.child)) {
                 .pointer => @bitCast(@as(u32, @intFromPtr(arg))),
                 else => @compileError("Invalid syscall argument type"),
             },
             .null => 0,
+            .@"struct" => |s| switch (s.layout) {
+                .@"packed" => @bitCast(@as(u32, @intCast(@as(s.backing_integer.?, @bitCast(arg))))),
+                else => @compileError("Invalid syscall argument type"),
+            },
             else => @compileError("Invalid syscall argument type"),
         };
     }
@@ -90,7 +94,60 @@ fn client(server_pid: u32) linksection(".userspace") void {
     send(server_pid, "le minitalk\n");
 }
 
-export fn _userland() linksection(".userspace") void {
+fn putstr(s: []const u8) void {
+    for (s) |c| {
+        _ = syscall(.write, &.{ &c, 1 });
+    }
+}
+
+fn zig_userland() linksection(".userspace") void {
+    // _ = syscall(.exit, &.{42});
+    _ = syscall(.sleep, .{200});
+    const addr: [*][4096]u8 = @ptrFromInt(@as(u32, @bitCast(syscall(.mmap, .{
+        null,
+        4096 * 3,
+        @import("syscall/mmap.zig").Prot{ .PROT_WRITE = true, .PROT_READ = true },
+        @import("syscall/mmap.zig").Flags{ .anonymous = true, .privacy = .Private },
+        0,
+        0,
+    }))));
+    @memcpy(addr[0][0..8], "bonjour\n");
+    @memcpy(addr[1][0..8], "bonjour\n");
+    @memcpy(addr[2][0..8], "bonjour\n");
+
+    putstr(addr[0][0..8]);
+    putstr(addr[1][0..8]);
+    putstr(addr[2][0..8]);
+    putstr("\n");
+
+    _ = syscall(.mmap, .{
+        @as(?*void, @ptrCast(&(addr[1]))),
+        4096,
+        @import("syscall/mmap.zig").Prot{ .PROT_WRITE = true, .PROT_READ = true },
+        @import("syscall/mmap.zig").Flags{ .anonymous = true, .privacy = .Private, .fixed = true },
+        0,
+        0,
+    });
+
+    putstr(addr[0][0..8]);
+    putstr(addr[1][0..8]);
+    putstr(addr[2][0..8]);
+    putstr("\n");
+
+    // _ = syscall (.munmap, .{@as(?*void, @ptrCast(&(addr[1]))), 4096});
+    _ = syscall(.mprotect, .{
+        @as(?*void, @ptrCast(&(addr[0]))),
+        4096,
+        @import("syscall/mmap.zig").Prot{ .PROT_WRITE = false, .PROT_READ = false },
+    });
+
+    putstr(addr[0][0..8]);
+    putstr(addr[1][0..8]);
+    putstr(addr[2][0..8]);
+    putstr("\n");
+
+    _ = syscall(.exit, .{42});
+
     const sigaction = @import("task/signal.zig").Sigaction{ .sa_sigaction = &poc_sigaction, .sa_flags = .{
         .SA_SIGINFO = true,
     } };
@@ -116,4 +173,8 @@ export fn _userland() linksection(".userspace") void {
     _ = syscall(.sleep, .{100});
     _ = syscall(.write, &.{ "salut\n", 6 });
     _ = syscall(.exit, .{42});
+}
+
+export fn _userland() linksection(".userspace") void {
+    zig_userland();
 }
