@@ -9,13 +9,13 @@ const cpu = @import("../cpu.zig");
 const logger = ft.log.scoped(.regions);
 
 pub const RegionOperations = struct {
-    // open: *const fn (region: *Region) void,
+    open: *const fn (region: *Region) void,
+    split: *const fn (region: *Region) void,
     close: *const fn (region: *Region) void,
     nopage: *const fn (region: *Region, address: paging.VirtualPagePtr) void,
 };
 
 pub const Region = struct {
-    active: bool = false,
     begin: usize = 0,
     len: usize = 0,
 
@@ -118,6 +118,8 @@ pub fn make_present(address: paging.VirtualPagePtr) !void {
 
 pub const PhysicallyContiguousRegion = struct {
     const operations: RegionOperations = .{
+        .open = &open,
+        .split = &split,
         .nopage = &nopage,
         .close = &close,
     };
@@ -127,6 +129,24 @@ pub const PhysicallyContiguousRegion = struct {
         const ptr = memory.smallAlloc.allocator().create(paging.PhysicalPtrDiff) catch @panic("todo"); // todo error
         ptr.* = offset;
         region.data = @intFromPtr(ptr);
+    }
+
+    pub fn open(region: *Region) void {
+        const ptr = memory.smallAlloc.allocator().create(paging.PhysicalPtrDiff) catch @panic("todo"); // todo error
+        errdefer memory.smallAlloc.allocator().destroy(ptr);
+        const physical = pageFrameAllocator.alloc_pages(region.len) catch @panic("todo");
+        ptr.* = @as(paging.PhysicalPtrDiff, @intCast(physical)) -
+            @as(paging.PhysicalPtrDiff, region.begin);
+        region.data = @intFromPtr(ptr);
+    }
+
+    pub fn split(region: *Region) void {
+        const ptr: *paging.PhysicalPtrDiff = @ptrFromInt(region.data);
+        const new_ptr: *paging.PhysicalPtrDiff = memory.smallAlloc.allocator().create(
+            paging.PhysicalPtrDiff,
+        ) catch @panic("todo");
+        new_ptr.* = ptr.*;
+        region.data = @intFromPtr(new_ptr);
     }
 
     pub fn nopage(region: *Region, address: paging.VirtualPagePtr) void {
@@ -148,6 +168,8 @@ pub const PhysicallyContiguousRegion = struct {
 
 pub const PhysicalMapping = struct {
     const operations: RegionOperations = .{
+        .open = &open,
+        .split = &split,
         .nopage = &nopage,
         .close = &close,
     };
@@ -157,6 +179,17 @@ pub const PhysicalMapping = struct {
         const ptr = memory.smallAlloc.allocator().create(paging.PhysicalPtrDiff) catch @panic("todo"); // todo error
         ptr.* = offset;
         region.data = @intFromPtr(ptr);
+    }
+
+    pub fn open(_: *Region) void {}
+
+    pub fn split(region: *Region) void {
+        const ptr: *paging.PhysicalPtrDiff = @ptrFromInt(region.data);
+        const new_ptr: *paging.PhysicalPtrDiff = memory.smallAlloc.allocator().create(
+            paging.PhysicalPtrDiff,
+        ) catch @panic("todo");
+        new_ptr.* = ptr.*;
+        region.data = @intFromPtr(new_ptr);
     }
 
     pub fn nopage(region: *Region, address: paging.VirtualPagePtr) void {
@@ -172,9 +205,12 @@ pub const PhysicalMapping = struct {
 
 pub const VirtuallyContiguousRegion = struct {
     const operations: RegionOperations = .{
+        .open = &open,
+        .split = &split,
         .nopage = &nopage,
         .close = &close,
     };
+
     pub const Flags = packed struct(u32) {
         private: bool = true,
         unused: u31 = undefined,
@@ -184,6 +220,10 @@ pub const VirtuallyContiguousRegion = struct {
         region.operations = &operations;
         region.data = @bitCast(flags);
     }
+
+    pub fn open(_: *Region) void {}
+
+    pub fn split(_: *Region) void {}
 
     pub fn nopage(region: *Region, address: paging.VirtualPagePtr) void {
         // const physical = try pageFrameAllocator.alloc_pages(1); // todo

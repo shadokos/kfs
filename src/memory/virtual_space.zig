@@ -125,9 +125,13 @@ pub const VirtualSpace = struct {
         ret.operations = region.operations;
         ret.data = region.data;
         ret.flags = region.flags;
+        ret.begin = page;
+        ret.len = ret_len;
         region.len -= ret_len;
-        self.spaceAllocator.free_space(page, ret_len) catch @panic("todo");
-        self.add_region_at(ret, page, ret_len, false) catch unreachable;
+        ret.operations.split(ret);
+        self.regions.add_region(ret);
+        ret.flush();
+
         return ret;
     }
 
@@ -295,6 +299,7 @@ pub const VirtualSpace = struct {
         if (self.spaceAllocator.set_used(first_page, npages)) |_| {
             region.begin = first_page;
             region.len = npages;
+            region.operations.open(region);
             self.regions.add_region(region);
             region.flush();
         } else |e| {
