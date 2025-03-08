@@ -9,20 +9,98 @@ const cpu = @import("../cpu.zig");
 const logger = ft.log.scoped(.regions);
 
 pub const RegionOperations = struct {
-    map: *const fn (region: *Region, address: paging.VirtualPagePtr) void,
-    free: *const fn (region: *Region, address: paging.VirtualPagePtr, npage: usize) void,
+    // open: *const fn (region: *Region) void,
+    close: *const fn (region: *Region) void,
+    nopage: *const fn (region: *Region, address: paging.VirtualPagePtr) void,
 };
 
 pub const Region = struct {
-    begin: usize,
-    len: usize,
+    active: bool = false,
+    begin: usize = 0,
+    len: usize = 0,
+
+    flags: Flags = .{},
+
     operations: *const RegionOperations = undefined,
     data: usize = undefined,
+
+    pub const Flags = struct {
+        write: bool = false,
+        read: bool = false,
+        may_write: bool = false,
+        may_read: bool = false,
+    };
 
     pub fn map_now(self: *Region) !void {
         for (self.begin..self.begin + self.len) |p| {
             try make_present(@ptrFromInt(p * paging.page_size));
         }
+    }
+
+    pub fn unmap(self: *Region) void {
+        for (self.begin..self.begin + self.len) |page| {
+            mapping.set_entry(
+                @ptrFromInt(page * paging.page_size),
+                .{ .not_mapped = .{} },
+            );
+        }
+        cpu.reload_cr3();
+    }
+
+    pub fn reset_pages(self: *Region, virtual_page: paging.VirtualPagePtr, npage: usize) void {
+        const first_page: usize = @as(usize, @intFromPtr(virtual_page)) / paging.page_size;
+        for (first_page..first_page + npage) |page| {
+            mapping.set_entry(
+                @ptrFromInt(page * paging.page_size),
+                .{ .not_present = @ptrCast(self) },
+            );
+        }
+        cpu.reload_cr3();
+    }
+
+    pub fn set_page(self: *Region, virtual_page: paging.VirtualPagePtr, physical: paging.PhysicalPtr) void {
+        const present_entry: paging.present_table_entry = .{
+            // TODO: Remove
+            .owner = if (self.flags.read or self.flags.write) .User else .Supervisor,
+            .writable = self.flags.write,
+            .address_fragment = @truncate(physical >> 12),
+        };
+        mapping.set_entry(virtual_page, .{ .present = present_entry });
+        cpu.reload_cr3();
+    }
+
+    fn flush_pages(self: *Region, virtual_page: paging.VirtualPagePtr, npage: usize) void {
+        const first_page: usize = @as(usize, @intFromPtr(virtual_page)) / paging.page_size;
+        for (first_page..first_page + npage) |page| {
+            const entry = mapping.get_entry(@ptrFromInt(page * paging.page_size));
+            if (mapping.is_page_present(entry)) {
+                var present_entry = entry.present;
+                present_entry.owner = if (self.flags.read or self.flags.write) .User else .Supervisor;
+                present_entry.writable = self.flags.write;
+                mapping.set_entry(
+                    @ptrFromInt(page * paging.page_size),
+                    .{ .present = present_entry },
+                );
+            } else {
+                mapping.set_entry(
+                    @ptrFromInt(page * paging.page_size),
+                    .{ .not_present = @ptrCast(self) },
+                );
+            }
+        }
+        cpu.reload_cr3();
+    }
+
+    pub fn flush_page(self: *Region, virtual_page: paging.VirtualPagePtr) void {
+        self.flush_pages(virtual_page, 1);
+    }
+
+    pub fn flush(self: *Region) void {
+        self.flush_pages(@ptrFromInt(self.begin * paging.page_size), self.len);
+    }
+
+    pub fn reset(self: *Region) void {
+        self.reset_pages(@ptrFromInt(self.begin * paging.page_size), self.len);
     }
 };
 
@@ -35,13 +113,13 @@ pub fn make_present(address: paging.VirtualPagePtr) !void {
         return;
     }
     const region: *Region = @ptrFromInt(@intFromPtr(entry.not_present));
-    region.operations.map(region, address);
+    region.operations.nopage(region, address);
 }
 
 pub const PhysicallyContiguousRegion = struct {
     const operations: RegionOperations = .{
-        .map = &map,
-        .free = &free,
+        .nopage = &nopage,
+        .close = &close,
     };
 
     pub fn init(region: *Region, offset: paging.PhysicalPtrDiff) void {
@@ -51,24 +129,17 @@ pub const PhysicallyContiguousRegion = struct {
         region.data = @intFromPtr(ptr);
     }
 
-    pub fn map(region: *Region, address: paging.VirtualPagePtr) void {
+    pub fn nopage(region: *Region, address: paging.VirtualPagePtr) void {
         const ptr: *const paging.PhysicalPtrDiff = @ptrFromInt(region.data);
-        const present_entry: paging.present_table_entry = .{
-            // TODO: Remove
-            .owner = .User,
-            .writable = true,
-            .address_fragment = @truncate(
-                @as(paging.PhysicalPtr, @intCast(@intFromPtr(address) + ptr.*)) / paging.page_size,
-            ),
-        };
-        mapping.set_entry(address, .{ .present = present_entry });
-        cpu.reload_cr3();
+        region.set_page(address, @as(paging.PhysicalPtr, @intCast(@intFromPtr(address) + ptr.*)));
         @memset(address, 0);
     }
 
-    pub fn free(region: *Region, address: paging.VirtualPagePtr, npages: usize) void {
-        const physical_ptr = mapping.get_physical_ptr(@ptrCast(address)) catch unreachable; // todo
-        memory.pageFrameAllocator.free_pages(physical_ptr, npages) catch @panic("todo2");
+    pub fn close(region: *Region) void {
+        const physical_ptr = mapping.get_physical_ptr(
+            @ptrFromInt(region.begin * paging.page_size),
+        ) catch unreachable; // todo
+        memory.pageFrameAllocator.free_pages(physical_ptr, region.len) catch @panic("todo2");
 
         const ptr: *paging.PhysicalPtrDiff = @ptrFromInt(region.data);
         memory.smallAlloc.allocator().destroy(ptr);
@@ -77,8 +148,8 @@ pub const PhysicallyContiguousRegion = struct {
 
 pub const PhysicalMapping = struct {
     const operations: RegionOperations = .{
-        .map = &map,
-        .free = &free,
+        .nopage = &nopage,
+        .close = &close,
     };
 
     pub fn init(region: *Region, offset: paging.PhysicalPtrDiff) void {
@@ -88,21 +159,12 @@ pub const PhysicalMapping = struct {
         region.data = @intFromPtr(ptr);
     }
 
-    pub fn map(region: *Region, address: paging.VirtualPagePtr) void {
+    pub fn nopage(region: *Region, address: paging.VirtualPagePtr) void {
         const ptr: *const paging.PhysicalPtrDiff = @ptrFromInt(region.data);
-        const present_entry: paging.present_table_entry = .{
-            // TODO: Remove
-            .owner = .User,
-            .writable = true,
-            .address_fragment = @truncate(
-                @as(paging.PhysicalPtr, @intCast(@intFromPtr(address) + ptr.*)) / paging.page_size,
-            ),
-        };
-        mapping.set_entry(address, .{ .present = present_entry });
-        cpu.reload_cr3();
+        region.set_page(address, @as(paging.PhysicalPtr, @intCast(@intFromPtr(address) + ptr.*)));
     }
 
-    pub fn free(region: *Region, _: paging.VirtualPagePtr, _: usize) void {
+    pub fn close(region: *Region) void {
         const ptr: *paging.PhysicalPtrDiff = @ptrFromInt(region.data);
         memory.smallAlloc.allocator().destroy(ptr);
     }
@@ -110,31 +172,29 @@ pub const PhysicalMapping = struct {
 
 pub const VirtuallyContiguousRegion = struct {
     const operations: RegionOperations = .{
-        .map = &map,
-        .free = &free,
+        .nopage = &nopage,
+        .close = &close,
+    };
+    pub const Flags = packed struct(u32) {
+        private: bool = true,
+        unused: u31 = undefined,
     };
 
-    pub fn init(region: *Region) void {
+    pub fn init(region: *Region, flags: Flags) void {
         region.operations = &operations;
+        region.data = @bitCast(flags);
     }
 
-    pub fn map(_: *Region, address: paging.VirtualPagePtr) void {
+    pub fn nopage(region: *Region, address: paging.VirtualPagePtr) void {
         // const physical = try pageFrameAllocator.alloc_pages(1); // todo
         const physical = pageFrameAllocator.alloc_pages(1) catch @panic("todo");
-        const present_entry: paging.present_table_entry = .{
-            // TODO: Remove
-            .owner = .User,
-            .writable = true,
-            .address_fragment = @truncate(physical >> 12),
-        };
-        mapping.set_entry(address, .{ .present = present_entry });
-        cpu.reload_cr3();
+        region.set_page(address, physical);
         @memset(address, 0);
     }
 
-    pub fn free(_: *Region, address: paging.VirtualPagePtr, npages: usize) void {
-        const page: usize = @intFromPtr(address) / paging.page_size;
-        for (0..npages) |p| // todo overflow (physical can be 64 bit)
+    pub fn close(region: *Region) void {
+        const page: usize = region.begin;
+        for (0..region.len) |p| // todo overflow (physical can be 64 bit)
         {
             const page_address: paging.VirtualPagePtr = @ptrFromInt((page + p) * paging.page_size);
             const entry = mapping.get_entry(page_address);

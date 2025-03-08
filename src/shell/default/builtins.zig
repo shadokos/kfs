@@ -289,6 +289,7 @@ pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
 }
 
 pub fn wait(_: anytype, _: [][]u8) CmdError!void {
+    const SignalId = @import("../../task/signal.zig").Id;
     var status: @import("../../task/wait.zig").Status = undefined;
     const pid = @import("../../task/wait.zig").wait(0, .CHILD, &status, .{
         .WNOHANG = true,
@@ -297,9 +298,30 @@ pub fn wait(_: anytype, _: [][]u8) CmdError!void {
     }) catch @panic("ono") orelse return;
     switch (status.type) {
         .Exited => printk("task {d} has exited with code {d}\n", .{ pid, status.value }),
-        .Signaled => printk("task {d} was terminated by signal {d}\n", .{ pid, status.value }),
-        .Stopped => printk("task {d} was stopped by signal {d}\n", .{ pid, status.value }),
-        .Continued => printk("task {d} was continued by signal {d}\n", .{ pid, status.value }),
+        .Signaled => printk(
+            "task {d} was terminated by signal {d} ({s})\n",
+            .{
+                pid,
+                status.value,
+                @tagName(@as(SignalId, @enumFromInt(status.value))),
+            },
+        ),
+        .Stopped => printk(
+            "task {d} was stopped by signal {d} ({s})\n",
+            .{
+                pid,
+                status.value,
+                @tagName(@as(SignalId, @enumFromInt(status.value))),
+            },
+        ),
+        .Continued => printk(
+            "task {d} was continued by signal {d} ({s})\n",
+            .{
+                pid,
+                status.value,
+                @tagName(@as(SignalId, @enumFromInt(status.value))),
+            },
+        ),
     }
 }
 

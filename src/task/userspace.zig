@@ -6,20 +6,31 @@ const VirtualSpace = @import("../memory/virtual_space.zig").VirtualSpace;
 const paging = @import("../memory/paging.zig");
 const interrupts = @import("../interrupts.zig");
 const scheduler = @import("scheduler.zig");
+const RegionSet = @import("../memory/region_set.zig").RegionSet;
+const regions = @import("../memory/regions.zig");
 
 fn map_userspace(vm: *VirtualSpace) void {
     const up_start = ft.mem.alignBackward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_start" })), 4096);
     const up_end = ft.mem.alignForward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_end" })), 4096);
 
-    vm.map(
-        up_start,
-        @ptrFromInt(up_start),
+    const region = RegionSet.create_region() catch @panic("cannot map userspace");
+    errdefer RegionSet.destroy_region(region) catch unreachable;
+
+    region.flags = .{
+        .read = true,
+        .write = true,
+        .may_read = true,
+        .may_write = true,
+    };
+
+    regions.PhysicalMapping.init(region, 0);
+
+    vm.add_region_at(
+        region,
+        up_start / paging.page_size,
         (up_end - up_start) / paging.page_size,
-    ) catch @panic("Failed to map userspace");
-    VirtualSpace.make_present(
-        @ptrFromInt(up_start),
-        (up_end - up_start) / paging.page_size,
-    ) catch unreachable;
+        true,
+    ) catch @panic("cannot map userspace");
 }
 comptime {
     _ = @import("../userspace.poc.zig");
@@ -32,7 +43,23 @@ pub fn switch_to_userspace(_: usize) u8 {
 }
 
 fn create_stack(vm: *VirtualSpace, size: usize) paging.VirtualPagePtr {
-    return vm.alloc_pages(size) catch @panic("Failed to allocate user");
+    const region = RegionSet.create_region() catch @panic("cannot map userspace");
+    errdefer RegionSet.destroy_region(region) catch unreachable;
+
+    region.flags = .{
+        .read = true,
+        .write = true,
+        .may_read = true,
+        .may_write = true,
+    };
+
+    regions.VirtuallyContiguousRegion.init(region, .{
+        .private = true,
+    });
+
+    vm.add_region(region, size) catch @panic("cannot map userspace");
+
+    return @ptrFromInt(region.begin * paging.page_size);
 }
 
 pub fn clone(entrypoint: usize) noreturn {
