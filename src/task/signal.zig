@@ -17,39 +17,50 @@ pub const DefaultAction = enum {
     Continue,
 };
 
+pub const Handler = *allowzero const fn (u32) callconv(.C) void;
+pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callconv(.C) void;
+pub const SIG_DFL: Handler = @ptrFromInt(0);
+pub const SIG_IGN: Handler = @ptrFromInt(1);
+
+// ids according to the system V i386 ABI
 pub const Id = enum(u32) {
-    SIGABRT,
-    SIGALRM,
-    SIGBUS,
-    SIGCHLD,
-    SIGCONT,
-    SIGFPE,
-    SIGHUP,
-    SIGILL,
-    SIGINT,
-    SIGKILL,
-    SIGPIPE,
-    SIGQUIT,
-    SIGSEGV,
-    SIGSTOP,
-    SIGTERM,
-    SIGTSTP,
-    SIGTTIN,
-    SIGTTOU,
-    SIGUSR1,
-    SIGUSR2,
-    SIGPOLL,
-    SIGPROF,
-    SIGSYS,
-    SIGTRAP,
-    SIGURG,
-    SIGVTALRM,
-    SIGXCPU,
-    SIGXFSZ,
+    SIGHUP = 1,
+    SIGINT = 2,
+    SIGQUIT = 3,
+    SIGILL = 4,
+    SIGTRAP = 5,
+    SIGABRT = 6,
+    SIGEMT = 7,
+    SIGFPE = 8,
+    SIGKILL = 9,
+    SIGBUS = 10,
+    SIGSEGV = 11,
+    SIGSYS = 12,
+    SIGPIPE = 13,
+    SIGALRM = 14,
+    SIGTERM = 15,
+    SIGUSR1 = 16,
+    SIGUSR2 = 17,
+    SIGCHLD = 18,
+    SIGPWR = 19,
+    SIGWINCH = 20,
+    SIGURG = 21,
+    SIGPOLL = 22,
+    SIGSTOP = 23,
+    SIGTSTP = 24,
+    SIGCONT = 25,
+    SIGTTIN = 26,
+    SIGTTOU = 27,
+    SIGVTALRM = 28,
+    SIGPROF = 29,
+    SIGXCPU = 30,
+    SIGXFSZ = 31,
 };
 
 pub const Code = enum(u32) {
     SI_USER,
+    SEGV_ACCERR,
+    SEGV_MAPERR,
 };
 
 pub const siginfo_t = extern struct {
@@ -62,11 +73,6 @@ pub const siginfo_t = extern struct {
     si_status: u32 = undefined,
     // si_value : sigval
 };
-
-pub const Handler = *allowzero const fn (u32) callconv(.C) void;
-pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callconv(.C) void;
-pub const SIG_DFL: Handler = @ptrFromInt(0);
-pub const SIG_IGN: Handler = @ptrFromInt(1);
 
 pub const SigSet = u32;
 
@@ -81,7 +87,7 @@ pub const Sigaction = extern struct {
         SA_RESTART: bool = false, // todo: implement this option
         SA_SIGINFO: bool = false,
         // SA_NOCLDWAIT : bool = false,
-        SA_NODEFER: bool = false,
+        SA_NODEFER: bool = false, // todo
         // SS_ONSTACK : bool = false,
         // SS_DISABLE : bool = false,
         // MINSIGSTKSZ : bool = false,
