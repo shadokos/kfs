@@ -41,6 +41,7 @@ pub fn Semaphore(max_count: u32) type {
                 first.data.state = .Ready;
                 self.queue.try_unblock();
             } else {
+                if (self.count == 0) @panic("Trying to release a unacquired semaphore");
                 self.count -= 1;
             }
         }
