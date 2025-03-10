@@ -3,9 +3,10 @@ const task = @import("task.zig");
 const task_set = @import("task_set.zig");
 const ready_queue = @import("ready_queue.zig");
 
-pub var lock_count: u32 = 0;
 var current_task: *task.TaskDescriptor = undefined;
-pub var initialized: bool = false;
+var initialized: bool = false;
+
+pub var lock_count: u32 = 0;
 
 pub inline fn lock() void {
     @import("../cpu.zig").disable_interrupts();
@@ -26,85 +27,8 @@ pub fn init(new_task: *task.TaskDescriptor) void {
     current_task = new_task;
 }
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// TEST WAIT QUEUES / SLEEPING
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-const pit = @import("../drivers/pit/pit.zig");
-fn sleep_callback(t: *task.TaskDescriptor) void {
-    t.state = .Sleeping;
-    schedule();
-}
-fn wakeup_callback(t: *task.TaskDescriptor) bool {
-    return pit.get_utime_since_boot() >= t.sleep_timeout;
-}
-
-var sleep_queue = @import("wait_queue.zig").WaitQueue(sleep_callback, wakeup_callback){};
-
-// wait queue but for semarphores
-fn semaphore_block_callback(t: *task.TaskDescriptor) void {
-    t.state = .Blocked;
-    schedule();
-}
-fn semaphore_unblock_callback(t: *task.TaskDescriptor) bool {
-    return t.state != .Blocked;
-}
-
-const scheduler = @This();
-
-pub fn Semaphore(max_count: u32) type {
-    return struct {
-        const Self = @This();
-
-        count: u32 = 0,
-        max_count: u32 = max_count,
-        queue: @import("wait_queue.zig").WaitQueue(semaphore_block_callback, semaphore_unblock_callback) = .{},
-
-        pub inline fn acquire(self: *Self) void {
-            scheduler.lock();
-            defer scheduler.unlock();
-
-            if (self.count < self.max_count) {
-                self.count += 1;
-            } else {
-                self.queue.block(current_task);
-                scheduler.schedule();
-            }
-        }
-
-        pub inline fn release(self: *Self) void {
-            scheduler.lock();
-            defer scheduler.unlock();
-
-            if (self.queue.queue.first) |first| {
-                first.data.state = .Ready;
-                self.queue.try_unblock();
-            } else {
-                self.count -= 1;
-            }
-        }
-    };
-}
-
-pub const Mutex = Semaphore(1);
-
-pub fn usleep(micro: u64) void {
-    @This().lock();
-    defer @This().unlock();
-
-    const t = current_task;
-    t.sleep_timeout = pit.get_utime_since_boot() + micro;
-
-    // if (t.sleep_timeout <= pit.get_utime_since_boot()) return;
-
-    sleep_queue.block(t);
-    schedule();
-}
-
-pub fn sleep(millis: u64) void {
-    @This().lock();
-    defer @This().unlock();
-
-    usleep(millis * 1000);
+pub fn is_initialized() bool {
+    return initialized;
 }
 
 pub fn schedule() void {
@@ -113,7 +37,7 @@ pub fn schedule() void {
     @This().lock();
     defer @This().unlock();
 
-    sleep_queue.try_unblock();
+    @import("sleep.zig").try_unblock_sleeping_task();
 
     if (ready_queue.popFirst()) |node| {
         const prev = current_task;

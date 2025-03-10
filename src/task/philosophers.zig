@@ -7,7 +7,7 @@ const allocator = @import("../memory.zig").smallAlloc.allocator();
 const task = @import("task.zig");
 const wait = @import("wait.zig");
 const scheduler = @import("scheduler.zig");
-const Mutex = scheduler.Mutex;
+const Mutex = @import("semaphore.zig").Mutex;
 
 var start_time: u64 = 0;
 var nb_philosophers: u8 = 5;
@@ -60,7 +60,7 @@ pub const Philosopher = struct {
         self.last_meal = get_time_since_boot() - start_time;
         self.check_eos();
         tty.printk("{} {} is eating\n", .{ self.last_meal, self.id });
-        scheduler.sleep(time_to_eat);
+        @import("sleep.zig").sleep(time_to_eat);
     }
 
     fn check_eos(self: *Self) void {
@@ -83,7 +83,7 @@ fn philosopher_task(data: usize) u8 {
     const philosopher: *Philosopher = @ptrFromInt(data);
 
     if (philosopher.id % 2 == 1) {
-        scheduler.sleep(time_to_eat / 2);
+        @import("sleep.zig").sleep(time_to_eat / 2);
     }
 
     while (true) {
@@ -92,7 +92,7 @@ fn philosopher_task(data: usize) u8 {
         philosopher.drop_forks();
         philosopher.check_eos();
         tty.printk("{} {} is sleeping\n", .{ get_time_since_boot() - start_time, philosopher.id });
-        scheduler.sleep(time_to_sleep);
+        @import("sleep.zig").sleep(time_to_sleep);
         philosopher.check_eos();
         tty.printk("{} {} is thinking\n", .{ get_time_since_boot() - start_time, philosopher.id });
     }

@@ -242,7 +242,7 @@ comptime {
 }
 
 pub fn setup_iret_frame(frame: *InterruptFrame) callconv(.C) void {
-    if (!scheduler.initialized)
+    if (!scheduler.is_initialized())
         return;
     scheduler.get_current_task().handle_signal();
     _ = frame;
