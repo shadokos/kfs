@@ -42,7 +42,7 @@ pub const TaskDescriptor = struct {
     ucontext: ucontext.ucontext_t = .{},
 
     // scheduling
-    rq_node: ready_queue.Node = .{ .data = null },
+    rq_node: ready_queue.Node = .{ .data = false },
     sleep_timeout: u64 = 0,
 
     pub const State = enum(u8) {
