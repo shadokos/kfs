@@ -613,7 +613,7 @@ var ttyBufferWriter = init: {
     break :init array;
 };
 
-var write_lock = @import("../task/scheduler.zig").Mutex{};
+var write_lock = @import("../task/semaphore.zig").Mutex{};
 
 /// print a formatted string to the current terminal using WriterBuffers
 pub inline fn printk(comptime fmt: []const u8, args: anytype) void {

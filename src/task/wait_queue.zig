@@ -7,7 +7,18 @@ const Node = Queue.Node;
 
 const allocator = @import("../memory.zig").smallAlloc.allocator();
 
-pub fn WaitQueue(block_callback: fn (*TaskDescriptor) void, unblock_callback: fn (*TaskDescriptor) bool) type {
+const WaitQueueArg = struct {
+    /// Callback to be called when a task is added to the wait queue.
+    block_callback: ?fn (*TaskDescriptor) void = null,
+
+    /// Predicate to determine if a task should be unblocked.
+    predicate: fn (*TaskDescriptor) bool,
+
+    /// Callback to be called when a task is unblocked.
+    unblock_callback: ?fn (*TaskDescriptor) void = null,
+};
+
+pub fn WaitQueue(arg: WaitQueueArg) type {
     return struct {
         const Self = @This();
 
@@ -20,7 +31,7 @@ pub fn WaitQueue(block_callback: fn (*TaskDescriptor) void, unblock_callback: fn
             const node: *Node = allocator.create(Node) catch @panic("wq.block");
             node.data = task;
             self.queue.append(node);
-            block_callback(task);
+            if (arg.block_callback) |callback| callback(task);
         }
 
         pub fn try_unblock(self: *Self) void {
@@ -31,10 +42,11 @@ pub fn WaitQueue(block_callback: fn (*TaskDescriptor) void, unblock_callback: fn
             while (node) |n| {
                 const task = n.data;
                 const next = n.next;
-                if (unblock_callback(task)) {
+                if (arg.predicate(task)) {
                     ready_queue.append(task);
                     self.queue.remove(n);
                     allocator.destroy(n);
+                    if (arg.unblock_callback) |callback| callback(task);
                 }
                 node = next;
             }
