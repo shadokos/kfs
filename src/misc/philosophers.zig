@@ -4,10 +4,10 @@ const get_time_since_boot = &@import("../drivers/pit/pit.zig").get_time_since_bo
 
 const allocator = @import("../memory.zig").smallAlloc.allocator();
 
-const task = @import("task.zig");
-const wait = @import("wait.zig");
-const scheduler = @import("scheduler.zig");
-const Mutex = @import("semaphore.zig").Mutex;
+const task = @import("../task/task.zig");
+const wait = @import("../task/wait.zig");
+const scheduler = @import("../task/scheduler.zig");
+const Mutex = @import("../task/semaphore.zig").Mutex;
 
 var start_time: u64 = 0;
 var nb_philosophers: u8 = 5;
@@ -60,7 +60,7 @@ pub const Philosopher = struct {
         self.last_meal = get_time_since_boot() - start_time;
         self.check_eos();
         tty.printk("{} {} is eating\n", .{ self.last_meal, self.id });
-        @import("sleep.zig").sleep(time_to_eat);
+        @import("../task/sleep.zig").sleep(time_to_eat);
     }
 
     fn check_eos(self: *Self) void {
@@ -83,7 +83,7 @@ fn philosopher_task(data: usize) u8 {
     const philosopher: *Philosopher = @ptrFromInt(data);
 
     if (philosopher.id % 2 == 1) {
-        @import("sleep.zig").sleep(time_to_eat / 2);
+        @import("../task/sleep.zig").sleep(time_to_eat / 2);
     }
 
     while (true) {
@@ -92,7 +92,7 @@ fn philosopher_task(data: usize) u8 {
         philosopher.drop_forks();
         philosopher.check_eos();
         tty.printk("{} {} is sleeping\n", .{ get_time_since_boot() - start_time, philosopher.id });
-        @import("sleep.zig").sleep(time_to_sleep);
+        @import("../task/sleep.zig").sleep(time_to_sleep);
         philosopher.check_eos();
         tty.printk("{} {} is thinking\n", .{ get_time_since_boot() - start_time, philosopher.id });
     }
@@ -123,7 +123,7 @@ pub fn main(nb: u8, ttd: usize, tte: usize, tts: usize) void {
     }
 
     for (0..nb_philosophers) |i| {
-        const d = @import("task_set.zig").create_task() catch @panic("Failed to create new_task");
+        const d = @import("../task/task_set.zig").create_task() catch @panic("Failed to create new_task");
         _ = d.spawn(philosopher_task, @intFromPtr(&philosophers[i])) catch @panic("Failed to spawn philosopher task");
     }
 
