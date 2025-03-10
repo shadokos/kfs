@@ -39,9 +39,9 @@ pub fn schedule() void {
 
     @import("sleep.zig").try_unblock_sleeping_task();
 
-    if (ready_queue.popFirst()) |node| {
+    if (ready_queue.pop()) |node| {
         const prev = current_task;
-        current_task = ready_queue.get_task_descriptor(node, "rq_node");
+        current_task = @alignCast(@fieldParentPtr("rq_node", node));
         task.switch_to_task(prev, current_task);
     }
 }

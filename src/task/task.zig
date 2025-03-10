@@ -319,8 +319,7 @@ pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     defer scheduler.unlock();
 
     if (prev.state == .Running) {
-        prev.state = .Ready;
-        ready_queue.append(prev);
+        ready_queue.push(prev);
     }
     next.state = .Running;
 
