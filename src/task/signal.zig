@@ -127,7 +127,7 @@ pub const SignalQueue = struct {
     fn is_ignored(self: Self) bool {
         return !self.action.sa_flags.SA_SIGINFO and
             (self.action.sa_handler == SIG_IGN or
-            (self.action.sa_handler == SIG_DFL and self.default_handler == .Ignore));
+                (self.action.sa_handler == SIG_DFL and self.default_handler == .Ignore));
     }
 
     pub fn queue_signal(self: *Self, signal: siginfo_t) void {
