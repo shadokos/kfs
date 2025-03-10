@@ -43,7 +43,7 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
                 const task = n.data;
                 const next = n.next;
                 if (arg.predicate(task)) {
-                    ready_queue.append(task);
+                    ready_queue.push(task);
                     self.queue.remove(n);
                     allocator.destroy(n);
                     if (arg.unblock_callback) |callback| callback(task);
@@ -51,29 +51,5 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
                 node = next;
             }
         }
-
-        // // Remove and return the first node in the list.
-        // pub fn popFirst(self: *Self) ?*TaskDescriptor {
-        //     scheduler.lock();
-        //     defer scheduler.unlock();
-
-        //     return self.queue.popFirst();
-        // }
-
-        // // Insert a new node at the beginning of the list.
-        // pub fn prepend(self: *Self, task: *TaskDescriptor) void {
-        //     scheduler.lock();
-        //     defer scheduler.unlock();
-
-        //     self.queue.prepend(task);
-        // }
-
-        // // Remove a node from the list.
-        // pub fn remove(self: *Self, node: *TaskDescriptor) void {
-        //     scheduler.lock();
-        //     defer scheduler.unlock();
-
-        //     self.queue.remove(node);
-        // }
     };
 }
