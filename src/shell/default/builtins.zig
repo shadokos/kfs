@@ -361,7 +361,7 @@ pub fn philo(_: anytype, args: [][]u8) CmdError!void {
     const time_to_eat = ft.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
     const time_to_sleep = ft.fmt.parseInt(usize, args[4], 0) catch return CmdError.InvalidParameter;
 
-    @import("../../task/philosophers.zig").main(
+    @import("../../misc/philosophers.zig").main(
         nb_philosophers,
         time_to_die,
         time_to_eat,
