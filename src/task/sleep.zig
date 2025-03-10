@@ -27,8 +27,6 @@ pub fn usleep(micro: u64) void {
     const t = scheduler.get_current_task();
     t.sleep_timeout = pit.get_utime_since_boot() + micro;
 
-    // if (t.sleep_timeout <= pit.get_utime_since_boot()) return;
-
     sleep_queue.block(t);
     scheduler.schedule();
 }
