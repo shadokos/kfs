@@ -4,7 +4,7 @@ const task_set = @import("task_set.zig");
 const ready_queue = @import("ready_queue.zig");
 
 var current_task: *task.TaskDescriptor = undefined;
-var initialized: bool = false;
+var idle_task: ?*task.TaskDescriptor = null;
 
 pub var lock_count: u32 = 0;
 
@@ -22,27 +22,34 @@ pub fn init(new_task: *task.TaskDescriptor) void {
     @This().lock();
     defer @This().unlock();
 
-    initialized = true;
+    idle_task = new_task;
     new_task.state = .Running;
     current_task = new_task;
 }
 
 pub fn is_initialized() bool {
-    return initialized;
+    return idle_task != null;
 }
 
 pub fn schedule() void {
-    if (!initialized) return;
+    if (!is_initialized()) return;
 
     @This().lock();
     defer @This().unlock();
 
     @import("sleep.zig").try_unblock_sleeping_task();
 
+    var next_task: ?*task.TaskDescriptor = null;
     if (ready_queue.pop()) |node| {
+        next_task = @alignCast(@fieldParentPtr("rq_node", node));
+    } else if (current_task.state != .Running and current_task.state != .Ready and current_task != idle_task) {
+        next_task = idle_task;
+    }
+
+    if (next_task) |next| {
         const prev = current_task;
-        current_task = @alignCast(@fieldParentPtr("rq_node", node));
-        task.switch_to_task(prev, current_task);
+        current_task = next;
+        task.switch_to_task(prev, next);
     }
 }
 

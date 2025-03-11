@@ -1,6 +1,6 @@
 const ci_shell = @import("shell/ci/shell.zig");
 
-pub fn main() void {
+pub fn main(_: usize) u8 {
     var shell = ci_shell.Shell.init(
         ci_shell.com_port_1.get_reader().any(),
         ci_shell.com_port_1.get_writer().any(),

@@ -17,6 +17,10 @@ pub fn push(new_node: *TaskDescriptor) void {
     scheduler.lock();
     defer scheduler.unlock();
 
+    // For performance reasons, the idle task should never be in the ready_queue.
+    // The scheduler will switch to the idle task only if there is no task to run.
+    if (new_node.pid == 0) return;
+
     if (new_node.rq_node.data == false)
         ready_queue.append(&new_node.rq_node);
 
