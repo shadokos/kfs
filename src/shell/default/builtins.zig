@@ -285,13 +285,13 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
 pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
     const ms = ft.fmt.parseInt(u64, args[1], 0) catch return CmdError.InvalidParameter;
-    @import("../../drivers/pit/pit.zig").sleep(ms);
+    @import("../../task/sleep.zig").sleep(ms);
 }
 
 pub fn wait(_: anytype, _: [][]u8) CmdError!void {
     const SignalId = @import("../../task/signal.zig").Id;
     var status: @import("../../task/wait.zig").Status = undefined;
-    const pid = @import("../../task/wait.zig").wait(0, .CHILD, &status, .{
+    const pid = @import("../../task/wait.zig").wait(1, .CHILD, &status, .{
         .WNOHANG = true,
         .WCONTINUED = true,
         .WUNTRACED = true,
