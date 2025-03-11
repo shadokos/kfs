@@ -18,7 +18,6 @@ pub fn create_task() !*TaskDescriptor {
     const parent = scheduler.get_current_task();
     if (pid == 0) {
         new_task.* = .{ .pid = pid, .pgid = pid, .parent = null, .state = .Running };
-        scheduler.init(new_task);
     } else {
         new_task.* = .{ .pid = pid, .pgid = parent.pgid, .parent = parent, .state = .Ready };
         new_task.next_sibling = parent.childs;
