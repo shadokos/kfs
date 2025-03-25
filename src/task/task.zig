@@ -22,6 +22,8 @@ pub const TaskDescriptor = struct {
     pid: Pid,
     pgid: Pid,
 
+    owner: u32 = 0,
+
     state: State,
 
     parent: ?*TaskDescriptor,
