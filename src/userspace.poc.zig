@@ -2,14 +2,14 @@ const ft = @import("ft");
 const paging = @import("memory/paging.zig");
 const signal = @import("task/signal.zig");
 
-fn poc_signal(id: u32) linksection("userspace") callconv(.C) void {
+fn poc_signal(id: u32) linksection(".userspace") callconv(.C) void {
     const str = " Signal handled\n";
     const c = id + '0';
     _ = syscall(.write, .{ &c, 1 });
     _ = syscall(.write, .{ str, str.len });
 }
 
-fn poc_sigaction(id: u32, _: *signal.siginfo_t, _: *void) linksection("userspace") callconv(.C) void {
+fn poc_sigaction(id: u32, _: *signal.siginfo_t, _: *void) linksection(".userspace") callconv(.C) void {
     const str = " Signal handled with sigaction\n";
     const c = id + '0';
     _ = syscall(.write, .{ &c, 1 });
@@ -58,10 +58,10 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
     return res;
 }
 
-var byte: u8 linksection("userspace") = 0;
-var byte_index: u5 linksection("userspace") = 0;
+var byte: u8 linksection(".userspace") = 0;
+var byte_index: u5 linksection(".userspace") = 0;
 
-fn server_handler(id: u32) linksection("userspace") callconv(.C) void {
+fn server_handler(id: u32) linksection(".userspace") callconv(.C) void {
     byte |= @truncate((id - @intFromEnum(signal.Id.SIGUSR1)) << byte_index);
     byte_index += 1;
     if (byte_index == 8) {
