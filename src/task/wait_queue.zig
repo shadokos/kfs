@@ -2,10 +2,9 @@ const TaskDescriptor = @import("task.zig").TaskDescriptor;
 const scheduler = @import("scheduler.zig");
 const ready_queue = @import("ready_queue.zig");
 
-const Queue = @import("ft").DoublyLinkedList(*TaskDescriptor);
-const Node = Queue.Node;
+const Queue = @import("ft").DoublyLinkedList(?*void);
 
-const allocator = @import("../memory.zig").smallAlloc.allocator();
+pub const Node = Queue.Node;
 
 const WaitQueueArg = struct {
     /// Callback to be called when a task is added to the wait queue.
@@ -28,8 +27,7 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
             scheduler.lock();
             defer scheduler.unlock();
 
-            const node: *Node = allocator.create(Node) catch @panic("wq.block");
-            node.data = task;
+            const node: *Node = &task.wq_node;
             self.queue.append(node);
             if (arg.block_callback) |callback| callback(task);
         }
@@ -40,12 +38,11 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
 
             var node = self.queue.first;
             while (node) |n| {
-                const task = n.data;
+                const task: *TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", n));
                 const next = n.next;
                 if (arg.predicate(task)) {
                     ready_queue.push(task);
                     self.queue.remove(n);
-                    allocator.destroy(n);
                     if (arg.unblock_callback) |callback| callback(task);
                 }
                 node = next;

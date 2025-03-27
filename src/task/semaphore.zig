@@ -39,7 +39,8 @@ pub fn Semaphore(max_count: u32) type {
             defer scheduler.unlock();
 
             if (self.queue.queue.first) |first| {
-                first.data.state = .Ready;
+                const _t: *task.TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", first));
+                _t.state = .Ready;
                 self.queue.try_unblock();
             } else {
                 if (self.count == 0) @panic("Trying to release a unacquired semaphore");

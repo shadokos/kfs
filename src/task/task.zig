@@ -11,6 +11,7 @@ const ucontext = @import("ucontext.zig");
 const Cache = @import("../memory/object_allocators/slab/cache.zig").Cache;
 const scheduler = @import("scheduler.zig");
 const ready_queue = @import("ready_queue.zig");
+const wait_queue = @import("wait_queue.zig");
 const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = ft.log.scoped(.task);
@@ -18,7 +19,7 @@ const Errno = @import("../errno.zig").Errno;
 
 pub const TaskDescriptor = struct {
     // todo: define the appropriate size for a kernelspace stack or get this value from config
-    stack: [16 * 1024]u8 align(4096) = undefined,
+    stack: [64 * 1024]u8 align(4096) = undefined,
     pid: Pid,
     pgid: Pid,
 
@@ -45,6 +46,8 @@ pub const TaskDescriptor = struct {
 
     // scheduling
     rq_node: ready_queue.Node = .{ .data = false },
+    wq_node: wait_queue.Node = .{ .data = null },
+
     sleep_timeout: u64 = 0,
 
     pub const State = enum(u8) {
