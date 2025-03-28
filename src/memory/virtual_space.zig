@@ -6,6 +6,7 @@ const pageFrameAllocator = &@import("../memory.zig").pageFrameAllocator;
 const cpu = @import("../cpu.zig");
 const Cache = @import("object_allocators/slab/cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;
+const Mutex = @import("../task/semaphore.zig").Mutex;
 
 const regions = @import("regions.zig");
 const Region = regions.Region;
@@ -16,6 +17,7 @@ pub const VirtualSpace = struct {
     regions: RegionSet = .{},
     directory_region: ?*Region = null,
     directory: mapping.Directory align(4096),
+    lock: Mutex = Mutex{},
 
     pub const Error = error{
         InvalidPointer,
@@ -55,7 +57,20 @@ pub const VirtualSpace = struct {
         try VirtualSpaceAllocator.global_init();
     }
 
+    fn internal_transfer(self: *Self) void {
+        mapping.transfer(@ptrCast(&self.directory));
+    }
+
+    fn internal_unmap(self: *Self, first_page: usize, npage: usize) !void {
+        while (self.regions.find_any_in_range(first_page, npage)) |region| {
+            self.close_region(try self.isolate_region(region, first_page, npage));
+        }
+    }
+
     pub fn clone(self: *Self) !*Self {
+        self.lock.acquire();
+        defer self.lock.release();
+
         const ret = try cache.allocator().create(Self);
         try ret.init();
         ret.spaceAllocator = try self.spaceAllocator.clone();
@@ -81,7 +96,10 @@ pub const VirtualSpace = struct {
     }
 
     fn clone_region(self: *Self, region: *Region) !void {
-        _ = self; // todo: maybe stateless (can we do this operation while this virtual space is not active)
+        self.lock.acquire();
+        defer self.lock.release();
+
+        // todo: maybe stateless (can we do this operation while this virtual space is not active)
         for (region.begin..region.begin + region.len) |p| {
             const pagePtr: paging.VirtualPagePtr = @ptrFromInt(p << paging.page_bits);
             var entry = mapping.get_entry(pagePtr);
@@ -90,7 +108,7 @@ pub const VirtualSpace = struct {
                 errdefer pageFrameAllocator.free_pages(physical, 1) catch unreachable;
                 const memory = @import("../memory.zig");
                 const virtual = try memory.kernel_virtual_space.map_anywhere(physical, 1);
-                defer memory.kernel_virtual_space.unmap(
+                defer memory.kernel_virtual_space.internal_unmap(
                     @as(usize, @intFromPtr(virtual)) / paging.page_size,
                     1,
                 ) catch unreachable;
@@ -104,6 +122,9 @@ pub const VirtualSpace = struct {
     }
 
     pub fn add_space(self: *Self, begin: usize, len: usize) !void {
+        self.lock.acquire();
+        defer self.lock.release();
+
         try self.spaceAllocator.add_space(begin, len);
     }
 
@@ -149,17 +170,14 @@ pub const VirtualSpace = struct {
 
     /// unmap a zone previously mapped
     pub fn unmap(self: *Self, first_page: usize, npage: usize) !void {
-        while (self.regions.find_any_in_range(first_page, npage)) |region| {
-            self.close_region(try self.isolate_region(region, first_page, npage));
-        }
+        self.lock.acquire();
+        defer self.lock.release();
+
+        return self.internal_unmap(first_page, npage);
     }
 
     /// allocate virtual space and map the area pointed by physical to this space
-    pub fn map_anywhere(
-        self: *Self,
-        physical_pages: paging.PhysicalPtr,
-        npages: usize,
-    ) !paging.VirtualPagePtr {
+    pub fn map_anywhere(self: *Self, physical_pages: paging.PhysicalPtr, npages: usize) !paging.VirtualPagePtr {
         const region = try RegionSet.create_region();
         errdefer RegionSet.destroy_region(region) catch unreachable;
         try self.add_region(region, npages);
@@ -211,9 +229,12 @@ pub const VirtualSpace = struct {
         npages: usize,
         options: AllocOptions,
     ) !paging.VirtualPagePtr {
+        self.lock.acquire();
+        defer self.lock.release();
+
         var region = try RegionSet.create_region();
         errdefer RegionSet.destroy_region(region) catch unreachable;
-        try self.add_region(region, npages);
+        try self.internal_add_region(region, npages);
         if (options.physically_contiguous) {
             const physical = try pageFrameAllocator.alloc_pages(npages);
             regions.PhysicallyContiguousRegion.init(region, @as(paging.PhysicalPtrDiff, @intCast(physical)) - @as(
@@ -295,7 +316,7 @@ pub const VirtualSpace = struct {
         return self.regions.find(@intFromPtr(ptr) / paging.page_size);
     }
 
-    pub fn add_region_at(self: *Self, region: *Region, first_page: usize, npages: usize, replace: bool) !void {
+    fn internal_add_region_at(self: *Self, region: *Region, first_page: usize, npages: usize, replace: bool) !void {
         if (self.spaceAllocator.set_used(first_page, npages)) |_| {
             region.begin = first_page;
             region.len = npages;
@@ -304,19 +325,32 @@ pub const VirtualSpace = struct {
             region.flush();
         } else |e| {
             if (replace) {
-                self.unmap(first_page, npages) catch @panic("todo");
-                return self.add_region_at(region, first_page, npages, replace);
+                self.internal_unmap(first_page, npages) catch @panic("todo");
+                return self.internal_add_region_at(region, first_page, npages, replace);
             } else {
                 return e;
             }
         }
     }
 
-    pub fn add_region(self: *Self, region: *Region, npages: usize) !void {
+    pub fn add_region_at(self: *Self, region: *Region, first_page: usize, npages: usize, replace: bool) !void {
+        self.lock.acquire();
+        defer self.lock.release();
+        return self.internal_add_region_at(region, first_page, npages, replace);
+    }
+
+    fn internal_add_region(self: *Self, region: *Region, npages: usize) !void {
         region.begin = try self.spaceAllocator.alloc_space(npages);
         region.len = npages;
         self.regions.add_region(region);
         region.flush();
+    }
+
+    pub fn add_region(self: *Self, region: *Region, npages: usize) !void {
+        self.lock.acquire();
+        defer self.lock.release();
+
+        return self.internal_add_region(region, npages);
     }
 
     fn close_region(self: *Self, region: *Region) void {
@@ -336,7 +370,10 @@ pub const VirtualSpace = struct {
     }
 
     pub fn transfer(self: *Self) void {
-        mapping.transfer(@ptrCast(&self.directory));
+        self.lock.acquire();
+        defer self.lock.release();
+
+        self.internal_transfer();
     }
 };
 
