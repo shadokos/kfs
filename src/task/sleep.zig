@@ -2,17 +2,12 @@ const task = @import("task.zig");
 const pit = @import("../drivers/pit/pit.zig");
 const scheduler = @import("scheduler.zig");
 
-fn sleep_callback(t: *task.TaskDescriptor) void {
-    t.state = .Sleeping;
-    scheduler.schedule();
-}
-
-fn sleep_predicate(t: *task.TaskDescriptor) bool {
-    return t.state == .Sleeping and pit.get_utime_since_boot() >= t.sleep_timeout;
+fn sleep_predicate(_: *void, sleep_timeout_ptr: ?*void) bool {
+    const sleep_timeout: u64 = @as(*u64, @alignCast(@ptrCast(sleep_timeout_ptr.?))).*;
+    return pit.get_utime_since_boot() >= sleep_timeout;
 }
 
 var sleep_queue = @import("wait_queue.zig").WaitQueue(.{
-    .block_callback = sleep_callback,
     .predicate = sleep_predicate,
 }){};
 
@@ -25,9 +20,9 @@ pub fn usleep(micro: u64) void {
     defer scheduler.unlock();
 
     const t = scheduler.get_current_task();
-    t.sleep_timeout = pit.get_utime_since_boot() + micro;
+    var sleep_timeout: u64 = pit.get_utime_since_boot() + micro;
 
-    sleep_queue.block(t);
+    sleep_queue.block(t, @ptrCast(&sleep_timeout));
     scheduler.schedule();
 }
 

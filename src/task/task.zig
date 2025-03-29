@@ -48,14 +48,11 @@ pub const TaskDescriptor = struct {
     rq_node: ready_queue.Node = .{ .data = false },
     wq_node: wait_queue.Node = .{ .data = null },
 
-    sleep_timeout: u64 = 0,
-
     pub const State = enum(u8) {
         Running,
         Blocked,
         Ready,
         Stopped,
-        Sleeping,
         Zombie,
     };
     pub const Pid = i32;
