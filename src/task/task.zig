@@ -154,7 +154,7 @@ pub const TaskDescriptor = struct {
     }
 
     fn handle_default_action(self: *Self, sig: signal.siginfo_t) void {
-        switch (self.signalManager.get_defaultAction(sig.si_signo)) {
+        switch (self.signalManager.get_defaultAction(sig.si_signo.unwrap())) {
             .Ignore => {},
             .Terminate => {
                 self.state = .Zombie;
@@ -200,7 +200,8 @@ pub const TaskDescriptor = struct {
         const bytecode_begin = ucontext.put_data_on_stack(&self.ucontext, bytecode).ptr;
 
         if (!action.sa_flags.SA_NODEFER) {
-            self.ucontext.uc_sigmask |= @as(signal.SigSet, 1) << @as(u5, @intCast(@intFromEnum(info.si_signo)));
+            self.ucontext.uc_sigmask |=
+                @as(signal.SigSet, 1) << @as(u5, @intCast(@intFromEnum(info.si_signo.unwrap())));
         }
 
         self.ucontext.uc_sigmask |= action.sa_mask;
@@ -235,7 +236,7 @@ pub const TaskDescriptor = struct {
 
     pub fn handle_signal(self: *Self) void {
         while (self.signalManager.get_pending_signal(self.ucontext.uc_sigmask)) |info| {
-            const id: signal.Id = info.si_signo;
+            const id: signal.Id = info.si_signo.unwrap();
             const action = self.signalManager.get_action(id);
             self.do_action(action, info);
         }
