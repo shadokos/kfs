@@ -33,6 +33,7 @@ pub const TaskDescriptor = struct {
 
     vm: ?*VirtualSpace = null,
 
+    status_wait_queue: @import("wait.zig").WaitQueue = .{},
     status_info: ?status_informations.Status = null,
     status_stack: StatusStack = .{},
     status_stack_process_node: StatusStack.Node = .{},
@@ -100,6 +101,7 @@ pub const TaskDescriptor = struct {
         if (new_status_info) |s| {
             if (self.parent) |p| {
                 p.status_stack.add(&self.status_stack_process_node, s.transition);
+                p.status_wait_queue.try_unblock();
             }
             // todo: process group
         } else @panic("todo");

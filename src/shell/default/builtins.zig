@@ -291,11 +291,23 @@ pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
 pub fn wait(_: anytype, _: [][]u8) CmdError!void {
     const SignalId = @import("../../task/signal.zig").Id;
     var status: @import("../../task/wait.zig").Status = undefined;
-    const pid = @import("../../task/wait.zig").wait(1, .CHILD, &status, .{
-        .WNOHANG = true,
-        .WCONTINUED = true,
-        .WUNTRACED = true,
-    }) catch @panic("ono") orelse return;
+    const current_pid = @import("../../task/scheduler.zig").get_current_task().pid;
+    const pid = @import("../../task/wait.zig").wait(
+        current_pid,
+        .CHILD,
+        &status,
+        null,
+        .{
+            .WNOHANG = true,
+            .WCONTINUED = true,
+            .WUNTRACED = true,
+        },
+    ) catch |e| {
+        printk("wait error: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+    if (pid == 0)
+        return;
     switch (status.type) {
         .Exited => printk("task {d} has exited with code {d}\n", .{ pid, status.value }),
         .Signaled => printk(
