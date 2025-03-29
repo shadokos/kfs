@@ -64,7 +64,7 @@ pub const Code = enum(u32) {
 };
 
 pub const siginfo_t = extern struct {
-    si_signo: Id = undefined,
+    si_signo: Signo = Signo.invalid,
     si_code: Code = undefined,
     si_errno: u32 = undefined,
     si_pid: TaskDescriptor.Pid = undefined, // todo pid type
@@ -72,6 +72,17 @@ pub const siginfo_t = extern struct {
     si_addr: paging.VirtualPtr = undefined,
     si_status: u32 = undefined,
     // si_value : sigval
+    pub const Signo = packed union {
+        valid: Id,
+        null: Monostate(u32, 0),
+        pub const invalid = @This(){ .null = .{} };
+        pub fn make(id: Id) @This() {
+            return .{ .valid = id };
+        }
+        pub fn unwrap(self: @This()) Id {
+            return if (@as(u32, @bitCast(self)) == 0) @panic("invalid signo") else self.valid;
+        }
+    };
 };
 
 pub const SigSet = u32;
@@ -217,12 +228,13 @@ pub const SignalManager = struct {
     }
 
     pub fn queue_signal(self: *Self, signal: siginfo_t) void {
-        if (@intFromEnum(signal.si_signo) > self.queues.len) {
+        const index: u32 = @intFromEnum(signal.si_signo.unwrap());
+        if (index > self.queues.len) {
             @panic("todo");
         }
-        self.queues[@intFromEnum(signal.si_signo)].queue_signal(signal);
-        if (self.queues[@intFromEnum(signal.si_signo)].queue.len != 0) { // todo: there may be a better way to do this
-            self.pending |= @as(SigSet, 1) << @as(u5, @intCast(@intFromEnum(signal.si_signo)));
+        self.queues[index].queue_signal(signal);
+        if (self.queues[index].queue.len != 0) { // todo: there may be a better way to do this
+            self.pending |= @as(SigSet, 1) << @as(u5, @intCast(index));
         }
     }
 

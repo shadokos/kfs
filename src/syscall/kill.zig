@@ -11,7 +11,7 @@ pub fn do(pid: task.TaskDescriptor.Pid, id: signal.Id) !void {
         const descriptor = task_set.get_task_descriptor(pid) orelse return Errno.ESRCH;
         // todo permisssion
         descriptor.signalManager.queue_signal(.{
-            .si_signo = id,
+            .si_signo = .{ .valid = id },
             .si_code = .SI_USER,
             .si_pid = scheduler.get_current_task().pid,
             // todo set more fields of siginfo
