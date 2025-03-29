@@ -10,7 +10,7 @@ pub fn do(pid: task.TaskDescriptor.Pid, id: signal.Id) !void {
     if (pid > 0) {
         const descriptor = task_set.get_task_descriptor(pid) orelse return Errno.ESRCH;
         // todo permisssion
-        descriptor.signalManager.queue_signal(.{
+        descriptor.send_signal(.{
             .si_signo = .{ .valid = id },
             .si_code = .SI_USER,
             .si_pid = scheduler.get_current_task().pid,

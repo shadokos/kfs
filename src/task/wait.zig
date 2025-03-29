@@ -87,9 +87,9 @@ pub fn get_task(
     descriptor: *TaskDescriptor,
     request: WaitRequest,
     selector: Selector,
-) ?*TaskDescriptor {
+) !?*TaskDescriptor {
     var var_request = request;
-    scheduler.get_current_task().status_wait_queue.block(scheduler.get_current_task(), @ptrCast(&var_request));
+    try scheduler.get_current_task().status_wait_queue.block(scheduler.get_current_task(), @ptrCast(&var_request));
     return get_task_nohang(descriptor, request, selector);
 }
 
@@ -126,7 +126,7 @@ pub fn wait(
             }
             return 0;
         },
-        false => get_task(descriptor, request, selector) orelse return Errno.EINTR,
+        false => try get_task(descriptor, request, selector) orelse return Errno.EINTR,
     };
 
     // if (options.WNOWAIT)

@@ -60,7 +60,7 @@ pub const Philosopher = struct {
         self.last_meal = get_time_since_boot() - start_time;
         self.check_eos();
         tty.printk("{} {} is eating\n", .{ self.last_meal, self.id });
-        @import("../task/sleep.zig").sleep(time_to_eat);
+        @import("../task/sleep.zig").sleep(time_to_eat) catch {};
     }
 
     fn check_eos(self: *Self) void {
@@ -83,7 +83,7 @@ fn philosopher_task(data: usize) u8 {
     const philosopher: *Philosopher = @ptrFromInt(data);
 
     if (philosopher.id % 2 == 1) {
-        @import("../task/sleep.zig").sleep(time_to_eat / 2);
+        @import("../task/sleep.zig").sleep(time_to_eat / 2) catch {};
     }
 
     while (true) {
@@ -92,7 +92,7 @@ fn philosopher_task(data: usize) u8 {
         philosopher.drop_forks();
         philosopher.check_eos();
         tty.printk("{} {} is sleeping\n", .{ get_time_since_boot() - start_time, philosopher.id });
-        @import("../task/sleep.zig").sleep(time_to_sleep);
+        @import("../task/sleep.zig").sleep(time_to_sleep) catch {};
         philosopher.check_eos();
         tty.printk("{} {} is thinking\n", .{ get_time_since_boot() - start_time, philosopher.id });
     }

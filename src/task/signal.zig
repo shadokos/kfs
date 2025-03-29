@@ -83,6 +83,9 @@ pub const siginfo_t = extern struct {
         pub fn unwrap(self: @This()) Id {
             return if (@as(u32, @bitCast(self)) == 0) @panic("invalid signo") else self.valid;
         }
+        pub fn safeUnwrap(self: @This()) ?Id {
+            return if (@as(u32, @bitCast(self)) == 0) null else self.valid;
+        }
     };
 };
 
