@@ -94,14 +94,35 @@ fn client(server_pid: u32) linksection(".userspace") void {
     send(server_pid, "le minitalk\n");
 }
 
+fn putchar(c: u8) void {
+    _ = syscall(.write, &.{ &c, 1 });
+}
+
 fn putstr(s: []const u8) void {
     for (s) |c| {
-        _ = syscall(.write, &.{ &c, 1 });
+        putchar(c);
     }
 }
 
-fn zig_userland() linksection(".userspace") void {
-    // _ = syscall(.exit, &.{42});
+fn putnbr(n: anytype) void {
+    const NTypeInfo = @typeInfo(@TypeOf(n));
+    const IntType = @import("std").meta.Int(
+        .unsigned,
+        NTypeInfo.int.bits + @intFromBool(NTypeInfo.int.signedness == .signed),
+    );
+    const unsigned: IntType = if (n < 0) b: {
+        putchar('-');
+        break :b @intCast(-n);
+    } else @intCast(n);
+    if (unsigned == 0) {
+        putchar('0');
+        return;
+    }
+    putnbr(@as(IntType, unsigned / @as(IntType, 10)));
+    putchar(@intCast((unsigned % 10) + '0'));
+}
+
+fn test_segfault() linksection(".userspace") void {
     _ = syscall(.sleep, .{200});
     const addr: [*][4096]u8 = @ptrFromInt(@as(u32, @bitCast(syscall(.mmap, .{
         null,
@@ -145,8 +166,72 @@ fn zig_userland() linksection(".userspace") void {
     putstr(addr[1][0..8]);
     putstr(addr[2][0..8]);
     putstr("\n");
+}
 
-    _ = syscall(.exit, .{42});
+fn count() void {
+    var n: u32 = 0;
+    while (true) : (n += 1) {
+        _ = syscall(.sleep, .{200});
+        putnbr(n);
+        putchar('\n');
+    }
+}
+
+fn launch_count() void {
+    const pid = syscall(.fork, .{});
+    if (pid == 0) {
+        count();
+    }
+    while (true) {
+        _ = syscall(.sleep, .{3000});
+        putstr("STOP\n");
+        _ = syscall(.kill, .{ pid, @as(u32, @intFromEnum(signal.Id.SIGSTOP)) });
+        _ = syscall(.sleep, .{2000});
+        putstr("CONT\n");
+        _ = syscall(.kill, .{ pid, @as(u32, @intFromEnum(signal.Id.SIGCONT)) });
+    }
+}
+
+fn zig_userland() linksection(".userspace") void {
+    // launch_count();
+
+    {
+        const pid = syscall(.fork, .{});
+        if (pid == 0) {
+            test_segfault();
+            _ = syscall(.exit, .{42});
+        }
+
+        const Status = @import("task/wait.zig").Status;
+
+        var status: Status = undefined;
+
+        // const WaitOptions = @import("task/wait.zig").WaitOptions;
+        // const wait_ret : i32 = syscall(.waitpid, .{pid, &status, WaitOptions{}});
+        const wait_ret: i32 = syscall(.wait, .{&status});
+
+        putnbr(wait_ret);
+        putchar('\n');
+        if (wait_ret > 0) {
+            putstr("process ");
+            putnbr(wait_ret);
+            switch (status.type) {
+                .Exited => {
+                    putstr(" exited with exit code ");
+                    putnbr(status.value);
+                },
+                .Continued => putstr(" continued"),
+                .Stopped => putstr(" stopped"),
+                .Signaled => {
+                    putstr(" received signal ");
+                    putnbr(status.value);
+                },
+            }
+            putchar('\n');
+        }
+
+        _ = syscall(.exit, .{0});
+    }
 
     const sigaction = @import("task/signal.zig").Sigaction{ .sa_sigaction = &poc_sigaction, .sa_flags = .{
         .SA_SIGINFO = true,
@@ -154,12 +239,13 @@ fn zig_userland() linksection(".userspace") void {
     _ = syscall(.sigaction, &.{ 2, &sigaction, null });
     // _ = syscall(.signal, &.{ 2, &poc_signal });
     _ = syscall(.kill, &.{ syscall(.getpid, &.{}), 2 });
-
-    const pid = syscall(.fork, .{});
-    if (pid == 0) {
-        server();
-    } else {
-        client(@bitCast(pid));
+    {
+        const pid = syscall(.fork, .{});
+        if (pid == 0) {
+            server();
+        } else {
+            client(@bitCast(pid));
+        }
     }
 
     _ = syscall(.exit, .{0});
