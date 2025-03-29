@@ -47,11 +47,12 @@ pub const TaskDescriptor = struct {
 
     // scheduling
     rq_node: ready_queue.Node = .{ .data = false },
-    wq_node: wait_queue.Node = .{ .data = null },
+    wq_node: wait_queue.Node = .{ .data = undefined },
 
     pub const State = enum(u8) {
         Running,
         Blocked,
+        BlockedUninterruptible,
         Ready,
         Stopped,
         Zombie,
@@ -75,6 +76,7 @@ pub const TaskDescriptor = struct {
         if (self.vm) |_| {
             // todo destroy vm
         }
+        wait_queue.force_remove(self);
         if (self.parent) |p| {
             p.status_stack.remove(&self.status_stack_process_node);
             var n: ?*Self = p.childs;
@@ -159,16 +161,18 @@ pub const TaskDescriptor = struct {
         switch (self.signalManager.get_defaultAction(sig.si_signo.unwrap())) {
             .Ignore => {},
             .Terminate => {
+                if (self.state == .Ready)
+                    ready_queue.remove(self);
                 self.state = .Zombie;
                 self.update_status(.{
                     .transition = .Terminated,
                     .signaled = true,
                     .siginfo = sig,
                 });
-                scheduler.schedule();
-                unreachable;
             },
-            .Stop => if (self.state == .Running) {
+            .Stop => if (self.state == .Running or self.state == .Ready) {
+                if (self.state == .Ready)
+                    ready_queue.remove(self);
                 self.state = .Stopped;
                 self.update_status(.{
                     .transition = .Stopped,
@@ -177,7 +181,6 @@ pub const TaskDescriptor = struct {
                 });
             },
             .Continue => if (self.state == .Stopped) {
-                self.state = .Running;
                 self.update_status(.{
                     .transition = .Continued,
                     .signaled = true,
@@ -241,6 +244,16 @@ pub const TaskDescriptor = struct {
             const id: signal.Id = info.si_signo.unwrap();
             const action = self.signalManager.get_action(id);
             self.do_action(action, info);
+        }
+    }
+
+    pub fn send_signal(self: *Self, sig: signal.siginfo_t) void {
+        self.signalManager.queue_signal(sig);
+        if (sig.si_signo.safeUnwrap() == .SIGCONT and self.state == .Stopped) {
+            self.state = .Ready;
+            ready_queue.push(self);
+        } else if (self.state == .Blocked) {
+            @import("wait_queue.zig").interrupt(self);
         }
     }
 

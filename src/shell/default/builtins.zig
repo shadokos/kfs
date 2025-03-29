@@ -285,7 +285,7 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
 pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
     const ms = ft.fmt.parseInt(u64, args[1], 0) catch return CmdError.InvalidParameter;
-    @import("../../task/sleep.zig").sleep(ms);
+    @import("../../task/sleep.zig").sleep(ms) catch {};
 }
 
 pub fn wait(_: anytype, _: [][]u8) CmdError!void {

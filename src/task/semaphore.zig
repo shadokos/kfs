@@ -24,7 +24,7 @@ pub fn Semaphore(max_count: u32) type {
                 self.count += 1;
             } else {
                 if (!scheduler.is_initialized()) @panic("Max count reached for a semaphore during early boot stage");
-                self.queue.block(scheduler.get_current_task(), null);
+                self.queue.block_no_int(scheduler.get_current_task(), null);
                 scheduler.schedule();
             }
         }
