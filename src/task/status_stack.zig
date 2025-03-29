@@ -52,7 +52,13 @@ pub const StatusStack = struct {
         } else return null;
     }
 
-    pub fn top(self: Self, transition: Status.Transition) ?*Node {
-        return self.lists[@intFromEnum(transition)];
+    pub fn top(self: Self, mask: Status.TransitionMask) ?*Node {
+        for (self.lists, 0..) |list, i| {
+            if (mask.check(@enumFromInt(i))) {
+                if (list) |n|
+                    return n;
+            }
+        }
+        return null;
     }
 };
