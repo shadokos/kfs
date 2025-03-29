@@ -72,6 +72,21 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
                 node = next;
             }
         }
+
+        pub fn unblock_all(self: *Self) void {
+            scheduler.lock();
+            defer scheduler.unlock();
+
+            var node = self.queue.first;
+            while (node) |n| {
+                const task: *TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", n));
+                const next = n.next;
+                ready_queue.push(task);
+                self.queue.remove(n);
+                if (arg.unblock_callback) |callback| callback(@alignCast(@ptrCast(task)), n.data);
+                node = next;
+            }
+        }
     };
 }
 

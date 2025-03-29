@@ -76,6 +76,7 @@ pub const TaskDescriptor = struct {
         if (self.vm) |_| {
             // todo destroy vm
         }
+        self.status_wait_queue.unblock_all();
         wait_queue.force_remove(self);
         if (self.parent) |p| {
             p.status_stack.remove(&self.status_stack_process_node);
