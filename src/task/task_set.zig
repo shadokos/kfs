@@ -42,7 +42,7 @@ fn next_pid() ?TaskDescriptor.Pid {
 }
 
 pub fn get_task_descriptor(pid: TaskDescriptor.Pid) ?*TaskDescriptor {
-    if (pid < 0) return null;
+    if (pid < 0 or pid >= list.len) return null;
     return list[@intCast(pid)];
 }
 
