@@ -109,7 +109,11 @@ fn call_syscall(comptime code: Code) void {
 
     switch (comptime syscall_type) {
         .do => {
-            const ret = @call(.auto, sys_struct.do, get_params(
+            const ret_type = if (@typeInfo(@TypeOf(sys_struct.do)).@"fn".return_type) |return_type|
+                if (@typeInfo(return_type) == .error_union) return_type else errno.Errno!return_type
+            else
+                errno.Errno!void;
+            const ret: ret_type = @call(.auto, sys_struct.do, get_params(
                 @typeInfo(@TypeOf(sys_struct.do)).@"fn",
                 current_task.ucontext.uc_mcontext,
             ));
