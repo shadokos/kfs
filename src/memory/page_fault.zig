@@ -71,7 +71,7 @@ fn kernel_page_fault(fault: PageFault) void {
 }
 
 fn segmentation_fault(task: *TaskDescriptor, fault: PageFault) void {
-    task.signalManager.queue_signal(.{
+    task.send_signal(.{
         .si_signo = .{ .valid = .SIGSEGV },
         .si_code = if (fault.present) .SEGV_ACCERR else .SEGV_MAPERR,
         .si_pid = 0,

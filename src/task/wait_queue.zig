@@ -1,8 +1,14 @@
 const TaskDescriptor = @import("task.zig").TaskDescriptor;
 const scheduler = @import("scheduler.zig");
 const ready_queue = @import("ready_queue.zig");
+const Errno = @import("../errno.zig").Errno;
 
-const Queue = @import("ft").DoublyLinkedList(?*void);
+const Payload = struct {
+    data: ?*void,
+    queue: *Queue,
+};
+
+const Queue = @import("ft").DoublyLinkedList(Payload);
 
 pub const Node = Queue.Node;
 
@@ -24,19 +30,30 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
 
         const Self = @This();
 
-        pub fn block(self: *Self, task: *TaskDescriptor, data: ?*void) void {
+        fn internal_block(self: *Self, task: *TaskDescriptor, interruptible: bool, data: ?*void) void {
             scheduler.lock();
             defer scheduler.unlock();
-			if (arg.predicate(@alignCast(@ptrCast(task)), data))
-				return;
+            if (arg.predicate(@alignCast(@ptrCast(task)), data))
+                return;
 
             const node: *Node = &task.wq_node;
 
-            node.data = data;
+            node.data.data = data;
+            node.data.queue = &self.queue;
             self.queue.append(node);
-            if (arg.block_callback) |callback| callback(@alignCast(@ptrCast(task)), node.data);
-            task.state = .Blocked;
+            if (arg.block_callback) |callback| callback(@alignCast(@ptrCast(task)), node.data.data);
+            task.state = if (interruptible) .Blocked else .BlockedUninterruptible;
             scheduler.schedule();
+        }
+
+        pub fn block(self: *Self, task: *TaskDescriptor, data: ?*void) !void {
+            self.internal_block(task, true, data);
+            if (!arg.predicate(@alignCast(@ptrCast(task)), data))
+                return Errno.EINTR;
+        }
+
+        pub fn block_no_int(self: *Self, task: *TaskDescriptor, data: ?*void) void {
+            self.internal_block(task, false, data);
         }
 
         pub fn try_unblock(self: *Self) void {
@@ -47,13 +64,32 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
             while (node) |n| {
                 const task: *TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", n));
                 const next = n.next;
-                if (arg.predicate(@alignCast(@ptrCast(task)), n.data)) {
+                if (arg.predicate(@alignCast(@ptrCast(task)), n.data.data)) {
                     ready_queue.push(task);
                     self.queue.remove(n);
-                    if (arg.unblock_callback) |callback| callback(@alignCast(@ptrCast(task)), n.data);
+                    if (arg.unblock_callback) |callback| callback(@alignCast(@ptrCast(task)), n.data.data);
                 }
                 node = next;
             }
         }
     };
+}
+
+pub fn interrupt(task: *TaskDescriptor) void {
+    scheduler.lock();
+    defer scheduler.unlock();
+    if (task.state != .Blocked)
+        return;
+
+    task.state = .Ready;
+    task.wq_node.data.queue.remove(&task.wq_node);
+    ready_queue.push(task);
+}
+
+pub fn force_remove(task: *TaskDescriptor) void {
+    scheduler.lock();
+    defer scheduler.unlock();
+    if (task.state != .Blocked and task.state != .BlockedUninterruptible)
+        return;
+    task.wq_node.data.queue.remove(&task.wq_node);
 }

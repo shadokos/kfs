@@ -15,20 +15,19 @@ pub fn try_unblock_sleeping_task() void {
     sleep_queue.try_unblock();
 }
 
-pub fn usleep(micro: u64) void {
+pub fn usleep(micro: u64) !void {
     scheduler.lock();
     defer scheduler.unlock();
 
     const t = scheduler.get_current_task();
     var sleep_timeout: u64 = pit.get_utime_since_boot() + micro;
 
-    sleep_queue.block(t, @ptrCast(&sleep_timeout));
-    scheduler.schedule();
+    try sleep_queue.block(t, @ptrCast(&sleep_timeout));
 }
 
-pub fn sleep(millis: u64) void {
+pub fn sleep(millis: u64) !void {
     scheduler.lock();
     defer scheduler.unlock();
 
-    usleep(millis * 1000);
+    return usleep(millis * 1000);
 }

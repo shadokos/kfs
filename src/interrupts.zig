@@ -264,10 +264,10 @@ export fn wrapper(
 
     f(frame.*);
 
-    setup_iret_frame(frame);
-
-    if (privilege_transition)
+    if (privilege_transition) {
+        setup_iret_frame(frame);
         frame.* = scheduler.get_current_task().ucontext.uc_mcontext;
+    }
 
     if (!interrupt_enable)
         scheduler.lock_count -|= 1;
