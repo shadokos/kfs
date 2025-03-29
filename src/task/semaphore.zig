@@ -1,12 +1,8 @@
 const task = @import("task.zig");
 const scheduler = @import("scheduler.zig");
 
-fn semaphore_block_callback(t: *task.TaskDescriptor) void {
-    t.state = .Blocked;
-    scheduler.schedule();
-}
-
-fn semaphore_predicate(t: *task.TaskDescriptor) bool {
+fn semaphore_predicate(t_void: *void, _: ?*void) bool {
+    const t: *task.TaskDescriptor = @alignCast(@ptrCast(t_void));
     return t.state == .Ready;
 }
 
@@ -17,7 +13,6 @@ pub fn Semaphore(max_count: u32) type {
         count: u32 = 0,
         max_count: u32 = max_count,
         queue: @import("wait_queue.zig").WaitQueue(.{
-            .block_callback = semaphore_block_callback,
             .predicate = semaphore_predicate,
         }) = .{},
 
@@ -29,7 +24,7 @@ pub fn Semaphore(max_count: u32) type {
                 self.count += 1;
             } else {
                 if (!scheduler.is_initialized()) @panic("Max count reached for a semaphore during early boot stage");
-                self.queue.block(scheduler.get_current_task());
+                self.queue.block(scheduler.get_current_task(), null);
                 scheduler.schedule();
             }
         }
