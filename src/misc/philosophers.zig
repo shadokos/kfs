@@ -148,6 +148,7 @@ pub fn main(nb: u8, ttd: usize, tte: usize, tts: usize) void {
             current_pid,
             .CHILD,
             &stat,
+            null,
             .{},
         ) catch ft.log.warn("Failed to wait for philosopher {}", .{philo.id});
     }
