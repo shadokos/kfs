@@ -9,6 +9,7 @@ const Cache = @import("../memory/object_allocators/slab/cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;
 const Errno = @import("../errno.zig").Errno;
 const logger = @import("ft").log.scoped(.signal);
+const Mutex = @import("semaphore.zig").Mutex;
 
 pub const DefaultAction = enum {
     Ignore,
@@ -173,6 +174,7 @@ pub const SignalQueue = struct {
 pub const SignalManager = struct {
     queues: [32]SignalQueue = undefined,
     pending: SigSet = 0,
+    mutex: Mutex = .{},
     const Self = @This();
 
     const non_maskable: SigSet = (@as(SigSet, 1) << @intFromEnum(Id.SIGKILL)) |
@@ -216,18 +218,24 @@ pub const SignalManager = struct {
     }
 
     pub fn change_action(self: *Self, id: Id, action: Sigaction) !void {
+        self.mutex.acquire();
+        defer self.mutex.release();
+
         return self.queues[@intFromEnum(id)].set_action(action);
     }
 
-    pub fn get_action(self: *Self, id: Id) Sigaction {
+    pub fn get_action(self: Self, id: Id) Sigaction {
         return self.queues[@intFromEnum(id)].action;
     }
 
-    pub fn get_defaultAction(self: *Self, id: Id) DefaultAction {
+    pub fn get_defaultAction(self: Self, id: Id) DefaultAction {
         return self.queues[@intFromEnum(id)].default_handler;
     }
 
     pub fn queue_signal(self: *Self, signal: siginfo_t) void {
+        self.mutex.acquire();
+        defer self.mutex.release();
+
         const index: u32 = @intFromEnum(signal.si_signo.unwrap());
         if (index > self.queues.len) {
             @panic("todo");
@@ -239,6 +247,9 @@ pub const SignalManager = struct {
     }
 
     pub fn get_pending_signal(self: *Self, mask: SigSet) ?siginfo_t {
+        self.mutex.acquire();
+        defer self.mutex.release();
+
         const real_mask: SigSet = mask & ~non_maskable;
         if ((self.pending & ~real_mask) != 0) {
             const signo = @ctz(self.pending & ~real_mask);
