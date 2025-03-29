@@ -137,17 +137,17 @@ pub const TaskDescriptor = struct {
         return ret;
     }
 
-    pub fn autowait(self: *Self, transition: status_informations.Status.Transition) Errno!?*Self {
+    pub fn autowait(self: *Self, mask: status_informations.Status.TransitionMask) ?*Self {
         if (self.status_info) |s| {
-            if (s.transition != transition) {
+            if (!mask.check(s.transition)) {
                 return null;
             }
             return self;
         } else return null;
     }
 
-    pub fn wait_child(self: *Self, transition: status_informations.Status.Transition) Errno!?*Self {
-        if (self.status_stack.top(transition)) |n| {
+    pub fn wait_child(self: *Self, mask: status_informations.Status.TransitionMask) ?*Self {
+        if (self.status_stack.top(mask)) |n| {
             const descriptor: *Self = @alignCast(@fieldParentPtr("status_stack_process_node", n));
             return descriptor;
         } else return null;

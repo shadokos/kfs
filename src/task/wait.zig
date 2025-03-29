@@ -54,7 +54,7 @@ pub const Status = packed struct(u32) {
 fn wait_selector(
     descriptor: *TaskDescriptor,
     selector: Selector,
-    transition: status_informations.Status.Transition,
+    transition: status_informations.Status.TransitionMask,
 ) Errno!?*TaskDescriptor {
     return switch (selector) {
         .SELF => descriptor.autowait(transition),
@@ -66,15 +66,15 @@ fn wait_transition(descriptor: *TaskDescriptor, selector: Selector, options: Wai
     return try wait_selector(
         descriptor,
         selector,
-        .Terminated,
+        .{ .Terminated = true },
     ) orelse (if (options.WCONTINUED) try wait_selector(
         descriptor,
         selector,
-        .Continued,
+        .{ .Continued = true },
     ) else null) orelse (if (options.WUNTRACED) try wait_selector(
         descriptor,
         selector,
-        .Stopped,
+        .{ .Stopped = true },
     ) else null);
 }
 
