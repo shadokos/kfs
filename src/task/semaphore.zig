@@ -28,6 +28,7 @@ pub fn Semaphore(max_count: u32) type {
             if (self.count < self.max_count) {
                 self.count += 1;
             } else {
+                if (!scheduler.is_initialized()) @panic("Max count reached for a semaphore during early boot stage");
                 self.queue.block(scheduler.get_current_task());
                 scheduler.schedule();
             }
@@ -38,7 +39,8 @@ pub fn Semaphore(max_count: u32) type {
             defer scheduler.unlock();
 
             if (self.queue.queue.first) |first| {
-                first.data.state = .Ready;
+                const _t: *task.TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", first));
+                _t.state = .Ready;
                 self.queue.try_unblock();
             } else {
                 if (self.count == 0) @panic("Trying to release a unacquired semaphore");
