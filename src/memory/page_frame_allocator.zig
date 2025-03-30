@@ -3,6 +3,7 @@ const paging = @import("paging.zig");
 const builtin = @import("builtin");
 const logger = @import("ft").log.scoped(.PFA);
 const ft = @import("ft");
+const Mutex = @import("../task/semaphore.zig").Mutex;
 
 const max_order = 10;
 
@@ -16,6 +17,8 @@ pub fn PageFrameAllocator(comptime _Zones: type) type {
         total_space: u64 = undefined,
 
         zones: [nzones]?Zone = [1]?Zone{null} ** nzones,
+
+        lock: Mutex = Mutex{},
 
         pub const Zone = struct {
             allocator: UnderlyingAllocator,
@@ -42,17 +45,25 @@ pub fn PageFrameAllocator(comptime _Zones: type) type {
             size: paging.PhysicalUsize,
             allocator: ft.mem.Allocator,
         ) void {
+            const _allocator = UnderlyingAllocator.init(
+                @truncate(@min(self.total_space -| begin, size) / @sizeOf(paging.page)),
+                allocator,
+            );
+
+            self.lock.acquire();
+            defer self.lock.release();
+
             self.zones[@intFromEnum(zone)] = .{
-                .allocator = UnderlyingAllocator.init(
-                    @truncate(@min(self.total_space -| begin, size) / @sizeOf(paging.page)),
-                    allocator,
-                ),
+                .allocator = _allocator,
                 .begin = begin,
                 .size = size,
             };
         }
 
         pub fn alloc_pages_zone(self: *Self, zone: Zones, n: usize) Error!paging.PhysicalPtr {
+            self.lock.acquire();
+            defer self.lock.release();
+
             inline for (0..nzones) |z| {
                 if (self.zones[z]) |*unwrapped| {
                     if (z >= @intFromEnum(zone)) {
@@ -70,6 +81,9 @@ pub fn PageFrameAllocator(comptime _Zones: type) type {
         }
 
         pub fn alloc_pages_hint(self: *Self, zone: Zones, n: usize) Error!paging.PhysicalPtr {
+            self.lock.acquire();
+            defer self.lock.release();
+
             inline for (0..nzones) |z| {
                 if (self.zones[z]) |*unwrapped| {
                     if (z >= @intFromEnum(zone)) {
@@ -83,6 +97,9 @@ pub fn PageFrameAllocator(comptime _Zones: type) type {
         }
 
         pub fn free_pages(self: *Self, ptr: paging.PhysicalPtr, n: usize) !void {
+            self.lock.acquire();
+            defer self.lock.release();
+
             inline for (0..nzones) |z| {
                 if (self.zones[z]) |*unwrapped| {
                     if (ptr >= unwrapped.begin and ptr < unwrapped.begin + unwrapped.size) {

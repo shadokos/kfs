@@ -54,8 +54,8 @@ pub const Slab = struct {
 
         const index = next * (self.header.cache.size_obj / @sizeOf(usize));
         switch (self.get_state()) {
-            .Empty => self.header.cache.move_slab(self, .Partial),
-            .Partial => if (self.data[index] == null) self.header.cache.move_slab(self, .Full),
+            .Empty => self.header.cache.unsafe_move_slab(self, .Partial),
+            .Partial => if (self.data[index] == null) self.header.cache.unsafe_move_slab(self, .Full),
             .Full => unreachable,
         }
         self.header.next_free = self.data[index];
@@ -84,8 +84,8 @@ pub const Slab = struct {
         self.bitmap.set(index, Bit.Free) catch unreachable;
         switch (self.get_state()) {
             .Empty => unreachable,
-            .Partial => if (self.header.in_use == 1) self.header.cache.move_slab(self, .Empty),
-            .Full => self.header.cache.move_slab(self, .Partial),
+            .Partial => if (self.header.in_use == 1) self.header.cache.unsafe_move_slab(self, .Empty),
+            .Full => self.header.cache.unsafe_move_slab(self, .Partial),
         }
         self.header.in_use -= 1;
         self.data[index * (self.header.cache.size_obj / @sizeOf(usize))] = self.header.next_free;

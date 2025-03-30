@@ -7,6 +7,7 @@ const Slab = @import("slab.zig").Slab;
 const SlabState = @import("slab.zig").SlabState;
 const BitMap = @import("../../../misc/bitmap.zig").BitMap;
 const mapping = @import("../../mapping.zig");
+const Mutex = @import("../../../task/semaphore.zig").Mutex;
 const logger = ft.log.scoped(.cache);
 
 const CACHE_NAME_LEN = 20;
@@ -14,6 +15,7 @@ const CACHE_NAME_LEN = 20;
 pub const Cache = struct {
     const Self = @This();
     pub const Error = error{ InitializationFailed, AllocationFailed };
+    pub const AllocError = Error || Slab.Error || PageAllocator.Error;
 
     next: ?*Cache = null,
     prev: ?*Cache = null,
@@ -28,6 +30,7 @@ pub const Cache = struct {
     obj_per_slab: u16 = 0,
     size_obj: usize = 0,
     align_obj: usize = 0,
+    lock: Mutex = .{},
 
     pub fn init(
         name: []const u8,
@@ -63,27 +66,7 @@ pub const Cache = struct {
         const name_len = @min(name.len, CACHE_NAME_LEN);
         @memset(new.name[0..CACHE_NAME_LEN], 0);
         @memcpy(new.name[0..name_len], name[0..name_len]);
-        //new.debug();
         return new;
-    }
-
-    pub fn grow(self: *Self, nb_slab: usize) PageAllocator.Error!void {
-        for (0..nb_slab) |_| {
-            const obj = try self.page_allocator.alloc_pages(self.pages_per_slab);
-            const slab: *Slab = @ptrCast(@alignCast(obj));
-
-            slab.* = Slab.init(self, @ptrCast(obj));
-
-            for (0..self.pages_per_slab) |i| {
-                const page_addr = @as(usize, @intFromPtr(obj)) + (i * paging.page_size);
-                var pfd = self.get_page_frame_descriptor(@ptrFromInt(page_addr));
-                pfd.prev = @ptrCast(@alignCast(self));
-                pfd.next = @ptrCast(@alignCast(slab));
-                pfd.flags.slab = true;
-            }
-            self.move_slab(slab, SlabState.Empty);
-            self.nb_slab += 1;
-        }
     }
 
     fn reset_page_frame_descriptor(self: *Self, slab: *Slab) void {
@@ -93,15 +76,6 @@ pub const Cache = struct {
             pfd.flags.slab = false;
             pfd.prev = null;
             pfd.next = null;
-        }
-    }
-
-    pub fn shrink(self: *Self) void {
-        while (self.slab_empty) |slab| {
-            self.unlink(slab);
-            self.reset_page_frame_descriptor(slab);
-            self.page_allocator.free_pages(@ptrCast(@alignCast(slab)), self.pages_per_slab);
-            self.nb_slab -= 1;
         }
     }
 
@@ -133,12 +107,44 @@ pub const Cache = struct {
         slab.header.prev = null;
     }
 
-    pub fn move_slab(self: *Self, slab: *Slab, state: SlabState) void {
+    // Unsafe methods are method implementing the logic without thread safety.
+    // Each unsafe_xxx method has xxx method which simply calls unsafe_xxx wrapped by mutex lock/unlock.
+    // This is a workaround to prevent deadlocks
+    //
+    pub fn unsafe_move_slab(self: *Self, slab: *Slab, state: SlabState) void {
         self.unlink(slab);
         self.link(slab, state);
     }
 
-    pub fn available_chunks(self: *Self) usize {
+    pub fn unsafe_grow(self: *Self, nb_slab: usize) PageAllocator.Error!void {
+        for (0..nb_slab) |_| {
+            const obj = try self.page_allocator.alloc_pages(self.pages_per_slab);
+            const slab: *Slab = @ptrCast(@alignCast(obj));
+
+            slab.* = Slab.init(self, @ptrCast(obj));
+
+            for (0..self.pages_per_slab) |i| {
+                const page_addr = @as(usize, @intFromPtr(obj)) + (i * paging.page_size);
+                var pfd = self.get_page_frame_descriptor(@ptrFromInt(page_addr));
+                pfd.prev = @ptrCast(@alignCast(self));
+                pfd.next = @ptrCast(@alignCast(slab));
+                pfd.flags.slab = true;
+            }
+            self.unsafe_move_slab(slab, SlabState.Empty);
+            self.nb_slab += 1;
+        }
+    }
+
+    fn unsafe_shrink(self: *Self) void {
+        while (self.slab_empty) |slab| {
+            self.unlink(slab);
+            self.reset_page_frame_descriptor(slab);
+            self.page_allocator.free_pages(@ptrCast(@alignCast(slab)), self.pages_per_slab);
+            self.nb_slab -= 1;
+        }
+    }
+
+    pub fn unsafe_available_chunks(self: *Self) usize {
         var ret: usize = 0;
         var partials = self.slab_partial;
         while (partials) |p| : (partials = p.header.next) {
@@ -151,27 +157,26 @@ pub const Cache = struct {
         return ret;
     }
 
-    pub fn prepare_alloc(self: *Self, count: usize) !void {
+    pub fn unsafe_prepare_alloc(self: *Self, count: usize) !void {
         const available = self.available_chunks();
         if (available >= count)
             return;
         const needed = count - available;
         const slabs_needed = ft.math.divCeil(usize, needed, self.obj_per_slab) catch unreachable;
-        try self.grow(slabs_needed);
+        try self.unsafe_grow(slabs_needed);
     }
 
-    pub const AllocError = Error || Slab.Error || PageAllocator.Error;
-    pub fn alloc_one(self: *Self) AllocError!*usize {
+    pub fn unsafe_alloc_one(self: *Self) AllocError!*usize {
         const slab: ?*Slab = if (self.slab_partial) |slab| slab else if (self.slab_empty) |slab| slab else null;
         if (slab) |s|
             return try s.alloc_object()
         else {
-            try self.grow(1);
-            return self.alloc_one();
+            try self.unsafe_grow(1);
+            return self.unsafe_alloc_one();
         }
     }
 
-    pub fn free(_: *Self, ptr: *usize) (Slab.Error || BitMap.Error)!void {
+    pub fn unsafe_free(_: *Self, ptr: *usize) (Slab.Error || BitMap.Error)!void {
         const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size);
         const page_descriptor = mapping.get_page_frame_descriptor(
             @ptrFromInt(addr),
@@ -181,6 +186,59 @@ pub const Cache = struct {
         const slab: *Slab = @ptrCast(@alignCast(page_descriptor.next));
         try slab.free_object(ptr);
     }
+
+    // The following methods are the thread safe wrapper to unsafe methods.
+    //
+    pub fn move_slab(self: *Self, slab: *Slab, state: SlabState) void {
+        self.lock.acquire();
+        defer self.lock.release();
+
+        return self.unsafe_move_slab(slab, state);
+    }
+
+    pub fn grow(self: *Self, nb_slab: usize) PageAllocator.Error!void {
+        self.lock.acquire();
+        defer self.lock.release();
+
+        return self.unsafe_grow(nb_slab);
+    }
+
+    pub fn shrink(self: *Self) void {
+        self.lock.acquire();
+        defer self.lock.release();
+
+        return self.unsafe_shrink();
+    }
+
+    pub fn available_chunks(self: *Self) usize {
+        self.lock.acquire();
+        defer self.lock.release();
+
+        return self.unsafe_available_chunks();
+    }
+
+    pub fn prepare_alloc(self: *Self, count: usize) !void {
+        self.lock.acquire();
+        defer self.lock.release();
+
+        return unsafe_prepare_alloc(count);
+    }
+
+    pub fn alloc_one(self: *Self) AllocError!*usize {
+        self.lock.acquire();
+        defer self.lock.release();
+
+        return self.unsafe_alloc_one();
+    }
+
+    pub fn free(self: *Self, ptr: *usize) (Slab.Error || BitMap.Error)!void {
+        self.lock.acquire();
+        defer self.lock.release();
+
+        return self.unsafe_free(ptr);
+    }
+    //
+    // End of thread safe methods
 
     pub fn get_page_frame_descriptor(_: *Self, obj: *usize) *page_frame_descriptor {
         const addr = ft.mem.alignBackward(usize, @intFromPtr(obj), paging.page_size);
@@ -273,6 +331,7 @@ pub const GlobalCache = struct {
     const Self = @This();
 
     cache: Cache = Cache{},
+    lock: Mutex = Mutex{},
 
     pub fn init(allocator: PageAllocator) !GlobalCache {
         return .{ .cache = try Cache.init("global", allocator, @sizeOf(Cache), @alignOf(Cache), 0) };
@@ -286,6 +345,9 @@ pub const GlobalCache = struct {
         obj_align: usize,
         order: u5,
     ) !*Cache {
+        self.lock.acquire();
+        defer self.lock.release();
+
         var cache: *Cache = @ptrCast(@alignCast(self.cache.alloc_one() catch |e| return e));
 
         cache.* = try Cache.init(name, allocator, obj_size, obj_align, order);
@@ -298,6 +360,9 @@ pub const GlobalCache = struct {
     }
 
     pub fn destroy(self: *Self, cache: *Cache) void {
+        self.lock.acquire();
+        defer self.lock.release();
+
         cache.shrink();
         var lst: ?*Slab = cache.slab_full;
 
