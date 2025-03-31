@@ -10,6 +10,7 @@ const logger = ft.log.scoped(.regions);
 
 pub const RegionOperations = struct {
     open: *const fn (region: *Region) void,
+    clone: *const fn (region: *Region) void,
     split: *const fn (region: *Region) void,
     close: *const fn (region: *Region) void,
     nopage: *const fn (region: *Region, address: paging.VirtualPagePtr) void,
@@ -120,6 +121,7 @@ pub const PhysicallyContiguousRegion = struct {
     const operations: RegionOperations = .{
         .open = &open,
         .split = &split,
+        .clone = &clone,
         .nopage = &nopage,
         .close = &close,
     };
@@ -149,6 +151,10 @@ pub const PhysicallyContiguousRegion = struct {
         region.data = @intFromPtr(new_ptr);
     }
 
+    pub fn clone(_: *Region) void {
+        @panic("todo");
+    }
+
     pub fn nopage(region: *Region, address: paging.VirtualPagePtr) void {
         const ptr: *const paging.PhysicalPtrDiff = @ptrFromInt(region.data);
         region.set_page(address, @as(paging.PhysicalPtr, @intCast(@intFromPtr(address) + ptr.*)));
@@ -170,6 +176,7 @@ pub const PhysicalMapping = struct {
     const operations: RegionOperations = .{
         .open = &open,
         .split = &split,
+        .clone = &clone,
         .nopage = &nopage,
         .close = &close,
     };
@@ -184,6 +191,10 @@ pub const PhysicalMapping = struct {
     pub fn open(_: *Region) void {}
 
     pub fn split(region: *Region) void {
+        clone(region);
+    }
+
+    pub fn clone(region: *Region) void {
         const ptr: *paging.PhysicalPtrDiff = @ptrFromInt(region.data);
         const new_ptr: *paging.PhysicalPtrDiff = memory.smallAlloc.allocator().create(
             paging.PhysicalPtrDiff,
@@ -207,6 +218,7 @@ pub const VirtuallyContiguousRegion = struct {
     const operations: RegionOperations = .{
         .open = &open,
         .split = &split,
+        .clone = &clone,
         .nopage = &nopage,
         .close = &close,
     };
@@ -224,6 +236,24 @@ pub const VirtuallyContiguousRegion = struct {
     pub fn open(_: *Region) void {}
 
     pub fn split(_: *Region) void {}
+
+    pub fn clone(region: *Region) void {
+        for (region.begin..region.begin + region.len) |p| {
+            const pagePtr: paging.VirtualPagePtr = @ptrFromInt(p << paging.page_bits);
+            var entry = mapping.get_entry(pagePtr);
+            if (entry.is_present()) {
+                const physical = pageFrameAllocator.alloc_pages(1) catch @panic("todo");
+                errdefer pageFrameAllocator.free_pages(physical, 1) catch unreachable;
+                const virtual = memory.kernel_virtual_space.map_anywhere(physical, 1) catch @panic("todo");
+                defer memory.kernel_virtual_space.unmap(
+                    @as(usize, @intFromPtr(virtual)) / paging.page_size,
+                    1,
+                ) catch unreachable;
+                @memcpy(virtual[0..], pagePtr[0..]);
+                region.set_page(pagePtr, physical);
+            }
+        }
+    }
 
     pub fn nopage(region: *Region, address: paging.VirtualPagePtr) void {
         // const physical = try pageFrameAllocator.alloc_pages(1); // todo

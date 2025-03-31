@@ -73,11 +73,9 @@ pub const TaskDescriptor = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        if (self.vm) |_| {
-            // todo destroy vm
-        }
         self.status_wait_queue.unblock_all();
         wait_queue.force_remove(self);
+
         if (self.parent) |p| {
             p.status_stack.remove(&self.status_stack_process_node);
             var n: ?*Self = p.childs;
@@ -93,7 +91,15 @@ pub const TaskDescriptor = struct {
                 prev.next_sibling = self.next_sibling;
             }
         }
+
+        if (self.vm) |vm| {
+            vm.deinit();
+            VirtualSpace.cache.allocator().destroy(vm);
+            self.vm = null;
+        }
+
         // todo: process group status_stack
+        // todo: this is unbounded recursivity
         while (self.childs) |c| {
             task_set.destroy_task(c.pid) catch @panic("cannot deinit task");
         }
@@ -114,7 +120,7 @@ pub const TaskDescriptor = struct {
         if (self.vm != null) {
             @panic("task already has a vm");
         }
-        const vm = try memory.bigAlloc.allocator().create(VirtualSpace);
+        const vm = try VirtualSpace.cache.allocator().create(VirtualSpace);
         try vm.init();
         try vm.add_space(0, paging.high_half / paging.page_size);
         try vm.add_space((paging.page_tables) / paging.page_size, 768);
