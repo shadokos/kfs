@@ -72,6 +72,7 @@ pub const VirtualSpace = struct {
         defer self.lock.release();
 
         const ret = try cache.allocator().create(Self);
+        errdefer cache.allocator().destroy(ret);
         try ret.init();
         ret.spaceAllocator = try self.spaceAllocator.clone();
         ret.regions = try self.regions.clone();
@@ -85,40 +86,38 @@ pub const VirtualSpace = struct {
         defer self.internal_transfer();
 
         const directory_region = ret.directory_region orelse @panic("todo");
-        try ret.clone_region(directory_region);
+        self.clone_region(ret.directory_region.?);
 
         var current = ret.regions.list.first;
         while (current) |r| : (current = r.next) {
             if (&r.data == directory_region) continue;
-            try ret.clone_region(&r.data);
+            self.clone_region(&r.data);
         }
         return ret;
     }
 
-    fn clone_region(self: *Self, region: *Region) !void {
-        self.lock.acquire();
-        defer self.lock.release();
+    fn clone_region(_: *Self, region: *Region) void {
+        region.operations.clone(region);
+        region.flush();
+    }
 
-        // todo: maybe stateless (can we do this operation while this virtual space is not active)
-        for (region.begin..region.begin + region.len) |p| {
-            const pagePtr: paging.VirtualPagePtr = @ptrFromInt(p << paging.page_bits);
-            var entry = mapping.get_entry(pagePtr);
-            if (entry.is_present()) {
-                const physical = try pageFrameAllocator.alloc_pages(1);
-                errdefer pageFrameAllocator.free_pages(physical, 1) catch unreachable;
-                const memory = @import("../memory.zig");
-                const virtual = try memory.kernel_virtual_space.map_anywhere(physical, 1);
-                defer memory.kernel_virtual_space.internal_unmap(
-                    @as(usize, @intFromPtr(virtual)) / paging.page_size,
-                    1,
-                ) catch unreachable;
-                @memcpy(virtual[0..], pagePtr[0..]);
-                entry.present.address_fragment = @intCast(physical >> paging.page_bits);
-            } else {
-                entry.not_present = @ptrCast(region);
+    pub fn deinit(self: *Self) void {
+        const old_cr3 = cpu.get_cr3();
+        self.transfer();
+        defer cpu.set_cr3(old_cr3);
+
+        const directory_region = self.directory_region orelse @panic("todo");
+        var current = self.regions.list.first;
+        while (current) |r| {
+            const next = r.next;
+            if (&r.data != directory_region) {
+                self.close_region(&r.data);
             }
-            mapping.set_entry(pagePtr, entry);
+            current = next;
         }
+        self.close_region(directory_region);
+
+        self.spaceAllocator.deinit();
     }
 
     pub fn add_space(self: *Self, begin: usize, len: usize) !void {
@@ -360,7 +359,7 @@ pub const VirtualSpace = struct {
 
         self.regions.remove_region(region);
 
-        self.spaceAllocator.free_space(region.begin, region.len) catch unreachable;
+        self.spaceAllocator.free_space(region.begin, region.len) catch @panic("double freed space");
 
         RegionSet.destroy_region(region) catch @panic("double freed region");
     }

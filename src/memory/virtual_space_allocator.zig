@@ -61,18 +61,40 @@ pub const VirtualSpaceAllocator = struct {
         if (ret.tree[0]) |t| {
             ret.tree[0] = try self.clone_node(t.*);
             ret.tree[1] = null;
-            ret.add_tree(t, @enumFromInt(1));
+            ret.add_tree(ret.tree[0].?);
         }
         return ret;
     }
 
-    fn add_tree(self: *Self, tree: *Node, field: AVL_type) void {
-        self.add_to_tree(tree, field);
-        if (tree.avl[@intFromEnum(field)].l) |l| {
-            self.add_tree(l, field);
+    pub fn deinit(self: *Self) void {
+        if (self.tree[0]) |root| {
+            var node = next_node(root, .Size);
+            while (node) |n| {
+                if (n.avl[0].l) |l| {
+                    node = l;
+                    n.avl[0].l = null;
+                } else if (n.avl[0].r) |r| {
+                    node = r;
+                    n.avl[0].r = null;
+                } else if (n.avl[0].p) |p| {
+                    free_node(n);
+                    node = p;
+                } else {
+                    node = null;
+                }
+            }
         }
-        if (tree.avl[@intFromEnum(field)].r) |r| {
-            self.add_tree(r, field);
+        self.tree[0] = null;
+        self.tree[1] = null;
+    }
+
+    fn add_tree(self: *Self, tree: *Node) void {
+        self.add_to_tree(tree, @enumFromInt(1));
+        if (tree.avl[0].l) |l| {
+            self.add_tree(l);
+        }
+        if (tree.avl[0].r) |r| {
+            self.add_tree(r);
         }
     }
 
@@ -91,6 +113,7 @@ pub const VirtualSpaceAllocator = struct {
             r.* = try self.clone_node(r.*.*);
             r.*.avl[0].p = ret;
         }
+        ret.avl[0].p = null;
         return ret;
     }
 
@@ -288,8 +311,20 @@ pub const VirtualSpaceAllocator = struct {
     /// debug function, used to check that a tree respect the rules of the AVL algorithm,
     /// this function panic if the tree is invalid
     fn check_node(self: *Self, n: *Node, field: AVL_type) i32 {
-        const dl: i32 = if (n.avl[@intFromEnum(field)].l) |l| self.check_node(l, field) else 0;
-        const dr: i32 = if (n.avl[@intFromEnum(field)].r) |r| self.check_node(r, field) else 0;
+        const dl: i32 = if (n.avl[@intFromEnum(field)].l) |l|
+            if (l.avl[@intFromEnum(field)].p == n)
+                self.check_node(l, field)
+            else
+                @panic("invalid tree (bad parent ptr)")
+        else
+            0;
+        const dr: i32 = if (n.avl[@intFromEnum(field)].r) |r|
+            if (r.avl[@intFromEnum(field)].p == n)
+                self.check_node(r, field)
+            else
+                @panic("invalid tree (bad parent ptr)")
+        else
+            0;
         if (dl - dr != n.avl[@intFromEnum(field)].balance_factor or
             n.avl[@intFromEnum(field)].balance_factor > 1 or
             n.avl[@intFromEnum(field)].balance_factor < -1)
