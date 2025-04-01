@@ -114,3 +114,11 @@ pub fn philo() void {
         .usage = "philo <n> <time_to_die> <time_to_eat> <time_to_sleep>",
     });
 }
+
+pub fn demo() void {
+    print_helper(Help{
+        .name = "demo",
+        .description = "Call an userland routine",
+        .usage = "demo <userland_routine>",
+    });
+}

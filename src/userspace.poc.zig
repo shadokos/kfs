@@ -58,10 +58,129 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
     return res;
 }
 
+fn putchar(c: u8) linksection(".userspace") void {
+    _ = syscall(.write, &.{ &c, 1 });
+}
+
+fn putstr(s: []const u8) linksection(".userspace") void {
+    for (s) |c| {
+        putchar(c);
+    }
+}
+
+fn putnbr(n: anytype) linksection(".userspace") void {
+    const NTypeInfo = @typeInfo(@TypeOf(n));
+    const IntType = @import("std").meta.Int(
+        .unsigned,
+        NTypeInfo.int.bits + @intFromBool(NTypeInfo.int.signedness == .signed),
+    );
+    const unsigned: IntType = if (n < 0) b: {
+        putchar('-');
+        break :b @intCast(-n);
+    } else @intCast(n);
+    if (unsigned == 0) {
+        putchar('0');
+        return;
+    }
+    if (@divTrunc(unsigned, @as(IntType, 10)) != 0)
+        putnbr(@divTrunc(unsigned, @as(IntType, 10)));
+    putchar(@intCast((unsigned % 10) + '0'));
+}
+
+export fn userland_mmap() linksection(".userspace") void {
+    _ = syscall(.sleep, .{200});
+
+    putstr("mmap 3 anonymous pages\n");
+
+    const addr: [*][4096]u8 = @ptrFromInt(@as(u32, @bitCast(syscall(.mmap, .{
+        null,
+        4096 * 3,
+        @import("syscall/mmap.zig").Prot{ .PROT_WRITE = true, .PROT_READ = true },
+        @import("syscall/mmap.zig").Flags{ .anonymous = true, .privacy = .Private },
+        0,
+        0,
+    }))));
+
+    putstr("write a small string in each one\n");
+
+    @memcpy(addr[0][0..7], "page 1\n");
+    @memcpy(addr[1][0..7], "page 2\n");
+    @memcpy(addr[2][0..7], "page 3\n");
+
+    putstr("print pages\n");
+
+    putstr(addr[0][0..7]);
+    putstr(addr[1][0..7]);
+    putstr(addr[2][0..7]);
+    putstr("\n");
+
+    putstr("mmap a fixed page on the second page\n");
+
+    _ = syscall(.mmap, .{
+        @as(?*void, @ptrCast(&(addr[1]))),
+        4096,
+        @import("syscall/mmap.zig").Prot{ .PROT_WRITE = true, .PROT_READ = true },
+        @import("syscall/mmap.zig").Flags{ .anonymous = true, .privacy = .Private, .fixed = true },
+        0,
+        0,
+    });
+
+    putstr("print pages\n");
+
+    putstr(addr[0][0..7]);
+    putstr(addr[1][0..7]);
+    putstr(addr[2][0..7]);
+    putstr("\n");
+
+    putstr("remove read permission from the 3rd page with mprotect (should segfault)\n");
+
+    // _ = syscall (.munmap, .{@as(?*void, @ptrCast(&(addr[1]))), 4096});
+    _ = syscall(.mprotect, .{
+        @as(?*void, @ptrCast(&(addr[2]))),
+        4096,
+        @import("syscall/mmap.zig").Prot{ .PROT_WRITE = false, .PROT_READ = false },
+    });
+
+    putstr("print pages\n");
+
+    putstr(addr[0][0..7]);
+    putstr(addr[1][0..7]);
+    putstr(addr[2][0..7]);
+    putstr("\n");
+}
+
+fn count() linksection(".userspace") void {
+    var n: u32 = 0;
+    while (true) : (n += 1) {
+        _ = syscall(.sleep, .{200});
+        putstr("         \r");
+        putnbr(n);
+    }
+}
+
+export fn userland_count() linksection(".userspace") void {
+    const pid = syscall(.fork, .{});
+    if (pid == 0) {
+        count();
+    }
+    for (0..3) |_| {
+        _ = syscall(.sleep, .{3000});
+        putstr("\rSTOP");
+        _ = syscall(.kill, .{ pid, @as(u32, @intFromEnum(signal.Id.SIGSTOP)) });
+        _ = syscall(.sleep, .{2000});
+        putstr("\rCONTINUE");
+        _ = syscall(.sleep, .{200});
+        _ = syscall(.kill, .{ pid, @as(u32, @intFromEnum(signal.Id.SIGCONT)) });
+    }
+    putchar('\n');
+    _ = syscall(.exit, .{0});
+}
+
 var byte: u8 linksection(".userspace") = 0;
 var byte_index: u5 linksection(".userspace") = 0;
 
 fn server_handler(id: u32) linksection(".userspace") callconv(.C) void {
+    // putstr("bonjour\n");
     byte |= @truncate((id - @intFromEnum(signal.Id.SIGUSR1)) << byte_index);
     byte_index += 1;
     if (byte_index == 8) {
@@ -91,176 +210,40 @@ fn send(pid: u32, msg: []const u8) linksection(".userspace") void {
 }
 
 fn client(server_pid: u32) linksection(".userspace") void {
+    _ = syscall(.sleep, .{100});
     send(server_pid, "le minitalk\n");
+    _ = syscall(.sleep, .{100});
 }
 
-fn putchar(c: u8) void {
-    _ = syscall(.write, &.{ &c, 1 });
-}
-
-fn putstr(s: []const u8) void {
-    for (s) |c| {
-        putchar(c);
-    }
-}
-
-fn putnbr(n: anytype) void {
-    const NTypeInfo = @typeInfo(@TypeOf(n));
-    const IntType = @import("std").meta.Int(
-        .unsigned,
-        NTypeInfo.int.bits + @intFromBool(NTypeInfo.int.signedness == .signed),
-    );
-    const unsigned: IntType = if (n < 0) b: {
-        putchar('-');
-        break :b @intCast(-n);
-    } else @intCast(n);
-    if (unsigned == 0) {
-        putchar('0');
-        return;
-    }
-    putnbr(@as(IntType, unsigned / @as(IntType, 10)));
-    putchar(@intCast((unsigned % 10) + '0'));
-}
-
-fn test_segfault() linksection(".userspace") void {
-    _ = syscall(.sleep, .{200});
-    const addr: [*][4096]u8 = @ptrFromInt(@as(u32, @bitCast(syscall(.mmap, .{
-        null,
-        4096 * 3,
-        @import("syscall/mmap.zig").Prot{ .PROT_WRITE = true, .PROT_READ = true },
-        @import("syscall/mmap.zig").Flags{ .anonymous = true, .privacy = .Private },
-        0,
-        0,
-    }))));
-    @memcpy(addr[0][0..8], "bonjour\n");
-    @memcpy(addr[1][0..8], "bonjour\n");
-    @memcpy(addr[2][0..8], "bonjour\n");
-
-    putstr(addr[0][0..8]);
-    putstr(addr[1][0..8]);
-    putstr(addr[2][0..8]);
-    putstr("\n");
-
-    _ = syscall(.mmap, .{
-        @as(?*void, @ptrCast(&(addr[1]))),
-        4096,
-        @import("syscall/mmap.zig").Prot{ .PROT_WRITE = true, .PROT_READ = true },
-        @import("syscall/mmap.zig").Flags{ .anonymous = true, .privacy = .Private, .fixed = true },
-        0,
-        0,
-    });
-
-    putstr(addr[0][0..8]);
-    putstr(addr[1][0..8]);
-    putstr(addr[2][0..8]);
-    putstr("\n");
-
-    // _ = syscall (.munmap, .{@as(?*void, @ptrCast(&(addr[1]))), 4096});
-    _ = syscall(.mprotect, .{
-        @as(?*void, @ptrCast(&(addr[0]))),
-        4096,
-        @import("syscall/mmap.zig").Prot{ .PROT_WRITE = false, .PROT_READ = false },
-    });
-
-    putstr(addr[0][0..8]);
-    putstr(addr[1][0..8]);
-    putstr(addr[2][0..8]);
-    putstr("\n");
-}
-
-fn count() void {
-    var n: u32 = 0;
-    while (true) : (n += 1) {
-        _ = syscall(.sleep, .{200});
-        putnbr(n);
-        putchar('\n');
-    }
-}
-
-fn launch_count() void {
+export fn userland_minitalk() linksection(".userspace") void {
     const pid = syscall(.fork, .{});
     if (pid == 0) {
-        count();
+        server();
+    } else {
+        client(@bitCast(pid));
     }
-    while (true) {
-        _ = syscall(.sleep, .{3000});
-        putstr("STOP\n");
-        _ = syscall(.kill, .{ pid, @as(u32, @intFromEnum(signal.Id.SIGSTOP)) });
-        _ = syscall(.sleep, .{2000});
-        putstr("CONT\n");
-        _ = syscall(.kill, .{ pid, @as(u32, @intFromEnum(signal.Id.SIGCONT)) });
-    }
-}
-
-fn zig_userland() linksection(".userspace") void {
-    // launch_count();
-
-    {
-        const pid = syscall(.fork, .{});
-        if (pid == 0) {
-            test_segfault();
-            _ = syscall(.exit, .{42});
-        }
-
-        const Status = @import("task/wait.zig").Status;
-
-        var status: Status = undefined;
-
-        // const WaitOptions = @import("task/wait.zig").WaitOptions;
-        // const wait_ret : i32 = syscall(.waitpid, .{pid, &status, WaitOptions{}});
-        const wait_ret: i32 = syscall(.wait, .{&status});
-
-        putnbr(wait_ret);
-        putchar('\n');
-        if (wait_ret > 0) {
-            putstr("process ");
-            putnbr(wait_ret);
-            switch (status.type) {
-                .Exited => {
-                    putstr(" exited with exit code ");
-                    putnbr(status.value);
-                },
-                .Continued => putstr(" continued"),
-                .Stopped => putstr(" stopped"),
-                .Signaled => {
-                    putstr(" received signal ");
-                    putnbr(status.value);
-                },
-            }
-            putchar('\n');
-        }
-
-        _ = syscall(.exit, .{0});
-    }
-
-    const sigaction = @import("task/signal.zig").Sigaction{ .sa_sigaction = &poc_sigaction, .sa_flags = .{
-        .SA_SIGINFO = true,
-    } };
-    _ = syscall(.sigaction, &.{ 2, &sigaction, null });
-    // _ = syscall(.signal, &.{ 2, &poc_signal });
-    _ = syscall(.kill, &.{ syscall(.getpid, &.{}), 2 });
-    {
-        const pid = syscall(.fork, .{});
-        if (pid == 0) {
-            server();
-        } else {
-            client(@bitCast(pid));
-        }
-    }
-
     _ = syscall(.exit, .{0});
-
-    // while (true) {}
-    _ = syscall(.write, &.{ "coucou\n", 7 });
-    _ = syscall(.fork, .{});
-    _ = syscall(.sleep, .{100});
-    _ = syscall(.write, &.{ "bonjour\n", 8 });
-    _ = syscall(.fork, .{});
-    _ = syscall(.sleep, .{100});
-    _ = syscall(.write, &.{ "salut\n", 6 });
-    _ = syscall(.exit, .{42});
 }
 
-export fn _userland() linksection(".userspace") void {
-    zig_userland();
+export fn userland_sleep() linksection(".userspace") void {
+    _ = syscall(.sleep, .{20000});
+    _ = syscall(.exit, .{0});
+}
+
+export fn userland_fork() linksection(".userspace") void {
+    putstr("before fork\n");
+    var id: u32 = @intFromBool(syscall(.fork, .{}) != 0);
+    _ = syscall(.sleep, .{100 * id});
+    putstr("fork 1\n");
+    id = 2 * id + @intFromBool(syscall(.fork, .{}) != 0);
+    _ = syscall(.sleep, .{100 * id});
+    putstr("fork 2\n");
+    id = 2 * id + @intFromBool(syscall(.fork, .{}) != 0);
+    _ = syscall(.sleep, .{100 * id});
+    putstr("fork 3\n");
+    id = 2 * id + @intFromBool(syscall(.fork, .{}) != 0);
+    _ = syscall(.sleep, .{100 * id});
+    putstr("fork 4\n");
+    _ = syscall(.sleep, .{20000});
+    _ = syscall(.exit, .{0});
 }

@@ -301,3 +301,56 @@ pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth:
         shell.print("{d}\n", .{descriptor.pid});
     }
 }
+
+const SignalId = @import("../task/signal.zig").Id;
+
+pub fn waitpid(shell: anytype, pid: i32) void {
+    var status: @import("../task/wait.zig").Status = undefined;
+    const ret = @import("../task/wait.zig").wait(
+        pid,
+        .SELF,
+        &status,
+        null,
+        .{
+            .WNOHANG = false,
+            .WCONTINUED = false,
+            .WUNTRACED = false,
+        },
+    ) catch |e| {
+        shell.print_error("waitpid: wait error: {s}", .{@errorName(e)});
+        return;
+    };
+    if (ret == 0)
+        return;
+    print_status(shell, ret, status);
+}
+
+pub fn print_status(shell: anytype, pid: i32, status: @import("../task/wait.zig").Status) void {
+    switch (status.type) {
+        .Exited => shell.print("task {d} has exited with code {d}\n", .{ pid, status.value }),
+        .Signaled => shell.print(
+            "task {d} was terminated by signal {d} ({s})\n",
+            .{
+                pid,
+                status.value,
+                @tagName(@as(SignalId, @enumFromInt(status.value))),
+            },
+        ),
+        .Stopped => shell.print(
+            "task {d} was stopped by signal {d} ({s})\n",
+            .{
+                pid,
+                status.value,
+                @tagName(@as(SignalId, @enumFromInt(status.value))),
+            },
+        ),
+        .Continued => shell.print(
+            "task {d} was continued by signal {d} ({s})\n",
+            .{
+                pid,
+                status.value,
+                @tagName(@as(SignalId, @enumFromInt(status.value))),
+            },
+        ),
+    }
+}
