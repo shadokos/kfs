@@ -288,8 +288,7 @@ pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
     @import("../../task/sleep.zig").sleep(ms) catch {};
 }
 
-pub fn wait(_: anytype, _: [][]u8) CmdError!void {
-    const SignalId = @import("../../task/signal.zig").Id;
+pub fn wait(shell: anytype, _: [][]u8) CmdError!void {
     var status: @import("../../task/wait.zig").Status = undefined;
     const current_pid = @import("../../task/scheduler.zig").get_current_task().pid;
     const pid = @import("../../task/wait.zig").wait(
@@ -308,42 +307,14 @@ pub fn wait(_: anytype, _: [][]u8) CmdError!void {
     };
     if (pid == 0)
         return;
-    switch (status.type) {
-        .Exited => printk("task {d} has exited with code {d}\n", .{ pid, status.value }),
-        .Signaled => printk(
-            "task {d} was terminated by signal {d} ({s})\n",
-            .{
-                pid,
-                status.value,
-                @tagName(@as(SignalId, @enumFromInt(status.value))),
-            },
-        ),
-        .Stopped => printk(
-            "task {d} was stopped by signal {d} ({s})\n",
-            .{
-                pid,
-                status.value,
-                @tagName(@as(SignalId, @enumFromInt(status.value))),
-            },
-        ),
-        .Continued => printk(
-            "task {d} was continued by signal {d} ({s})\n",
-            .{
-                pid,
-                status.value,
-                @tagName(@as(SignalId, @enumFromInt(status.value))),
-            },
-        ),
-    }
+    utils.print_status(shell, pid, status);
 }
 
 pub fn kill(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) return CmdError.InvalidNumberOfArguments;
     const pid = ft.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter;
     const signal = ft.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
-    for (0..10) |_| {
-        @import("../../syscall/kill.zig").do(pid, @enumFromInt(signal)) catch @panic("ono");
-    }
+    @import("../../syscall/kill.zig").do(pid, @enumFromInt(signal)) catch return CmdError.InvalidParameter;
 }
 
 pub fn pstree(shell: anytype, _: [][]u8) CmdError!void {
@@ -379,4 +350,37 @@ pub fn philo(_: anytype, args: [][]u8) CmdError!void {
         time_to_eat,
         time_to_sleep,
     );
+}
+
+pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
+    const array = [_][]const u8{
+        "mmap",
+        "minitalk",
+        "sleep",
+        "count",
+        "fork",
+    };
+
+    if (args.len != 2) {
+        shell.print("Available routines:\n", .{});
+        for (array) |f| {
+            shell.print("- {s}\n", .{f});
+        }
+        return CmdError.InvalidNumberOfArguments;
+    }
+
+    inline for (array) |name| {
+        if (ft.mem.eql(u8, name, args[1])) {
+            const new_task = @import("../../task/task_set.zig").create_task() catch
+                @panic("Failed to create new_task");
+            new_task.spawn(
+                &@import("../../task/userspace.zig").call_userspace,
+                @intFromPtr(@extern(?*fn () void, .{ .name = "userland_" ++ name }).?),
+            ) catch @panic("Failed to spawn new_task");
+            utils.waitpid(shell, new_task.pid);
+            return;
+        }
+    } else {
+        return CmdError.InvalidParameter;
+    }
 }
