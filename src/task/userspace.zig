@@ -35,10 +35,9 @@ fn map_userspace(vm: *VirtualSpace) void {
 comptime {
     _ = @import("../userspace.poc.zig");
 }
-extern fn _userland() void;
 
-pub fn switch_to_userspace(_: usize) u8 {
-    clone(@intFromPtr(&_userland));
+pub fn call_userspace(f: usize) u8 {
+    clone(f);
     return 0;
 }
 
