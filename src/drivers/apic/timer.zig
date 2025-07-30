@@ -26,6 +26,7 @@ pub const TimerDivider = enum(u8) {
 var timer_frequency: u64 = 0;
 var timer_period_ns: f64 = 0;
 var timer_ticks: u64 = 0;
+var current_time: u64 = 0;
 var timer_ticks_ptr: *volatile u64 = &timer_ticks; // Ensure visibility across cores
 var timer_mode: lapic.TimerMode = .Periodic;
 var timer_divider: TimerDivider = .Div1;
@@ -44,7 +45,7 @@ var calibration: CalibrationState = .{
 };
 
 // Timer interrupt handler
-pub fn timer_handler(_: interrupts.InterruptFrame) void {
+pub fn simple_timer_handler(_: interrupts.InterruptFrame) void {
     timer_ticks_ptr.* += 1;
     lapic.send_eoi();
     scheduler.schedule();
@@ -126,7 +127,7 @@ pub fn setup_periodic(frequency_hz: u32) !void {
     lapic.write(lapic.LAPIC_TIMER_INITIAL_COUNT, @truncate(initial_count));
 
     timer_mode = .Periodic;
-    logger.debug("Periodic timer set to {} Hz", .{frequency_hz});
+    // logger.debug("Periodic timer set to {} Hz", .{frequency_hz});
 
     // time between 2 ticks in nanoseconds
     timer_period_ns = 1_000_000_000.0 / @as(f64, @floatFromInt(frequency_hz));
@@ -187,12 +188,27 @@ pub fn sleep(ms: u64) void {
     nano_sleep(ms * 1_000_000);
 }
 
+// pub fn get_time_since_boot() u64 {
+//     return @intFromFloat((@as(f64, @floatFromInt(timer_ticks)) * timer_period_ns) / 1_000_000);
+// }
+//
+// pub fn get_utime_since_boot() u64 {
+//     return @intFromFloat((@as(f64, @floatFromInt(timer_ticks)) * timer_period_ns) / 1_000);
+// }
+
 pub fn get_time_since_boot() u64 {
-    return @intFromFloat((@as(f64, @floatFromInt(timer_ticks)) * timer_period_ns) / 1_000_000);
+    // Retourne le temps en millisecondes depuis le boot
+    return current_time / 1_000_000;
 }
 
 pub fn get_utime_since_boot() u64 {
-    return @intFromFloat((@as(f64, @floatFromInt(timer_ticks)) * timer_period_ns) / 1_000);
+    // Retourne le temps en microsecondes depuis le boot
+    return current_time / 1_000;
+}
+
+pub fn get_ntime_since_boot() u64 {
+    // Nouvelle fonction pour les nanosecondes si besoin
+    return current_time;
 }
 
 // Initialize APIC timer
@@ -206,9 +222,13 @@ pub fn init() !void {
     try setup_periodic(100);
 
     // Register interrupt handler
-    interrupts.set_intr_gate(TIMER_VECTOR, interrupts.Handler.create(timer_handler, false));
+    interrupts.set_intr_gate(TIMER_VECTOR, interrupts.Handler.create(simple_timer_handler, false));
 
     logger.info("APIC timer initialized at 1000 Hz", .{});
+}
+
+pub fn new_handler() void {
+    interrupts.set_intr_gate(TIMER_VECTOR, interrupts.Handler.create(timer_handler, false));
 }
 
 // Check if TSC-deadline mode is supported
@@ -240,4 +260,121 @@ pub fn precise_delay_us(microseconds: u64) void {
     while (tsc.get_time_us() - start < microseconds) {
         cpu.io_wait();
     }
+}
+
+pub var sleep_queue: @import("../../task/sleep_timer.zig").SleepQueue = .{};
+var min_timer_interval_ns: u64 = 100_000; // 100µs minimum pour éviter l'overhead
+var periodic_interval_ns: u64 = 10_000_000; // 10ms pour le scheduling normal
+
+// // Nouvelle fonction pour programmer le prochain réveil
+// pub fn schedule_next_wakeup() void {
+//     const current_time = tsc.get_time_ns();
+//
+//     // Vérifie s'il y a des tâches à réveiller
+//     if (sleep_queue.get_next_wake_time()) |next_wake| {
+//         const delay_ns = if (next_wake > current_time)
+//             next_wake - current_time
+//         else
+//             0;
+//
+//         if (delay_ns < periodic_interval_ns) {
+//             // Programme un one-shot pour le réveil précis
+//             const delay_us = @max(delay_ns / 1000, min_timer_interval_ns / 1000);
+//             setup_oneshot(@intCast(delay_us)) catch {
+//                 // Fallback sur le mode périodique
+//                 setup_periodic(20) catch unreachable;
+//             };
+//             return;
+//         }
+//     }
+//
+//     // Sinon, reste en mode périodique normal
+//     setup_periodic(20) catch unreachable;
+// }
+
+pub fn schedule_next_wakeup() void {
+    // const current_time = tsc.get_time_ns();
+
+    // Vérifie s'il y a des tâches à réveiller
+    if (sleep_queue.get_next_wake_time()) |next_wake| {
+        const delay_ns = if (next_wake > current_time)
+            next_wake - current_time
+        else
+            0;
+
+        // Si le délai est court ET qu'on peut reprogrammer
+        if (delay_ns < periodic_interval_ns and should_reprogram()) {
+            // Programme un one-shot pour le réveil précis
+            const delay_us = @max(delay_ns / 1000, min_timer_interval_ns / 1000);
+            setup_oneshot(@intCast(delay_us)) catch {
+                // Fallback sur le mode périodique
+                setup_periodic(20) catch unreachable;
+            };
+            return;
+        }
+    }
+
+    // Sinon, reste en mode périodique normal
+    // Cela arrive si on a dépassé la limite de reprogrammations
+    // ou si le prochain réveil est loin
+    setup_periodic(20) catch unreachable;
+}
+
+const ready_queue = @import("../../task/ready_queue.zig");
+const TaskDescriptor = @import("../../task/task.zig").TaskDescriptor;
+
+// Modifiez le timer_handler
+pub fn timer_handler(_: interrupts.InterruptFrame) void {
+    timer_ticks_ptr.* += 1;
+    lapic.send_eoi();
+
+    // Réveille les tâches endormies
+    current_time = tsc.get_time_ns();
+    while (sleep_queue.pop_ready(current_time)) |node| {
+        const task: *TaskDescriptor = @alignCast(@fieldParentPtr("sleep_node", node));
+        ready_queue.push(task);
+        // Libérer le node (via un pool d'allocation)
+    }
+
+    // Reprogramme le timer pour le prochain réveil
+    schedule_next_wakeup();
+
+    // Continue avec le scheduling normal
+    scheduler.schedule();
+}
+
+pub fn coalesce_wakeups(wake_time: u64, tolerance_ns: u64) u64 {
+    const window_start = wake_time - tolerance_ns;
+    const window_end = wake_time + tolerance_ns;
+
+    // Cherche d'autres réveils dans la fenêtre
+    var iter = sleep_queue.head;
+    while (iter) |node| : (iter = node.next) {
+        if (node.wake_time >= window_start and node.wake_time <= window_end) {
+            // Aligne sur ce réveil existant
+            return node.wake_time;
+        }
+        if (node.wake_time > window_end) break;
+    }
+
+    return wake_time;
+}
+
+const MAX_TIMER_REPROG_RATE = 100_000; // Max 10k reprog/sec
+var reprog_counter: u64 = 0;
+var last_reprog_time: u64 = 0;
+
+pub fn should_reprogram() bool {
+    // const current_time = tsc.get_time_ns();
+    if (current_time - last_reprog_time > 1_000_000_000) {
+        // Reset le compteur chaque seconde
+        reprog_counter = 0;
+        last_reprog_time = current_time;
+    }
+
+    if (reprog_counter < MAX_TIMER_REPROG_RATE) {
+        reprog_counter += 1;
+        return true;
+    }
+    return false;
 }

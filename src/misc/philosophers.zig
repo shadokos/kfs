@@ -109,6 +109,7 @@ pub fn main(nb: u8, ttd: usize, tte: usize, tts: usize) void {
     end_of_simulation = false;
 
     start_time = get_time_since_boot();
+    tty.printk("start_time {} ms\n", .{start_time});
 
     var mutexes: []Mutex = allocator.alloc(Mutex, nb_philosophers) catch @panic("Failed to allocate mutexes");
     var philosophers: []Philosopher = allocator.alloc(
@@ -130,14 +131,25 @@ pub fn main(nb: u8, ttd: usize, tte: usize, tts: usize) void {
     const status: bool = b: while (true) {
         for (philosophers) |philo| {
             eos_mutex.acquire();
-            if (get_time_since_boot() - start_time - philo.last_meal > time_to_die) {
-                tty.printk("{} {} died\n", .{ get_time_since_boot() - start_time, philo.id });
+            const time_since_boot = get_time_since_boot();
+            const start = start_time;
+            const t_td = time_to_die;
+            // tty.printk("{}: {} - {} - {} > {}\n", .{
+            //     philo.id,
+            //     time_since_boot,
+            //     start,
+            //     philo.last_meal,
+            //     t_td
+            // });
+            if (time_since_boot - start - philo.last_meal > t_td) {
+                tty.printk("{} {} died\n", .{ time_since_boot - start, philo.id });
                 end_of_simulation = true;
                 eos_mutex.release();
                 break :b true;
             }
             eos_mutex.release();
         }
+        // @import("../task/sleep.zig").usleep(500) catch {};
         _ = scheduler.schedule();
     };
 

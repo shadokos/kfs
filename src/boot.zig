@@ -93,6 +93,8 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("task/task.zig").TaskDescriptor.init_cache() catch @panic("Failed to initialized task_descriptor cache");
 
+    @import("drivers/apic/timer.zig").new_handler();
+
     const idle_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create idle task");
 
     @import("task/scheduler.zig").init(idle_task);

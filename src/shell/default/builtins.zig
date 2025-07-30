@@ -384,3 +384,30 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         return CmdError.InvalidParameter;
     }
 }
+
+pub fn boottime(_: anytype, _: [][]u8) CmdError!void {
+    const timer = @import("../../drivers/apic/timer.zig");
+    const boot_time = timer.get_time_since_boot();
+    tty.printk("Boot time: {d} ms\n", .{boot_time});
+}
+
+// ms, n times
+pub fn nsleep(_: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+    const ms = ft.fmt.parseInt(u64, args[1], 0) catch return CmdError.InvalidParameter;
+    const n = ft.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
+
+    for (0..n) |_| {
+        @import("../../task/sleep.zig").sleep(ms) catch {};
+    }
+}
+
+pub fn nusleep(_: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+    const us = ft.fmt.parseInt(u64, args[1], 0) catch return CmdError.InvalidParameter;
+    const n = ft.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
+
+    for (0..n) |_| {
+        @import("../../task/sleep.zig").usleep(us) catch {};
+    }
+}

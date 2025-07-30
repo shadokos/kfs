@@ -17,6 +17,8 @@ const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = ft.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
+const sleep_timer = @import("sleep_timer.zig");
+
 pub const TaskDescriptor = struct {
     // todo: define the appropriate size for a kernelspace stack or get this value from config
     stack: [64 * 1024]u8 align(4096) = undefined,
@@ -44,6 +46,12 @@ pub const TaskDescriptor = struct {
     esp: u32 = undefined,
 
     ucontext: ucontext.ucontext_t = .{},
+
+    sleep_node: sleep_timer.SleepNode = .{
+        .wake_time = 0,
+        .next = null,
+        .prev = null,
+    },
 
     // scheduling
     rq_node: ready_queue.Node = .{ .data = false },
