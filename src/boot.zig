@@ -68,18 +68,20 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("gdt.zig").init();
 
-    @import("drivers/pic/pic.zig").init();
-
-    // Sets up the IDT, and unlocks the scheduler (decrements lock_count, and enables interrupts)
     @import("interrupts.zig").init();
 
-    @import("drivers/pit/pit.zig").init();
-
     @import("memory.zig").init();
+
+    @import("drivers/apic/apic.zig").init();
+
+    @import("cpu/tsc.zig").init();
 
     @import("drivers/ps2/ps2.zig").init();
 
     @import("tty/keyboard.zig").init();
+
+    // Enable interrupts
+    @import("task/scheduler.zig").unlock();
 
     @import("./drivers/acpi/acpi.zig").init();
 

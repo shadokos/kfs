@@ -121,6 +121,19 @@ fn init_kernel_vm() void {
     logger.debug("\tKernel virtual space activated", .{});
 }
 
+pub fn map_mmio(
+    phys: paging.PhysicalPtr,
+    size: paging.PhysicalUsize,
+) !paging.VirtualPtr {
+    logger.debug("Mapping MMIO region at 0x{x:0>8} of size {d} bytes", .{ phys, size });
+    const virt = kernel_virtual_space.map_object_anywhere(phys, size) catch |err| {
+        logger.err("Failed to map MMIO region: {s}", .{@errorName(err)});
+        return err;
+    };
+    logger.debug("MMIO region mapped at 0x{x:0>8}", .{@intFromPtr(virt)});
+    return virt;
+}
+
 pub fn init() void {
     logger.debug("Initializing memory", .{});
 

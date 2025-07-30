@@ -171,8 +171,6 @@ pub fn init() void {
     idtr.offset = @intFromPtr(&idt);
     cpu.load_idt(&idtr);
     logger.info("Idt initialized", .{});
-    scheduler.unlock();
-    logger.info("Interrupts enabled", .{});
 }
 
 /// return the numeric id of an interrupt (which can be an Exception, pic.IRQ or an int)
@@ -327,6 +325,10 @@ pub const Handler = extern union {
     }
 };
 
+pub const APIC_SPURIOUS_VECTOR = 0xFF;
+pub const APIC_ERROR_VECTOR = 0xFE;
+pub const APIC_TIMER_VECTOR = 0x20;
+
 pub fn default_handler(
     comptime id: u8,
     comptime t: enum { except, except_err, irq, interrupt },
@@ -340,16 +342,14 @@ pub fn default_handler(
             const e = @as(Exceptions, @enumFromInt(id));
             ft.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), 0 });
         }
-        pub fn irq(_: InterruptFrame) void {
-            const _id = pic.get_irq_from_interrupt_id(id);
-
-            // If the interrupt was a spurious interrupt,
-            // the ack_spurious_interrupt will keep track of the
-            // spurious interrupt amount since boot, and will return true.
-            // So we can ignore the interrupt then.
-            if (pic.ack_spurious_interrupt(@intFromEnum(_id))) return;
-            pic.ack(_id);
-            ft.log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
+        pub fn apic_irq(_: InterruptFrame) void {
+            if (comptime id >= 0x20 and id < 0x30) {
+                const apic = @import("drivers/apic/apic.zig");
+                if (apic.get_irq_from_vector(id)) |irq| {
+                    apic.ack(irq);
+                    ft.log.scoped(.irq).err("{} ({s}) unhandled", .{ @intFromEnum(irq), @tagName(irq) });
+                }
+            }
         }
         pub fn interrupt(_: InterruptFrame) void {
             ft.log.scoped(.interrupt).err("{d} unhandled", .{id});
@@ -358,7 +358,7 @@ pub fn default_handler(
     return switch (t) {
         .except => Handler.create(&handlers.exception, false),
         .except_err => Handler.create(&handlers.exception_err, true),
-        .irq => Handler.create(&handlers.irq, false),
+        .irq => Handler.create(&handlers.apic_irq, false),
         .interrupt => Handler.create(&handlers.interrupt, false),
     };
 }

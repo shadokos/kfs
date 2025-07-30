@@ -326,7 +326,7 @@ pub fn tic(shell: anytype, args: [][]u8) CmdError!void {
     var n = if (args.len == 2) ft.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter else null;
     while (if (n) |nv| nv > 0 else true) {
         shell.print("tic\n", .{});
-        @import("../../drivers/pit/pit.zig").sleep(1000);
+        @import("../../drivers/apic/timer.zig").sleep(1000);
         if (n) |*nv| nv.* -= 1;
     }
 }

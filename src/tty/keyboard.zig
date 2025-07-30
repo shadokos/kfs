@@ -1,7 +1,7 @@
 const ft = @import("ft");
 const tty = @import("tty.zig");
 const ps2 = @import("../drivers/ps2/ps2.zig");
-const pic = @import("../drivers/pic/pic.zig");
+const apic = @import("../drivers/apic/apic.zig");
 const keymap = @import("keyboard/keymap.zig");
 const scanmap = @import("keyboard/scanmap.zig");
 const scanmap_normal = scanmap.scanmap_normal;
@@ -163,7 +163,7 @@ pub fn handler(_: InterruptFrame) void {
             },
         },
     };
-    pic.ack(.Keyboard);
+    apic.ack(.Keyboard);
 }
 
 fn is_key_available() bool {
@@ -173,6 +173,6 @@ fn is_key_available() bool {
 pub fn init() void {
     const interrupts = @import("../interrupts.zig");
     ps2.set_first_port_interrupts(true);
-    interrupts.set_intr_gate(.Keyboard, interrupts.Handler.create(&handler, false));
-    pic.enable_irq(pic.IRQ.Keyboard);
+    interrupts.set_intr_gate(apic.get_vector_for_irq(.Keyboard), interrupts.Handler.create(&handler, false));
+    apic.enable_irq(apic.IRQ.Keyboard);
 }
