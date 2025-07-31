@@ -4,13 +4,15 @@ const colors = @import("colors");
 const tty = @import("../../tty/tty.zig");
 
 pub fn on_init(shell: *Shell) void {
+    var current_tty = &tty.tty_array[shell.tty_id];
+    current_tty.config.c_lflag.ECHOCTL = true;
+
     shell.writer.print("tty {d}, Hello {s}{d}{s}\n", .{
-        @import("../../tty/tty.zig").current_tty,
+        shell.tty_id,
         colors.green,
         42,
         colors.reset,
     }) catch {};
-    tty.get_tty().config.c_lflag.ECHOCTL = true;
 }
 
 pub fn on_error(shell: *Shell) void {

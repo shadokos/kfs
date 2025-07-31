@@ -164,6 +164,7 @@ pub fn handler(_: InterruptFrame) void {
         },
     };
     pic.ack(.Keyboard);
+    kb_read();
 }
 
 fn is_key_available() bool {

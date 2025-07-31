@@ -31,6 +31,8 @@ pub const TaskDescriptor = struct {
     childs: ?*TaskDescriptor = null,
     next_sibling: ?*TaskDescriptor = null,
 
+    assigned_tty: ?u8 = null,
+
     vm: ?*VirtualSpace = null,
 
     status_wait_queue: @import("wait.zig").WaitQueue = .{},
@@ -61,6 +63,16 @@ pub const TaskDescriptor = struct {
     pub const Self = @This();
 
     pub var cache: *Cache = undefined;
+
+    pub fn assign_tty(self: *Self, tty_index: u8) !void {
+        if (tty_index > @import("../tty/tty.zig").max_tty)
+            return error.InvalidTty;
+        self.assigned_tty = tty_index;
+    }
+
+    pub fn get_assigned_tty(self: *Self) ?u8 {
+        return self.assigned_tty;
+    }
 
     pub fn init_cache() !void {
         cache = try memory.globalCache.create(

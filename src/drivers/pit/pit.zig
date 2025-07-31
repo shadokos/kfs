@@ -172,7 +172,7 @@ pub fn get_utime_since_boot() u64 {
 
 pub fn init() void {
     pit_logger.debug("Initializing PIT", .{});
-    init_channel(.Channel_0, 1000);
+    init_channel(.Channel_0, 100);
     interrupts.set_intr_gate(.Timer, Handler.create(pit_handler, false));
     pic.enable_irq(.Timer);
     pit_logger.info("PIT initialized", .{});

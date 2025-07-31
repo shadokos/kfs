@@ -384,3 +384,41 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         return CmdError.InvalidParameter;
     }
 }
+
+pub fn termios(_: anytype, _: [][]u8) CmdError!void {
+    const t = @import("../../tty/termios.zig");
+    const current = tty.get_tty();
+    printk("Current TTY (tty {d}):\n", .{tty.current_tty});
+    printk("  iflag: \n", .{});
+    inline for (@typeInfo(t.iflags).@"struct".fields) |field| {
+        const flag = @field(current.config.c_iflag, field.name);
+        printk("    {s}: {s}\n", .{ field.name, if (flag) "true" else "false" });
+    }
+    printk("  oflag: \n", .{});
+    inline for (@typeInfo(t.oflags).@"struct".fields) |field| {
+        const flag = @field(current.config.c_oflag, field.name);
+        switch (@typeInfo(@TypeOf(flag))) {
+            .@"enum" => {
+                printk("    {s}: {s} ({d})\n", .{ field.name, @tagName(flag), @intFromEnum(flag) });
+            },
+            else => {
+                printk("    {s}: {s}\n", .{ field.name, if (flag) "true" else "false" });
+            },
+        }
+    }
+    printk("  cflag: \n", .{});
+    inline for (@typeInfo(t.cflags).@"struct".fields) |field| {
+        const flag = @field(current.config.c_cflag, field.name);
+        printk("    {s}: {s}\n", .{ field.name, if (flag) "true" else "false" });
+    }
+    printk(" lflag: \n", .{});
+    inline for (@typeInfo(t.lflags).@"struct".fields) |field| {
+        const flag = @field(current.config.c_lflag, field.name);
+        printk("    {s}: {s}\n", .{ field.name, if (flag) "true" else "false" });
+    }
+    printk("  c_cc: \n", .{});
+    inline for (@typeInfo(t.cc_index).@"enum".fields) |f| {
+        const e = @field(t.cc_index, f.name);
+        printk("    {s}: {d}\n", .{ @tagName(e), current.config.c_cc[f.value] });
+    }
+}

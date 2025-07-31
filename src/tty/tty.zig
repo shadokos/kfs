@@ -99,6 +99,17 @@ pub fn TtyN(comptime history_size: u32) type {
         /// current theme
         theme: ?themes.Theme = themes.default,
 
+        read_wait_queue: @import("../task/wait_queue.zig").WaitQueue(.{
+            .predicate = tty_read_predicate,
+        }) = .{},
+
+        fn tty_read_predicate(task_ptr: *void, tty_ptr: ?*void) bool {
+            _ = task_ptr;
+            const tty: *Tty = @alignCast(@ptrCast(tty_ptr.?));
+            return tty.read_tail != tty.current_line_begin or
+                tty.read_head +% 1 == tty.read_tail;
+        }
+
         const input_buffer_pos_t = ft.meta.Int(.unsigned, ft.math.log2(MAX_INPUT)); // todo: is this the right type?
 
         /// Writer object type
@@ -178,6 +189,8 @@ pub fn TtyN(comptime history_size: u32) type {
         pub fn input(self: *Self, s: []const u8) void {
             for (s) |c| self.input_char(c);
             self.local_processing();
+
+            self.read_wait_queue.try_unblock();
         }
 
         /// send one char as input to the terminal
@@ -388,12 +401,18 @@ pub fn TtyN(comptime history_size: u32) type {
 
         /// read bytes from the terminal and store them in s, suitable for use with ft.io.Reader
         pub fn read(self: *Self, s: []u8) Self.ReadError!usize {
-            // todo time/min
+            //     // todo time/min
+            const scheduler = @import("../task/scheduler.zig");
             var count: usize = 0;
+
             for (s) |*c| {
-                while (self.read_tail == self.current_line_begin and self.read_head +% 1 != self.read_tail) {
-                    @import("../cpu.zig").halt();
-                    keyboard.kb_read();
+                while (self.read_tail == self.current_line_begin and
+                    self.read_head +% 1 != self.read_tail)
+                {
+                    self.read_wait_queue.block(scheduler.get_current_task(), @ptrCast(self)) catch {
+                        if (count > 0) return count;
+                        return 0;
+                    };
                 }
 
                 c.* = self.input_buffer[self.read_tail];
@@ -401,6 +420,7 @@ pub fn TtyN(comptime history_size: u32) type {
                     self.current_line_begin +%= 1;
                 self.read_tail +%= 1;
                 count += 1;
+
                 if (self.config.c_lflag.ICANON and self.is_end_of_line(c.*)) {
                     if (c.* == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
                         count -= 1;
@@ -620,8 +640,16 @@ pub inline fn printk(comptime fmt: []const u8, args: anytype) void {
     write_lock.acquire();
     defer write_lock.release();
 
-    ttyBufferWriter[current_tty].print(fmt, args) catch {};
-    ttyBufferWriter[current_tty].flush() catch {};
+    const scheduler = @import("../task/scheduler.zig");
+    const current_task = scheduler.get_current_task();
+
+    const target_tty = if (scheduler.is_initialized() and current_task.assigned_tty != null)
+        current_task.assigned_tty.?
+    else
+        current_tty; // Fallback sur le TTY actif si pas d'assignation
+
+    ttyBufferWriter[target_tty].print(fmt, args) catch {};
+    ttyBufferWriter[target_tty].flush() catch {};
 }
 
 pub fn init() void {

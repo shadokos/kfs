@@ -46,6 +46,7 @@ pub fn Shell(comptime _builtins: anytype) type {
         writer: ft.io.AnyWriter = undefined,
         hooks: Hooks = Hooks{},
         jobs: ft.ArrayList(Job) = undefined,
+        tty_id: u8 = 0,
 
         pub fn init(
             reader: ft.io.AnyReader,
@@ -58,12 +59,14 @@ pub fn Shell(comptime _builtins: anytype) type {
                 pre_cmd: ?*const anyopaque = null,
                 post_cmd: ?*const anyopaque = null,
             },
+            tty_id: u8,
         ) Self {
             var ret = Self{
                 .jobs = ft.ArrayList(Job).init(allocator),
                 .reader = reader,
                 .writer = writer,
                 .config = config,
+                .tty_id = tty_id,
             };
             if (hooks.on_init) |h| ret.hooks.on_init = @alignCast(@ptrCast(h));
             if (hooks.on_error) |h| ret.hooks.on_error = @alignCast(@ptrCast(h));
