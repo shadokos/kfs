@@ -52,7 +52,6 @@ pub fn destroy_task(pid: TaskDescriptor.Pid) !void {
     if (pid < 0) return error.NoSuchTask;
     const index: u32 = @intCast(pid);
     const descriptor = list[index] orelse return error.NoSuchTask; // todo error
-    @import("ready_queue.zig").remove(descriptor);
     descriptor.deinit();
     list[index] = null;
     count -= 1;
