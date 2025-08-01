@@ -17,6 +17,25 @@ const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = std.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
+const callback_allocator = @import("../memory.zig").smallAlloc.allocator();
+const Callback = *const fn (*TaskDescriptor) void;
+const Callbacks = std.ArrayList(Callback);
+
+pub var on_terminate_callback: Callbacks = .empty;
+
+pub fn add_on_terminate_callback(callback: *const fn (*TaskDescriptor) void) !void {
+    try on_terminate_callback.append(callback_allocator, callback);
+}
+
+pub fn remove_on_terminate_callback(callback: *const fn (*TaskDescriptor) void) void {
+    for (on_terminate_callback.items, 0..) |item, index| {
+        if (item == callback) {
+            on_terminate_callback.swapRemove(index);
+            return;
+        }
+    }
+}
+
 pub const TaskDescriptor = struct {
     // todo: define the appropriate size for a kernelspace stack or get this value from config
     stack: [64 * 1024]u8 align(4096) = undefined,
@@ -74,7 +93,6 @@ pub const TaskDescriptor = struct {
 
     pub fn deinit(self: *Self) void {
         self.status_wait_queue.unblock_all();
-        wait_queue.force_remove(self);
 
         if (self.parent) |p| {
             p.status_stack.remove(&self.status_stack_process_node);
@@ -385,7 +403,8 @@ pub fn exit(code: u8) noreturn {
         },
     });
 
-    ready_queue.remove(task);
+    for (on_terminate_callback.items) |callback|
+        callback(task);
 
     scheduler.schedule();
     unreachable;

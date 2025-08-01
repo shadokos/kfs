@@ -74,11 +74,11 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     // Sets up the IDT, and unlocks the scheduler (decrements lock_count, and enables interrupts)
     @import("interrupts.zig").init();
 
-    @import("drivers/pit/pit.zig").init();
-
     @import("memory.zig").init();
 
     @import("debug.zig").init();
+
+    @import("timer.zig").init();
 
     @import("drivers/ps2/ps2.zig").init();
 
@@ -93,6 +93,10 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     @import("task/signal.zig").SignalQueue.init_cache() catch @panic("Failed to initialized SignalQueue cache");
 
     @import("task/task.zig").TaskDescriptor.init_cache() catch @panic("Failed to initialized task_descriptor cache");
+
+    // The ready_queue and wait_queue init functions are only here to setup their on_terminate task callbacks
+    @import("task/ready_queue.zig").init();
+    @import("task/wait_queue.zig").init();
 
     const idle_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create idle task");
 
