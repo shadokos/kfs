@@ -36,8 +36,6 @@ pub fn schedule() void {
     @This().lock();
     defer @This().unlock();
 
-    @import("sleep.zig").try_unblock_sleeping_task();
-
     var next_task: ?*task.TaskDescriptor = null;
     if (ready_queue.pop()) |node| {
         next_task = @alignCast(@fieldParentPtr("rq_node", node));
