@@ -1,6 +1,6 @@
 const std = @import("std");
 const tty = @import("../tty/tty.zig");
-const get_time_since_boot = &@import("../drivers/pit/pit.zig").get_time_since_boot;
+const get_time_since_boot = &@import("../timer.zig").get_time_since_boot;
 
 const allocator = @import("../memory.zig").smallAlloc.allocator();
 

@@ -1,18 +1,10 @@
 const task = @import("task.zig");
-const pit = @import("../drivers/pit/pit.zig");
 const scheduler = @import("scheduler.zig");
+const ready_queue = @import("ready_queue.zig");
+const timer = @import("../timer.zig");
 
-fn sleep_predicate(_: *void, sleep_timeout_ptr: ?*void) bool {
-    const sleep_timeout: u64 = @as(*u64, @ptrCast(@alignCast(sleep_timeout_ptr.?))).*;
-    return pit.get_utime_since_boot() >= sleep_timeout;
-}
-
-var sleep_queue = @import("wait_queue.zig").WaitQueue(.{
-    .predicate = sleep_predicate,
-}){};
-
-pub fn try_unblock_sleeping_task() void {
-    sleep_queue.try_unblock();
+fn unblock_task(t: *task.TaskDescriptor, _: *usize) void {
+    ready_queue.push(t);
 }
 
 pub fn usleep(micro: u64) !void {
@@ -20,14 +12,19 @@ pub fn usleep(micro: u64) !void {
     defer scheduler.unlock();
 
     const t = scheduler.get_current_task();
-    var sleep_timeout: u64 = pit.get_utime_since_boot() + micro;
 
-    try sleep_queue.block(t, @ptrCast(&sleep_timeout));
+    _ = timer.schedule_event(timer.Event{
+        .timestamp = timer.get_utime_since_boot() + micro,
+        .callback = unblock_task,
+        .task = t,
+    }) catch return error.ENOMEM;
+
+    ready_queue.remove(t);
+    t.state = .Blocked;
+
+    scheduler.schedule();
 }
 
 pub fn sleep(millis: u64) !void {
-    scheduler.lock();
-    defer scheduler.unlock();
-
     return usleep(millis * 1000);
 }
