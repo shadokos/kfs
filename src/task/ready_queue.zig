@@ -57,3 +57,9 @@ pub fn remove(t: *TaskDescriptor) void {
     // Not sure, as this method is called during an exit, right after setting it to .Zombie state.
     // TODO: Maybe we should discuss it together.
 }
+
+pub fn init() void {
+    @import("task.zig").add_on_terminate_callback(remove) catch |err| switch (err) {
+        inline else => |e| @panic("ready_queue: Failed to register remove task callback: " ++ @errorName(e)),
+    };
+}

@@ -20,9 +20,6 @@ pub const ch1_data = 0x41; // Read/Write
 pub const ch2_data = 0x42; // Read/Write
 pub const mode_cmd_register = 0x43; // Read
 
-pub var ch0_ticks: u64 = 0;
-pub var ch1_ticks: u64 = 0;
-pub var ch2_ticks: u64 = 0;
 pub var interval_ns: u32 = 0;
 
 pub const OperatingMode = enum(u3) {
@@ -141,39 +138,4 @@ pub fn init_channel(comptime channel: SelectChannel, frequency: u32) void {
     const status = read_back_channel(channel);
     init_logger.debug("Read back status: 0b{b:0>8}", .{@as(u8, @bitCast(status))});
     pit_logger.debug("{s} initialized", .{@tagName(channel)});
-}
-
-pub fn pit_handler(_: interrupts.InterruptFrame) void {
-    ch0_ticks +%= 1;
-    pic.ack(.Timer);
-    @import("../../task/scheduler.zig").schedule();
-}
-
-pub fn sleep_n_ticks(ticks: u64) void {
-    const start = ch0_ticks;
-    while (ch0_ticks - start < ticks) cpu.halt();
-}
-
-pub fn nano_sleep(ns: u64) void {
-    sleep_n_ticks(ns / interval_ns);
-}
-
-pub fn sleep(ms: u64) void {
-    sleep_n_ticks(ms * 1_000_000 / interval_ns);
-}
-
-pub fn get_time_since_boot() u64 {
-    return (ch0_ticks * interval_ns) / 1_000_000;
-}
-
-pub fn get_utime_since_boot() u64 {
-    return (ch0_ticks * interval_ns) / 1_000;
-}
-
-pub fn init() void {
-    pit_logger.debug("Initializing PIT", .{});
-    init_channel(.Channel_0, 1000);
-    interrupts.set_intr_gate(.Timer, Handler.create(pit_handler, false));
-    pic.enable_irq(.Timer);
-    pit_logger.info("PIT initialized", .{});
 }
