@@ -1,6 +1,6 @@
+const std = @import("std");
 const boot = @import("boot.zig");
 const interrupts = @import("interrupts.zig");
-const ft = @import("ft");
 const tty = @import("./tty/tty.zig");
 const printk = @import("./tty/tty.zig").printk;
 const PageFrameAllocator = @import("memory/page_frame_allocator.zig").PageFrameAllocator;
@@ -9,8 +9,8 @@ const paging = @import("memory/paging.zig");
 const multiboot = @import("multiboot.zig");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const mapping = @import("memory/mapping.zig");
-const logger = @import("ft").log.scoped(.memory);
 const VirtualSpace = @import("memory/virtual_space.zig").VirtualSpace;
+const logger = std.log.scoped(.memory);
 
 const StaticAllocator = @import("memory/object_allocators/static_allocator.zig").StaticAllocator;
 const PageGrainedAllocator = @import("memory/object_allocators/page_grained_allocator.zig").PageGrainedAllocator;
@@ -96,7 +96,7 @@ fn init_kernel_vm() void {
     logger.debug("\tInitializing kernel virtual space...", .{});
     VirtualSpace.global_init() catch @panic("unable to init VirtualSpace");
     kernel_virtual_space.init() catch @panic("unable to init kernel virtual space");
-    const vm_begin = ft.mem.alignForward(usize, paging.high_half + @intFromPtr(boot.kernel_end), paging.page_size);
+    const vm_begin = std.mem.alignForward(usize, paging.high_half + @intFromPtr(boot.kernel_end), paging.page_size);
     const vm_end = paging.page_tables;
     kernel_virtual_space.add_space(
         vm_begin / paging.page_size,
@@ -127,20 +127,20 @@ pub fn init() void {
     const total_space: u64 = get_max_mem();
     logger.debug("\ttotal_space: {x}", .{total_space});
 
-    const direct_begin: paging.PhysicalPtr = ft.mem.alignForward(
+    const direct_begin: paging.PhysicalPtr = std.mem.alignForward(
         paging.PhysicalPtr,
         @intFromPtr(boot.kernel_end),
         paging.page_size,
     );
-    const direct_end: paging.PhysicalUsize = @max(direct_begin, ft.mem.alignBackward(
+    const direct_end: paging.PhysicalUsize = @max(direct_begin, std.mem.alignBackward(
         paging.PhysicalPtr,
         @min(total_space, direct_begin + paging.direct_zone_size),
         paging.page_size,
     ));
     const direct_size: paging.PhysicalUsize = direct_end - direct_begin;
 
-    const medium_begin: paging.PhysicalPtr = ft.mem.alignForward(paging.PhysicalPtr, direct_end, paging.page_size);
-    const medium_end: paging.PhysicalPtr = @max(medium_begin, ft.mem.alignBackward(
+    const medium_begin: paging.PhysicalPtr = std.mem.alignForward(paging.PhysicalPtr, direct_end, paging.page_size);
+    const medium_end: paging.PhysicalPtr = @max(medium_begin, std.mem.alignBackward(
         paging.PhysicalPtr,
         @min(total_space, paging.kernel_virtual_space_top),
         paging.page_size,
@@ -187,23 +187,23 @@ fn check_mem_availability(min: paging.PhysicalPtr, max: paging.PhysicalPtr) void
             if (e.type != multiboot2_h.MULTIBOOT_MEMORY_AVAILABLE)
                 continue;
             var area_begin: paging.PhysicalPtr = @intCast(
-                ft.mem.alignForward(
+                std.mem.alignForward(
                     paging.PhysicalPtr,
                     @as(paging.PhysicalPtr, @truncate(@min(e.base, (1 << 32) - 1))),
                     page_size,
                 ),
             );
             var area_end: paging.PhysicalPtr = @intCast(
-                ft.mem.alignBackward(
+                std.mem.alignBackward(
                     paging.PhysicalPtr,
                     @as(paging.PhysicalPtr, @truncate(@min(e.base + e.length, (1 << 32) - 1))),
                     page_size,
                 ),
             );
             if (area_begin < min)
-                area_begin = ft.mem.alignForward(paging.PhysicalPtr, min, page_size);
+                area_begin = std.mem.alignForward(paging.PhysicalPtr, min, page_size);
             if (area_end > max)
-                area_end = ft.mem.alignBackward(paging.PhysicalPtr, max, page_size);
+                area_end = std.mem.alignBackward(paging.PhysicalPtr, max, page_size);
             if (area_begin >= area_end) // smaller than a page
                 continue;
             while (area_begin < area_end) : (area_begin += page_size) {

@@ -1,4 +1,3 @@
-const ft = @import("ft");
 const paging = @import("memory/paging.zig");
 const signal = @import("task/signal.zig");
 

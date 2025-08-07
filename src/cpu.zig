@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 
 pub const PrivilegeLevel = enum(u2) {
     Supervisor = 0,
@@ -245,7 +245,7 @@ pub inline fn load_tss(selector: Selector) void {
 // todo: non comptime code segment
 pub inline fn load_segments(comptime code: Selector, data: Selector, stack: Selector) void {
     comptime var code_selector_buf: [10]u8 = undefined;
-    comptime var stream = ft.io.fixedBufferStream(code_selector_buf[0..]);
+    comptime var stream = std.io.fixedBufferStream(code_selector_buf[0..]);
     comptime stream.writer().print("0b{b}", .{@as(u16, @bitCast(code))}) catch |e| @compileError(e);
     asm volatile ("jmp $" ++ stream.getWritten() ++ ", $.reload_CS\n" ++
             \\ .reload_CS:

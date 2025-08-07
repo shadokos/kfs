@@ -1,9 +1,10 @@
+const std = @import("std");
 const BuddyAllocator = @import("buddy_allocator.zig").BuddyAllocator;
 const paging = @import("paging.zig");
 const builtin = @import("builtin");
-const logger = @import("ft").log.scoped(.PFA);
-const ft = @import("ft");
 const Mutex = @import("../task/semaphore.zig").Mutex;
+
+const logger = @import("std").log.scoped(.PFA);
 
 const max_order = 10;
 
@@ -43,7 +44,7 @@ pub fn PageFrameAllocator(comptime _Zones: type) type {
             zone: Zones,
             begin: paging.PhysicalPtr,
             size: paging.PhysicalUsize,
-            allocator: ft.mem.Allocator,
+            allocator: std.mem.Allocator,
         ) void {
             const _allocator = UnderlyingAllocator.init(
                 @truncate(@min(self.total_space -| begin, size) / @sizeOf(paging.page)),

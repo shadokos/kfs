@@ -1,6 +1,6 @@
 const Serial = @import("../../drivers/serial_port/serial.zig");
 const pic = @import("../../drivers/pic/pic.zig");
-const ft = @import("ft");
+const std = @import("std");
 const Packet = @import("packet.zig").Packet;
 const interrupts = @import("../../interrupts.zig");
 
@@ -12,8 +12,8 @@ fn pic_handler(_: interrupts.InterruptFrame) void {
 }
 
 pub fn on_init(shell: *Shell) void {
-    com_port_1.activate() catch return ft.log.err("Failed to enable COM1", .{});
-    ft.log.info("COM1 enabled", .{});
+    com_port_1.activate() catch return std.log.err("Failed to enable COM1", .{});
+    std.log.info("COM1 enabled", .{});
 
     interrupts.set_trap_gate(pic.IRQ.COM1, interrupts.Handler.create(&pic_handler, false));
     pic.enable_irq(pic.IRQ.COM1);

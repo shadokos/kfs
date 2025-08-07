@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 
 /// LinearAllocator is a basic allocator, it allocate chunks linearly on the space designated by 'buffer'
 /// it does not support freeing
@@ -20,20 +20,20 @@ pub const LinearAllocator = struct {
     pub fn alloc(self: *Self, comptime T: type, n: usize) Error![]T {
         if (self.locked)
             return Error.Locked;
-        if ((ft.math.divCeil(
+        if ((std.math.divCeil(
             usize,
             @bitSizeOf(T) * (n + 1),
             8,
         ) catch unreachable) > self.remaining_space()) {
             return Error.NoSpaceLeft;
         }
-        self.index += ft.mem.alignForward(
+        self.index += std.mem.alignForward(
             usize,
             @intFromPtr(self.buffer) + self.index,
             @alignOf(T),
         ) - (@intFromPtr(self.buffer) + self.index);
         const ret: []T = @as([*]T, @ptrFromInt(@intFromPtr(self.buffer) + self.index))[0..n];
-        self.index += (ft.math.divCeil(
+        self.index += (std.math.divCeil(
             usize,
             n * @bitSizeOf(T),
             8,

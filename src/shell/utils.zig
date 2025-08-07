@@ -1,14 +1,14 @@
+const std = @import("std");
 const tty = @import("../tty/tty.zig");
-const ft = @import("ft");
-const StackIterator = ft.debug.StackIterator;
+const StackIterator = std.debug.StackIterator;
 
 const c = @import("colors");
 
 const prompt: *const [1:0]u8 = "\xaf";
 extern var stack_bottom: [*]u8;
 
-pub fn ensure_newline(writer: ft.io.AnyWriter) void {
-    ft.fmt.format(writer, "{s}\x1b[{d}C\r", .{
+pub fn ensure_newline(writer: std.io.AnyWriter) void {
+    std.fmt.format(writer, "{s}\x1b[{d}C\r", .{
         c.invert ++ "%" ++ c.reset, // No newline char: '%' character in reverse
         tty.width - 2, // Move cursor to the end of the line or on the next line if the line is not empty
     }) catch {};
@@ -16,7 +16,7 @@ pub fn ensure_newline(writer: ft.io.AnyWriter) void {
 
 pub fn print_error(shell: anytype, comptime msg: []const u8, args: anytype) void {
     ensure_newline(shell.writer);
-    ft.fmt.format(shell.writer, c.red ++ "Error" ++ c.reset ++ ": " ++ msg ++ "\n", args) catch {};
+    std.fmt.format(shell.writer, c.red ++ "Error" ++ c.reset ++ ": " ++ msg ++ "\n", args) catch {};
 }
 
 pub fn print_prompt(shell: anytype) void {
@@ -24,7 +24,7 @@ pub fn print_prompt(shell: anytype) void {
 
     // print the prompt:
     // prompt collor depending on the last command status
-    ft.fmt.format(shell.writer, "{s}{s}" ++ c.reset ++ " ", .{
+    std.fmt.format(shell.writer, "{s}{s}" ++ c.reset ++ " ", .{
         if (shell.execution_context.err != null) c.red else c.cyan,
         prompt,
     }) catch {};
@@ -43,7 +43,7 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
         var offsetPreview: usize = 0;
         var line: [67]u8 = [_]u8{' '} ** 67;
 
-        _ = ft.fmt.bufPrint(&line, "{x:0>8}: ", .{start +| i}) catch {};
+        _ = std.fmt.bufPrint(&line, "{x:0>8}: ", .{start +| i}) catch {};
 
         while (ptr +| 1 < start +| i +| 16 and ptr < end) : ({
             ptr +|= 2;
@@ -53,10 +53,10 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
             const byte1: u8 = @as(*allowzero u8, @ptrFromInt(ptr)).*;
             const byte2: u8 = @as(*allowzero u8, @ptrFromInt(ptr +| 1)).*;
 
-            _ = ft.fmt.bufPrint(line[10 + offset ..], "{x:0>2}{x:0>2} ", .{ byte1, byte2 }) catch {};
-            _ = ft.fmt.bufPrint(line[51 + offsetPreview ..], "{s}{s}", .{
-                [_]u8{if (ft.ascii.isPrint(byte1)) byte1 else '.'},
-                [_]u8{if (ft.ascii.isPrint(byte2)) byte2 else '.'},
+            _ = std.fmt.bufPrint(line[10 + offset ..], "{x:0>2}{x:0>2} ", .{ byte1, byte2 }) catch {};
+            _ = std.fmt.bufPrint(line[51 + offsetPreview ..], "{s}{s}", .{
+                [_]u8{if (std.ascii.isPrint(byte1)) byte1 else '.'},
+                [_]u8{if (std.ascii.isPrint(byte2)) byte2 else '.'},
             }) catch {};
         }
 
@@ -86,22 +86,22 @@ pub inline fn print_stack() void {
         c.red,    c.reset,
         c.blue,   c.reset,
     });
-    tty.printk("   \xDA" ++ "\xC4" ** 12 ++ "\xBF <- {s}0x{x:0>8}{s}\n", .{ c.red, esp, c.reset });
+    tty.printk("   +" ++ "-" ** 12 ++ "+ <- {s}0x{x:0>8}{s}\n", .{ c.red, esp, c.reset });
     while (true) {
         var size = si.fp - esp;
 
         if (pc) |_| size -= @sizeOf(usize);
         if (size > 0)
-            tty.printk("{s}\xB3     ...    \xB3 {s}{d}{s} bytes\n{s}", .{
-                if (link) "\xB3  " else "   ",                                         c.green, size, c.reset,
-                (if (link) "\xB3  " else "   ") ++ "\xC3" ++ "\xC4" ** 12 ++ "\xB4\n",
+            tty.printk("{s}|     ...    | {s}{d}{s} bytes\n{s}{s}", .{
+                if (link) "|  " else "   ", c.green,                   size, c.reset,
+                if (link) "|  " else "   ", "+" ++ "-" ** 12 ++ "+\n",
             });
         old_fp = si.fp;
         esp = si.fp + @sizeOf(usize);
         if (si.next()) |addr| {
             pc = addr;
-            tty.printk("{s}\xB3 {s}0x{x:0>8}{s} \xB3 <- {s}0x{x:0>8}{s}\n", .{
-                if (link) "\xC0> " else "   ",
+            tty.printk("{s}| {s}0x{x:0>8}{s} | <- {s}0x{x:0>8}{s}\n", .{
+                if (link) "+> " else "   ",
                 c.yellow,
                 si.fp,
                 c.reset,
@@ -111,17 +111,17 @@ pub inline fn print_stack() void {
             });
             link = true;
             if (si.fp > @intFromPtr(stack_bottom)) break;
-            tty.printk("   \xC0\xC4\xC2" ++ "\xC4" ** 10 ++ "\xD9\n", .{});
-            tty.printk("\xDA" ++ "\xC4" ** 4 ++ "\xD9\n", .{});
-            tty.printk("\xB3  \xDA" ++ "\xC4" ** 12 ++ "\xBF\n", .{});
-            tty.printk("\xB3  \xB3 {s}0x{x:0>8}{s} \xB3 <- {s}0x{x:0>8}{s}\n", .{
+            tty.printk("   +-+" ++ "-" ** 10 ++ "+\n", .{});
+            tty.printk("+" ++ "-" ** 4 ++ "+\n", .{});
+            tty.printk("|  +" ++ "-" ** 12 ++ "+\n", .{});
+            tty.printk("|  | {s}0x{x:0>8}{s} | <- {s}0x{x:0>8}{s}\n", .{
                 c.blue, addr, c.reset,
                 c.red,  esp,  c.reset,
             });
-            tty.printk("\xB3  \xC3" ++ "\xC4" ** 12 ++ "\xB4\n", .{});
+            tty.printk("|  +" ++ "-" ** 12 ++ "+\n", .{});
         } else {
-            tty.printk("{s}\xB3 {s}0x{x:0>8}{s} \xB3 <- {s}0x{x:0>8}{s}\n", .{
-                if (link) "\xC0> " else "   ",
+            tty.printk("{s}| {s}0x{x:0>8}{s} | <- {s}0x{x:0>8}{s}\n", .{
+                if (link) "+> " else "   ",
                 c.yellow,
                 @as(*align(1) const usize, @ptrFromInt(si.fp)).*,
                 c.reset,
@@ -132,7 +132,7 @@ pub inline fn print_stack() void {
             break;
         }
     }
-    tty.printk("   \xC0" ++ "\xC4" ** 12 ++ "\xD9\n", .{});
+    tty.printk("   +" ++ "-" ** 12 ++ "+\n", .{});
 }
 
 pub inline fn dump_stack() void {
@@ -159,8 +159,8 @@ pub inline fn dump_stack() void {
             \\ebp: {s}0x{x}{s}, esp: {s}0x{x}{s}
         ,
             .{
-                "\xCD" ** 11 ++ "\xD1" ++ "\xCD" ** (tty.width - 12),
-                "\xB3\n" ++ "\xC4" ** 11 ++ "\xD9\n",
+                "=" ** 11 ++ "+" ++ "=" ** (tty.width - 12),
+                "|\n" ++ "-" ** 11 ++ "+\n",
                 c.green,
                 size,
                 c.reset,
@@ -186,7 +186,7 @@ pub inline fn dump_stack() void {
             pc = addr;
         } else break;
     }
-    tty.printk("\xCD" ** tty.width ++ "\n", .{});
+    tty.printk("=" ** tty.width ++ "\n", .{});
 }
 
 pub fn print_mmap() void {
@@ -199,12 +199,12 @@ pub fn print_mmap() void {
     }
 
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP)) |t| {
-        tty.printk("\xC9{s:\xCD<18}\xD1{s:\xCD^18}\xD1{s:\xCD<18}\xBB\n", .{
+        tty.printk("+{s:=<18}+{s:=^18}+{s:=<18}+\n", .{
             "",
             " MMAP ",
             "",
         }); // 14
-        tty.printk("\xBA {s: <16} \xB3 {s: <16} \xB3 {s: <16} \xBA\n", .{
+        tty.printk("| {s: <16} | {s: <16} | {s: <16} |\n", .{
             "base",
             "length",
             "type",
@@ -212,18 +212,18 @@ pub fn print_mmap() void {
 
         var iter = multiboot.mmap_it{ .base = t };
         while (iter.next()) |e| {
-            tty.printk("\xCC{s:\xCD<18}\xD8{s:\xCD^18}\xD8{s:\xCD<18}\xB9\n", .{
+            tty.printk("+{s:=<18}+{s:=^18}+{s:=<18}+\n", .{
                 "",
                 "",
                 "",
             }); // 14
-            tty.printk("\xBA 0x{x:0>14} \xB3 0x{x:0>14} \xB3 {d: <16} \xBA\n", .{
+            tty.printk("| 0x{x:0>14} | 0x{x:0>14} | {d: <16} |\n", .{
                 e.base,
                 e.length,
                 e.type,
             }); // 14
         }
-        tty.printk("\xC8{s:\xCD<18}\xCF{s:\xCD^18}\xCF{s:\xCD<18}\xBC\n", .{
+        tty.printk("+{s:=<18}+{s:=^18}+{s:=<18}+\n", .{
             "",
             "",
             "",
@@ -264,7 +264,7 @@ pub fn show_palette() void {
     }
 }
 
-pub fn fuzz(allocator: ft.mem.Allocator, writer: ft.io.AnyWriter, nb: usize, max_size: usize, quiet: bool) !void {
+pub fn fuzz(allocator: std.mem.Allocator, writer: std.io.AnyWriter, nb: usize, max_size: usize, quiet: bool) !void {
     const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(1000);
 
     var fuzzer: Fuzzer = Fuzzer.init(allocator, writer, &Fuzzer.converging);
@@ -278,22 +278,22 @@ const taskSet = @import("../task/task_set.zig");
 pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth: usize) void {
     const descriptor = taskSet.get_task_descriptor(pid) orelse return;
     if (descriptor.childs) |first_child| {
-        shell.print("{d:\xc4<5}", .{descriptor.pid});
+        shell.print("{d:-<5}", .{descriptor.pid});
         if ((depth + 1) * 6 > prefix.len) return;
         var child: ?*task.TaskDescriptor = first_child;
         while (child) |current| : (child = current.next_sibling) {
             if (current == first_child) {
                 if (current.next_sibling == null) {
-                    shell.print("\xc4", .{});
+                    shell.print("-", .{});
                 } else {
-                    shell.print("\xc2", .{});
+                    shell.print("+", .{});
                     prefix[depth * 6 + 5] = 0xb3;
                 }
             } else if (current.next_sibling == null) {
                 prefix[depth * 6 + 5] = ' ';
-                shell.print("{s}\xc0", .{prefix[0 .. (depth + 1) * 6 - 1]});
+                shell.print("{s}+", .{prefix[0 .. (depth + 1) * 6 - 1]});
             } else {
-                shell.print("{s}\xc3", .{prefix[0 .. (depth + 1) * 6 - 1]});
+                shell.print("{s}+", .{prefix[0 .. (depth + 1) * 6 - 1]});
             }
             pstree(shell, current.pid, prefix, depth + 1);
         }
