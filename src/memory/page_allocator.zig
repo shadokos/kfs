@@ -1,6 +1,5 @@
-const ft = @import("ft");
 const paging = @import("paging.zig");
-const logger = @import("ft").log.scoped(.page_allocator);
+const logger = @import("std").log.scoped(.page_allocator);
 
 ptr: *anyopaque,
 vtable: *const VTable,

@@ -1,4 +1,3 @@
-const ft = @import("ft");
 const paging = @import("paging.zig");
 const Cache = @import("object_allocators/slab/cache.zig").Cache;
 const memory = @import("../memory.zig");
@@ -6,7 +5,7 @@ const globalCache = &memory.globalCache;
 const mapping = @import("mapping.zig");
 const pageFrameAllocator = &memory.pageFrameAllocator;
 const cpu = @import("../cpu.zig");
-const logger = ft.log.scoped(.regions);
+const logger = @import("std").log.scoped(.regions);
 
 pub const RegionOperations = struct {
     open: *const fn (region: *Region) void,

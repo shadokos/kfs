@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const tty = @import("../tty/tty.zig");
 const paging = @import("paging.zig");
 const bitmap = @import("../misc/bitmap.zig");
@@ -19,7 +19,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
         @compileError("max order can't be 0");
     return struct {
         /// the allocator used to allocates data structures for the BuddyAllocator
-        allocator: ?ft.mem.Allocator = null,
+        allocator: ?std.mem.Allocator = null,
 
         /// store information about pages (like flags) (mem_map[0] store information for page mem[0])
         mem_map: []page_frame_descriptor = ([0]page_frame_descriptor{})[0..],
@@ -44,7 +44,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
         const Self = @This();
 
         /// init an instance (if the underlying allocator is set)self.bit_map
-        pub fn init(_total_pages: idx_t, _allocator: ft.mem.Allocator) Self {
+        pub fn init(_total_pages: idx_t, _allocator: std.mem.Allocator) Self {
             var self = Self{ .total_pages = _total_pages, .allocator = _allocator };
 
             self.mem_map = _allocator.alloc(
@@ -54,14 +54,14 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
             @memset(self.mem_map, .{ .flags = .{ .available = false } });
 
             for (0..max_order + 1) |o| {
-                const bit_map_size = ft.math.divCeil(
+                const bit_map_size = std.math.divCeil(
                     usize,
                     self.total_pages,
                     @as(usize, 1) << @truncate(o),
                 ) catch unreachable;
                 self.bit_maps[o] = bitmap.BitMap.init(@ptrCast(_allocator.alloc(
                     usize,
-                    (ft.math.divCeil(usize, bit_map_size, 8) catch unreachable),
+                    (std.math.divCeil(usize, bit_map_size, 8) catch unreachable),
                 ) catch @panic("not enough space to allocate bitmap")), bit_map_size);
                 for (0..bit_map_size) |i| self.bit_maps[o].set(i, .Taken) catch unreachable;
             }
@@ -104,7 +104,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
         /// remove the page frame identified by page_idx from the list of free pages for order order
         fn lst_remove(self: *Self, order: order_t, page_idx: idx_t) void {
             const frame = self.frame_from_idx(
-                ft.mem.alignBackward(idx_t, page_idx, @as(idx_t, 1) << order),
+                std.mem.alignBackward(idx_t, page_idx, @as(idx_t, 1) << order),
             );
 
             if (frame.prev) |prev| {
@@ -122,7 +122,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
         /// add the page frame identified by page_idx to the list of free pages for order order
         fn lst_add(self: *Self, order: order_t, page_idx: idx_t) void {
             const frame = self.frame_from_idx(
-                ft.mem.alignBackward(idx_t, page_idx, @as(idx_t, 1) << order),
+                std.mem.alignBackward(idx_t, page_idx, @as(idx_t, 1) << order),
             );
 
             frame.prev = null;
@@ -186,7 +186,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
 
         /// alloc n physical pages and return the idx of the first page
         pub fn alloc_pages(self: *Self, n: usize) Error!idx_t {
-            var order: order_t = @intCast(ft.math.log2(n));
+            var order: order_t = @intCast(std.math.log2(n));
             if (@as(usize, 1) << order < n) {
                 order += 1;
             }
@@ -227,7 +227,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
         }
 
         /// set the underlying allocator
-        pub fn set_allocator(self: *Self, allocator: ft.mem.Allocator) void {
+        pub fn set_allocator(self: *Self, allocator: std.mem.Allocator) void {
             self.allocator = allocator;
         }
 
@@ -235,7 +235,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
         fn bitmap_size(pages: usize) usize {
             var ret: usize = 0;
             for (0..max_order + 1) |o| {
-                ret += ft.math.divCeil(
+                ret += std.math.divCeil(
                     usize,
                     pages,
                     @as(usize, 1) << @truncate(o),
@@ -248,12 +248,12 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
         pub fn max_possible_space(comptime T: type, available_space: usize) T {
             const average_page_cost: usize = @bitSizeOf(page_frame_descriptor) + 2;
 
-            var ret: usize = ft.math.divCeil(
+            var ret: usize = std.math.divCeil(
                 usize,
                 available_space * 8,
                 average_page_cost,
             ) catch unreachable;
-            while (@sizeOf(page_frame_descriptor) * ret + (ft.math.divCeil(
+            while (@sizeOf(page_frame_descriptor) * ret + (std.math.divCeil(
                 usize,
                 bitmap_size(ret),
                 8,

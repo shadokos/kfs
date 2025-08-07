@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const memory = @import("../memory.zig");
 const interrupts = @import("../interrupts.zig");
 const paging = @import("../memory/paging.zig");
@@ -14,7 +14,7 @@ const ready_queue = @import("ready_queue.zig");
 const wait_queue = @import("wait_queue.zig");
 const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
-const logger = ft.log.scoped(.task);
+const logger = std.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
 pub const TaskDescriptor = struct {

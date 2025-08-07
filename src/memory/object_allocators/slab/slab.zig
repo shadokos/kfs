@@ -2,7 +2,7 @@ const printk = @import("../../../tty/tty.zig").printk;
 const Cache = @import("cache.zig").Cache;
 const BitMap = @import("../../../misc/bitmap.zig").BitMap;
 const Bit = @import("../../../misc/bitmap.zig").Bit;
-const ft = @import("ft");
+const std = @import("std");
 
 pub const SlabState = enum {
     Empty,
@@ -34,7 +34,7 @@ pub const Slab = struct {
         const mem: [*]usize = @ptrFromInt(@intFromPtr(page) + @sizeOf(Slab));
         new.bitmap = BitMap.init(mem, cache.obj_per_slab);
 
-        const start = ft.mem.alignForward(
+        const start = std.mem.alignForward(
             usize,
             @intFromPtr(page) + @sizeOf(Slab) + new.bitmap.get_size(),
             cache.align_obj,

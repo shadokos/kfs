@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const Shell = @import("shell.zig").Shell;
 
 const allocator = @import("../../memory.zig").smallAlloc.allocator();
@@ -7,12 +7,12 @@ pub fn Packet(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        writer: ft.io.AnyWriter,
+        writer: std.io.AnyWriter,
         err: ?anyerror = null,
         type: enum { Error, Info, Success } = .Info,
         data: T = undefined,
 
-        pub fn init(writer: ft.io.AnyWriter) Self {
+        pub fn init(writer: std.io.AnyWriter) Self {
             return .{ .writer = writer };
         }
 
@@ -24,16 +24,15 @@ pub fn Packet(comptime T: type) type {
 
         pub fn sendf(self: *Self, comptime fmt: []const u8, args: anytype) void {
             if (self.err) |_| self.type = .Error;
-            var buffer = ft.ArrayList(u8).init(allocator);
-            ft.fmt.format(buffer.writer(), fmt, args) catch {};
+            var buffer = std.ArrayList(u8).init(allocator);
+            std.fmt.format(buffer.writer(), fmt, args) catch {};
             self.data = buffer.slice;
             defer buffer.deinit();
             self.printValue(self.*);
             _ = self.writer.write("\n") catch {};
         }
 
-        // TODO: Maybe implements this part in ft.fmt ??
-        // TODO: Maybe not this code actually, but a way to print a struct
+        // TODO: Refactor this part in to use std.fmt
         pub fn printValue(self: *Self, data: anytype) void {
             const type_info = @typeInfo(@TypeOf(data));
             switch (type_info) {
@@ -64,7 +63,7 @@ pub fn Packet(comptime T: type) type {
                     inline for (
                         type_info.@"struct".fields,
                         0..,
-                    ) |field, i| if (!ft.mem.eql(u8, field.name, "writer")) {
+                    ) |field, i| if (!std.mem.eql(u8, field.name, "writer")) {
                         _ = self.writer.print("\"{s}\": ", .{field.name}) catch {};
                         self.printValue(@field(data, field.name));
                         self.writer.print("{s} ", .{if (i + 1 < nb_fields) "," else ""}) catch {};

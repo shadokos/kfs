@@ -1,9 +1,10 @@
+const std = @import("std");
 const kernel = @import("kernel.zig");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const multiboot = @import("multiboot.zig");
-const builtin = @import("std").builtin;
+const builtin = std.builtin;
 const paging = @import("memory/paging.zig");
-const log = @import("ft").log;
+const log = std.log;
 
 const STACK_SIZE: u32 = 64 * 1024;
 
@@ -17,7 +18,7 @@ pub const kernel_end = @extern([*]u8, .{ .name = "kernel_end" });
 
 pub var multiboot_info: *multiboot.info_header = undefined;
 
-pub const ft_options: @import("ft").Options = .{
+pub const std_options: @import("std").Options = .{
     .logFn = @import("logger.zig").kernel_log,
     .log_level = switch (@import("build_options").optimize) {
         .Debug => log.Level.debug,
@@ -106,6 +107,6 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 }
 
 pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
-    @import("ft").log.err("{s}", .{msg});
+    log.err("{s}", .{msg});
     unreachable;
 }

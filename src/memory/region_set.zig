@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const paging = @import("paging.zig");
 const memory = @import("../memory.zig");
 const globalCache = &memory.globalCache;
@@ -10,7 +10,7 @@ const Region = @import("regions.zig").Region;
 pub const RegionSet = struct {
     list: ListType = .{},
 
-    const ListType = ft.DoublyLinkedList(Region);
+    const ListType = std.DoublyLinkedList(Region);
 
     pub const RangeIterator = struct {
         lower_bound: usize,

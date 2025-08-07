@@ -1,6 +1,6 @@
 const interrupts = @import("../interrupts.zig");
 const signal = @import("signal.zig");
-const ft = @import("ft");
+const std = @import("std");
 
 pub const mcontext_t = interrupts.InterruptFrame;
 
@@ -12,7 +12,7 @@ pub const ucontext_t = extern struct {
 };
 
 pub fn put_data_on_stack(context: *ucontext_t, data: []u8) []u8 {
-    const aligned_stack = ft.mem.alignBackward(usize, context.uc_mcontext.iret.sp - data.len, 4);
+    const aligned_stack = std.mem.alignBackward(usize, context.uc_mcontext.iret.sp - data.len, 4);
     const sp: []u8 = @as([*]u8, @ptrFromInt(aligned_stack))[0..data.len];
     @memcpy(sp, data);
     context.uc_mcontext.iret.sp = @intFromPtr(sp.ptr);
@@ -20,7 +20,7 @@ pub fn put_data_on_stack(context: *ucontext_t, data: []u8) []u8 {
 }
 
 pub fn put_on_stack(context: *ucontext_t, elem: anytype) *@TypeOf(elem) { // todo bound check
-    const sp = ft.mem.alignBackward(usize, context.uc_mcontext.iret.sp - @sizeOf(@TypeOf(elem)), 4);
+    const sp = std.mem.alignBackward(usize, context.uc_mcontext.iret.sp - @sizeOf(@TypeOf(elem)), 4);
     @as(*@TypeOf(elem), @ptrFromInt(sp)).* = elem;
     context.uc_mcontext.iret.sp = sp;
     return @ptrFromInt(sp);

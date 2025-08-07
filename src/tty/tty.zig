@@ -1,11 +1,10 @@
-const ft = @import("ft");
+const std = @import("std");
 const vt100 = @import("vt100.zig").vt100;
 const termios = @import("termios.zig");
 const cc_t = termios.cc_t;
 const keyboard = @import("keyboard.zig");
 const vga = @import("../drivers/vga/text.zig");
 const themes = @import("themes.zig");
-const BufferWriter = @import("buffer_writer.zig").BufferWriter;
 
 /// The colors available for the console
 pub const Color = enum(u8) {
@@ -99,12 +98,12 @@ pub fn TtyN(comptime history_size: u32) type {
         /// current theme
         theme: ?themes.Theme = themes.default,
 
-        const input_buffer_pos_t = ft.meta.Int(.unsigned, ft.math.log2(MAX_INPUT)); // todo: is this the right type?
+        const input_buffer_pos_t = std.meta.Int(.unsigned, std.math.log2(MAX_INPUT)); // todo: is this the right type?
 
         /// Writer object type
-        pub const Writer = ft.io.Writer(*Self, Self.WriteError, Self.write);
+        pub const Writer = std.io.Writer(*Self, Self.WriteError, Self.write);
         /// Reader object type
-        pub const Reader = ft.io.Reader(*Self, Self.ReadError, Self.read);
+        pub const Reader = std.io.Reader(*Self, Self.ReadError, Self.read);
 
         pub const WriteError = error{};
         pub const ReadError = error{};
@@ -337,9 +336,9 @@ pub fn TtyN(comptime history_size: u32) type {
         fn output_processing(self: *Self, c: u8) void {
             if (self.config.c_oflag.OPOST) {
                 switch (self.write_state) {
-                    .Escape => if (ft.mem.len(@as([*:0]u8, &self.escape_buffer)) < self.escape_buffer.len - 1) {
+                    .Escape => if (std.mem.len(@as([*:0]u8, &self.escape_buffer)) < self.escape_buffer.len - 1) {
                         var buffer_save: @TypeOf(self.escape_buffer) = undefined;
-                        self.escape_buffer[ft.mem.len(@as([*:0]u8, &self.escape_buffer))] = c;
+                        self.escape_buffer[std.mem.len(@as([*:0]u8, &self.escape_buffer))] = c;
                         self.write_state = .Normal;
                         @memcpy(&buffer_save, &self.escape_buffer);
                         @memset(&self.escape_buffer, 0);
@@ -386,7 +385,7 @@ pub fn TtyN(comptime history_size: u32) type {
             self.view();
         }
 
-        /// read bytes from the terminal and store them in s, suitable for use with ft.io.Reader
+        /// read bytes from the terminal and store them in s, suitable for use with std.io.Reader
         pub fn read(self: *Self, s: []u8) Self.ReadError!usize {
             // todo time/min
             var count: usize = 0;
@@ -410,7 +409,7 @@ pub fn TtyN(comptime history_size: u32) type {
             return count;
         }
 
-        /// write the string s to the buffer and return the number of bites writen, suitable for use with ft.io.Writer
+        /// write the string s to the buffer and return the number of bites writen, suitable for use with std.io.Writer
         pub fn write(self: *Self, s: []const u8) Self.WriteError!usize {
             var ret: usize = 0;
             for (s) |c| {
@@ -592,23 +591,24 @@ pub fn set_tty(n: u8) !void {
 }
 
 /// return the reader object of the current tty
-pub inline fn get_reader() ft.io.AnyReader {
+pub inline fn get_reader() std.io.AnyReader {
     return tty_array[current_tty].reader().any();
 }
 
 /// return the writer object of the current tty
-pub inline fn get_writer() ft.io.AnyWriter {
+pub inline fn get_writer() std.io.AnyWriter {
     return get_tty().writer().any();
 }
 
 /// The BufferWriter type for Tty
-const TtyBufferWriter = BufferWriter(Tty.Writer, Tty.Writer.Error, Tty.Writer.write, width);
+const TtyBufferWriter = std.io.BufferedWriter(width, Tty.Writer);
 
 /// Array of BufferWriters, each one wrapping one instance of Tty
 var ttyBufferWriter = init: {
     var array: [max_tty + 1]TtyBufferWriter = undefined;
     for (0..max_tty + 1) |i| {
-        array[i] = TtyBufferWriter{ .context = tty_array[i].writer() };
+        // array[i] = TtyBufferWriter{ .context = tty_array[i].writer() };
+        array[i] = TtyBufferWriter{ .unbuffered_writer = tty_array[i].writer() };
     }
     break :init array;
 };
@@ -620,7 +620,7 @@ pub inline fn printk(comptime fmt: []const u8, args: anytype) void {
     write_lock.acquire();
     defer write_lock.release();
 
-    ttyBufferWriter[current_tty].print(fmt, args) catch {};
+    ttyBufferWriter[current_tty].writer().print(fmt, args) catch {};
     ttyBufferWriter[current_tty].flush() catch {};
 }
 

@@ -2,7 +2,7 @@ const Errno = @import("../errno.zig").Errno;
 const scheduler = @import("../task/scheduler.zig");
 const paging = @import("../memory/paging.zig");
 const Prot = @import("mmap.zig").Prot;
-const ft = @import("ft");
+const std = @import("std");
 const regions = @import("../memory/regions.zig");
 const Region = regions.Region;
 
@@ -16,7 +16,7 @@ pub fn do(addr: *allowzero void, len: usize, prot: Prot) !void {
         return Errno.EINVAL;
     }
     const first_page = @as(usize, @intFromPtr(addr)) / paging.page_size;
-    const npage = ft.math.divCeil(usize, len, paging.page_size) catch unreachable;
+    const npage = std.math.divCeil(usize, len, paging.page_size) catch unreachable;
     // todo: check int overflow
 
     var it = vm.regions.get_range_iterator(first_page, npage);
