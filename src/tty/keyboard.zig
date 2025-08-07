@@ -1,4 +1,3 @@
-const ft = @import("ft");
 const tty = @import("tty.zig");
 const ps2 = @import("../drivers/ps2/ps2.zig");
 const pic = @import("../drivers/pic/pic.zig");

@@ -1,10 +1,10 @@
-const ft = @import("ft");
+const std = @import("std");
 pub const cpu = @import("../../cpu.zig");
-const logger = @import("ft").log.scoped(.serial);
+const logger = std.log.scoped(.serial);
 
 const Self = @This();
-pub const Reader = ft.io.Reader(*Self, anyerror, read);
-pub const Writer = ft.io.Writer(*Self, anyerror, write);
+pub const Reader = std.io.Reader(*Self, anyerror, read);
+pub const Writer = std.io.Writer(*Self, anyerror, write);
 
 port: cpu.Ports = undefined,
 

@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const tty = @import("../tty/tty.zig");
 const get_time_since_boot = &@import("../drivers/pit/pit.zig").get_time_since_boot;
 
@@ -150,7 +150,7 @@ pub fn main(nb: u8, ttd: usize, tte: usize, tts: usize) void {
             &stat,
             null,
             .{},
-        ) catch ft.log.warn("Failed to wait for philosopher {}", .{philo.id});
+        ) catch std.log.warn("Failed to wait for philosopher {}", .{philo.id});
     }
 
     tty.printk("End of simulation {}\n", .{status});

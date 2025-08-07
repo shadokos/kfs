@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const paging = @import("paging.zig");
 const Cache = @import("object_allocators/slab/cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;
@@ -117,7 +117,7 @@ pub const VirtualSpaceAllocator = struct {
         return ret;
     }
 
-    pub fn set_allocator(self: *Self, new_allocator: ft.mem.Allocator) void {
+    pub fn set_allocator(self: *Self, new_allocator: std.mem.Allocator) void {
         self.allocator = new_allocator;
     }
 
@@ -270,7 +270,7 @@ pub const VirtualSpaceAllocator = struct {
 
     /// AVL tree rotation, rotate the node `n` in the tree `field` in the direction `dir` ("l" or "r")
     fn rotate(self: *Self, n: *Node, field: AVL_type, comptime dir: []const u8) void {
-        const other_dir = comptime if (ft.mem.eql(u8, dir, "l")) "r" else "l";
+        const other_dir = comptime if (std.mem.eql(u8, dir, "l")) "r" else "l";
         const ref = self.node_ref(n, field);
 
         const l: *Node = @field(n.avl[@intFromEnum(field)], dir) orelse return;
@@ -278,7 +278,7 @@ pub const VirtualSpaceAllocator = struct {
 
         const bn = n.avl[@intFromEnum(field)].balance_factor;
         const bl = l.avl[@intFromEnum(field)].balance_factor;
-        if (comptime ft.mem.eql(u8, dir, "l")) {
+        if (comptime std.mem.eql(u8, dir, "l")) {
             if (bl > 0) {
                 n.avl[@intFromEnum(field)].balance_factor -= 1 + bl;
                 l.avl[@intFromEnum(field)].balance_factor = -1 + @min(bl, bn - 1);
@@ -473,17 +473,17 @@ pub const VirtualSpaceAllocator = struct {
         const a_ref = self.node_ref(a, field);
         const b_ref = self.node_ref(b, field);
 
-        ft.mem.swap(?*Node, a_ref, b_ref);
-        ft.mem.swap(i8, &a.avl[@intFromEnum(field)].balance_factor, &b.avl[@intFromEnum(field)].balance_factor);
-        ft.mem.swap(?*Node, &a.avl[@intFromEnum(field)].p, &b.avl[@intFromEnum(field)].p);
-        ft.mem.swap(?*Node, &a.avl[@intFromEnum(field)].l, &b.avl[@intFromEnum(field)].l);
+        std.mem.swap(?*Node, a_ref, b_ref);
+        std.mem.swap(i8, &a.avl[@intFromEnum(field)].balance_factor, &b.avl[@intFromEnum(field)].balance_factor);
+        std.mem.swap(?*Node, &a.avl[@intFromEnum(field)].p, &b.avl[@intFromEnum(field)].p);
+        std.mem.swap(?*Node, &a.avl[@intFromEnum(field)].l, &b.avl[@intFromEnum(field)].l);
         if (a.avl[@intFromEnum(field)].l) |l| {
             l.avl[@intFromEnum(field)].p = a;
         }
         if (b.avl[@intFromEnum(field)].l) |l| {
             l.avl[@intFromEnum(field)].p = b;
         }
-        ft.mem.swap(?*Node, &a.avl[@intFromEnum(field)].r, &b.avl[@intFromEnum(field)].r);
+        std.mem.swap(?*Node, &a.avl[@intFromEnum(field)].r, &b.avl[@intFromEnum(field)].r);
         if (a.avl[@intFromEnum(field)].r) |r| {
             r.avl[@intFromEnum(field)].p = a;
         }

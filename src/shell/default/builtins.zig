@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const tty = @import("../../tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("../utils.zig");
@@ -31,7 +31,7 @@ pub fn help(shell: anytype, data: [][]u8) CmdError!void {
         return;
     }
     inline for (@typeInfo(helpers).@"struct".decls) |decl| {
-        if (ft.mem.eql(u8, decl.name, data[1])) {
+        if (std.mem.eql(u8, decl.name, data[1])) {
             @field(helpers, decl.name)();
             return;
         }
@@ -50,8 +50,8 @@ pub fn hexdump(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) {
         return CmdError.InvalidNumberOfArguments;
     }
-    const begin: usize = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    const len: usize = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+    const begin: usize = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const len: usize = std.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
     utils.memory_dump(begin, begin +| len);
 }
 
@@ -126,7 +126,7 @@ const vpa = &@import("../../memory.zig").kernel_virtual_space;
 
 pub fn alloc_page(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
-    const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const nb = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
     const pages = vpa.alloc_pages(nb) catch {
         utils.print_error(shell, "Failed to allocate {d} pages", .{nb});
         return CmdError.OtherError;
@@ -137,7 +137,7 @@ pub fn alloc_page(shell: anytype, args: [][]u8) CmdError!void {
 pub fn kmalloc(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
     var kmem = &@import("../../memory.zig").smallAlloc;
-    const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const nb = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
     const obj: []u8 = kmem.alloc(u8, nb) catch {
         utils.print_error(shell, "Failed to allocate {d} bytes", .{nb});
         return CmdError.OtherError;
@@ -149,8 +149,8 @@ pub fn kfree(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
     var kmem = &@import("../../memory.zig").smallAlloc;
-    const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    if (!ft.mem.isAligned(addr, @sizeOf(usize))) {
+    const addr = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    if (!std.mem.isAligned(addr, @sizeOf(usize))) {
         utils.print_error(shell, "0x{x} is not aligned", .{addr});
         return CmdError.OtherError;
     }
@@ -161,8 +161,8 @@ pub fn ksize(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
     var kmem = &@import("../../memory.zig").smallAlloc;
-    const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    if (!ft.mem.isAligned(addr, @sizeOf(usize))) {
+    const addr = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    if (!std.mem.isAligned(addr, @sizeOf(usize))) {
         utils.print_error(shell, "0x{x} is not aligned", .{addr});
         return CmdError.OtherError;
     }
@@ -177,9 +177,9 @@ pub fn krealloc(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) return CmdError.InvalidNumberOfArguments;
 
     var kmem = &@import("../../memory.zig").smallAlloc;
-    const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    const new_size = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
-    if (!ft.mem.isAligned(addr, @sizeOf(usize))) {
+    const addr = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const new_size = std.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+    if (!std.mem.isAligned(addr, @sizeOf(usize))) {
         utils.print_error(shell, "0x{x} is not aligned", .{addr});
         return CmdError.OtherError;
     }
@@ -209,8 +209,8 @@ pub fn cache_create(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 4) return CmdError.InvalidNumberOfArguments;
     const globalCache = &@import("../../memory.zig").globalCache;
     const name = args[1];
-    const size = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
-    const order = ft.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
+    const size = std.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+    const order = std.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
     const new_cache = globalCache.create(
         name,
         @import("../../memory.zig").directPageAllocator.page_allocator(),
@@ -231,7 +231,7 @@ pub fn cache_destroy(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
 
     const globalCache = &@import("../../memory.zig").globalCache;
-    const addr = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const addr = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
 
     globalCache.destroy(@ptrFromInt(addr));
 }
@@ -247,8 +247,8 @@ pub fn shrink(_: anytype, _: [][]u8) CmdError!void {
 pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
-    const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    const max_size = if (args.len == 3) ft.fmt.parseInt(
+    const nb = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const max_size = if (args.len == 3) std.fmt.parseInt(
         usize,
         args[2],
         0,
@@ -266,8 +266,8 @@ pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
 pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
-    const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    const max_size = if (args.len == 3) ft.fmt.parseInt(
+    const nb = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const max_size = if (args.len == 3) std.fmt.parseInt(
         usize,
         args[2],
         0,
@@ -284,7 +284,7 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
 
 pub fn sleep(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 2) return CmdError.InvalidNumberOfArguments;
-    const ms = ft.fmt.parseInt(u64, args[1], 0) catch return CmdError.InvalidParameter;
+    const ms = std.fmt.parseInt(u64, args[1], 0) catch return CmdError.InvalidParameter;
     @import("../../task/sleep.zig").sleep(ms) catch {};
 }
 
@@ -312,8 +312,8 @@ pub fn wait(shell: anytype, _: [][]u8) CmdError!void {
 
 pub fn kill(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) return CmdError.InvalidNumberOfArguments;
-    const pid = ft.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter;
-    const signal = ft.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
+    const pid = std.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter;
+    const signal = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
     @import("../../syscall/kill.zig").do(pid, @enumFromInt(signal)) catch return CmdError.InvalidParameter;
 }
 
@@ -323,7 +323,7 @@ pub fn pstree(shell: anytype, _: [][]u8) CmdError!void {
 }
 
 pub fn tic(shell: anytype, args: [][]u8) CmdError!void {
-    var n = if (args.len == 2) ft.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter else null;
+    var n = if (args.len == 2) std.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter else null;
     while (if (n) |nv| nv > 0 else true) {
         shell.print("tic\n", .{});
         @import("../../drivers/pit/pit.zig").sleep(1000);
@@ -339,10 +339,10 @@ pub fn philo(_: anytype, args: [][]u8) CmdError!void {
 
     if (args.len < 5) return CmdError.InvalidNumberOfArguments;
 
-    const nb_philosophers = ft.fmt.parseInt(u8, args[1], 0) catch return CmdError.InvalidParameter;
-    const time_to_die = ft.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
-    const time_to_eat = ft.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
-    const time_to_sleep = ft.fmt.parseInt(usize, args[4], 0) catch return CmdError.InvalidParameter;
+    const nb_philosophers = std.fmt.parseInt(u8, args[1], 0) catch return CmdError.InvalidParameter;
+    const time_to_die = std.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+    const time_to_eat = std.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
+    const time_to_sleep = std.fmt.parseInt(usize, args[4], 0) catch return CmdError.InvalidParameter;
 
     @import("../../misc/philosophers.zig").main(
         nb_philosophers,
@@ -370,7 +370,7 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
     }
 
     inline for (array) |name| {
-        if (ft.mem.eql(u8, name, args[1])) {
+        if (std.mem.eql(u8, name, args[1])) {
             const new_task = @import("../../task/task_set.zig").create_task() catch
                 @panic("Failed to create new_task");
             new_task.spawn(

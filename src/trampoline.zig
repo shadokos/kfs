@@ -1,16 +1,16 @@
+const std = @import("std");
 const paging = @import("memory/paging.zig");
-const ft = @import("ft");
 const cpu = @import("cpu.zig");
 
 pub const kernel_size = 0x10_000_000 + paging.direct_zone_size;
 
-const page_count = ft.math.divCeil(
+const page_count = std.math.divCeil(
     comptime_int,
     kernel_size,
     paging.page_size,
 ) catch unreachable;
 
-pub const table_count = ft.math.divCeil(
+pub const table_count = std.math.divCeil(
     comptime_int,
     page_count,
     paging.page_table_size,
