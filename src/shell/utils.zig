@@ -4,7 +4,7 @@ const StackIterator = std.debug.StackIterator;
 
 const c = @import("colors");
 
-const prompt: *const [1:0]u8 = "\xaf";
+const prompt: *const [2:0]u8 = "»";
 extern var stack_bottom: [*]u8;
 
 pub fn ensure_newline(writer: std.io.AnyWriter) void {
@@ -86,22 +86,22 @@ pub inline fn print_stack() void {
         c.red,    c.reset,
         c.blue,   c.reset,
     });
-    tty.printk("   +" ++ "-" ** 12 ++ "+ <- {s}0x{x:0>8}{s}\n", .{ c.red, esp, c.reset });
+    tty.printk("   ┌" ++ "─" ** 12 ++ "┐ <- {s}0x{x:0>8}{s}\n", .{ c.red, esp, c.reset });
     while (true) {
         var size = si.fp - esp;
 
         if (pc) |_| size -= @sizeOf(usize);
         if (size > 0)
-            tty.printk("{s}|     ...    | {s}{d}{s} bytes\n{s}{s}", .{
-                if (link) "|  " else "   ", c.green,                   size, c.reset,
-                if (link) "|  " else "   ", "+" ++ "-" ** 12 ++ "+\n",
+            tty.printk("{s}│     ...    │ {s}{d}{s} bytes\n{s}{s}", .{
+                if (link) "│  " else "   ", c.green,                         size, c.reset,
+                if (link) "│  " else "   ", "├" ++ "─" ** 12 ++ "┤\n",
             });
         old_fp = si.fp;
         esp = si.fp + @sizeOf(usize);
         if (si.next()) |addr| {
             pc = addr;
-            tty.printk("{s}| {s}0x{x:0>8}{s} | <- {s}0x{x:0>8}{s}\n", .{
-                if (link) "+> " else "   ",
+            tty.printk("{s}│ {s}0x{x:0>8}{s} │ <- {s}0x{x:0>8}{s}\n", .{
+                if (link) "└> " else "   ",
                 c.yellow,
                 si.fp,
                 c.reset,
@@ -111,17 +111,17 @@ pub inline fn print_stack() void {
             });
             link = true;
             if (si.fp > @intFromPtr(stack_bottom)) break;
-            tty.printk("   +-+" ++ "-" ** 10 ++ "+\n", .{});
-            tty.printk("+" ++ "-" ** 4 ++ "+\n", .{});
-            tty.printk("|  +" ++ "-" ** 12 ++ "+\n", .{});
-            tty.printk("|  | {s}0x{x:0>8}{s} | <- {s}0x{x:0>8}{s}\n", .{
+            tty.printk("   └─┬" ++ "─" ** 10 ++ "┘\n", .{});
+            tty.printk("┌" ++ "─" ** 4 ++ "┘\n", .{});
+            tty.printk("│  ┌" ++ "─" ** 12 ++ "┐\n", .{});
+            tty.printk("│  │ {s}0x{x:0>8}{s} │ <- {s}0x{x:0>8}{s}\n", .{
                 c.blue, addr, c.reset,
                 c.red,  esp,  c.reset,
             });
-            tty.printk("|  +" ++ "-" ** 12 ++ "+\n", .{});
+            tty.printk("│  ├" ++ "─" ** 12 ++ "┤\n", .{});
         } else {
-            tty.printk("{s}| {s}0x{x:0>8}{s} | <- {s}0x{x:0>8}{s}\n", .{
-                if (link) "+> " else "   ",
+            tty.printk("{s}│ {s}0x{x:0>8}{s} │ <- {s}0x{x:0>8}{s}\n", .{
+                if (link) "└> " else "   ",
                 c.yellow,
                 @as(*align(1) const usize, @ptrFromInt(si.fp)).*,
                 c.reset,
@@ -132,7 +132,7 @@ pub inline fn print_stack() void {
             break;
         }
     }
-    tty.printk("   +" ++ "-" ** 12 ++ "+\n", .{});
+    tty.printk("   └" ++ "─" ** 12 ++ "┘\n", .{});
 }
 
 pub inline fn dump_stack() void {
@@ -159,8 +159,8 @@ pub inline fn dump_stack() void {
             \\ebp: {s}0x{x}{s}, esp: {s}0x{x}{s}
         ,
             .{
-                "=" ** 11 ++ "+" ++ "=" ** (tty.width - 12),
-                "|\n" ++ "-" ** 11 ++ "+\n",
+                "═" ** 11 ++ "╤" ++ "═" ** (tty.width - 12),
+                "│\n" ++ "─" ** 11 ++ "┘\n",
                 c.green,
                 size,
                 c.reset,
@@ -186,7 +186,7 @@ pub inline fn dump_stack() void {
             pc = addr;
         } else break;
     }
-    tty.printk("=" ** tty.width ++ "\n", .{});
+    tty.printk("═" ** tty.width ++ "\n", .{});
 }
 
 pub fn print_mmap() void {
@@ -199,12 +199,12 @@ pub fn print_mmap() void {
     }
 
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP)) |t| {
-        tty.printk("+{s:=<18}+{s:=^18}+{s:=<18}+\n", .{
+        tty.printk("╔{s:═<18}╤{s:═^18}╤{s:═<18}╗\n", .{
             "",
             " MMAP ",
             "",
         }); // 14
-        tty.printk("| {s: <16} | {s: <16} | {s: <16} |\n", .{
+        tty.printk("║ {s: <16} │ {s: <16} │ {s: <16} ║\n", .{
             "base",
             "length",
             "type",
@@ -212,18 +212,18 @@ pub fn print_mmap() void {
 
         var iter = multiboot.mmap_it{ .base = t };
         while (iter.next()) |e| {
-            tty.printk("+{s:=<18}+{s:=^18}+{s:=<18}+\n", .{
+            tty.printk("╠{s:═<18}╪{s:═^18}╪{s:═<18}╣\n", .{
                 "",
                 "",
                 "",
             }); // 14
-            tty.printk("| 0x{x:0>14} | 0x{x:0>14} | {d: <16} |\n", .{
+            tty.printk("║ 0x{x:0>14} │ 0x{x:0>14} │ {d: <16} ║\n", .{
                 e.base,
                 e.length,
                 e.type,
             }); // 14
         }
-        tty.printk("+{s:=<18}+{s:=^18}+{s:=<18}+\n", .{
+        tty.printk("╚{s:═<18}╧{s:═^18}╧{s:═<18}╝\n", .{
             "",
             "",
             "",
@@ -278,22 +278,22 @@ const taskSet = @import("../task/task_set.zig");
 pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth: usize) void {
     const descriptor = taskSet.get_task_descriptor(pid) orelse return;
     if (descriptor.childs) |first_child| {
-        shell.print("{d:-<5}", .{descriptor.pid});
+        shell.print("{d:─<5}", .{@as(u32, @intCast(descriptor.pid))});
         if ((depth + 1) * 6 > prefix.len) return;
         var child: ?*task.TaskDescriptor = first_child;
         while (child) |current| : (child = current.next_sibling) {
             if (current == first_child) {
                 if (current.next_sibling == null) {
-                    shell.print("-", .{});
+                    shell.print("─", .{});
                 } else {
-                    shell.print("+", .{});
+                    shell.print("┬", .{});
                     prefix[depth * 6 + 5] = 0xb3;
                 }
             } else if (current.next_sibling == null) {
                 prefix[depth * 6 + 5] = ' ';
-                shell.print("{s}+", .{prefix[0 .. (depth + 1) * 6 - 1]});
+                shell.print("{s}└", .{prefix[0 .. (depth + 1) * 6 - 1]});
             } else {
-                shell.print("{s}+", .{prefix[0 .. (depth + 1) * 6 - 1]});
+                shell.print("{s}├", .{prefix[0 .. (depth + 1) * 6 - 1]});
             }
             pstree(shell, current.pid, prefix, depth + 1);
         }
