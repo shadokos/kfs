@@ -5,6 +5,7 @@ const cc_t = termios.cc_t;
 const keyboard = @import("keyboard.zig");
 const vga = @import("../drivers/vga/text.zig");
 const themes = @import("themes.zig");
+const cp437 = @import("cp437.zig");
 
 /// The colors available for the console
 pub const Color = enum(u8) {
@@ -411,13 +412,15 @@ pub fn TtyN(comptime history_size: u32) type {
 
         /// write the string s to the buffer and return the number of bites writen, suitable for use with std.io.Writer
         pub fn write(self: *Self, s: []const u8) Self.WriteError!usize {
-            var ret: usize = 0;
-            for (s) |c| {
-                self.putchar_no_flush(c);
-                ret += 1;
+            var iter = cp437.Utf8ToCp437Iterator{ .bytes = s };
+            var count: usize = 0;
+
+            while (iter.next()) |cp437_char| {
+                self.putchar_no_flush(cp437_char);
+                count += 1;
             }
             self.view();
-            return ret;
+            return s.len;
         }
 
         /// return the current terminal state for save/restore
