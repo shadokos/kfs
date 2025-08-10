@@ -41,9 +41,15 @@ pub fn kernel_log(
         } else {
             @import("drivers/pic/pic.zig").disable_all_irqs();
             @import("drivers/pic/pic.zig").enable_irq(.Keyboard);
-            @import("cpu.zig").enable_interrupts();
+
+            for (0..@import("task/scheduler.zig").lock_count) |_|
+                @import("task/scheduler.zig").unlock();
+
             tty.get_tty().config.c_lflag.ECHO = false;
             tty.get_tty().config.c_lflag.ECHONL = false;
+
+            @import("debug.zig").dumpCurrentStackTrace() catch {};
+
             while (true) {
                 @import("cpu.zig").halt();
                 @import("tty/keyboard.zig").kb_read();

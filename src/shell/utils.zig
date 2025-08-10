@@ -190,9 +190,6 @@ pub inline fn dump_stack() void {
 }
 
 pub fn print_mmap() void {
-    const multiboot = @import("../multiboot.zig");
-    const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
-
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_BASIC_MEMINFO)) |basic_meminfo| {
         tty.printk("mem lower: 0x{x:0>8} Kb\n", .{basic_meminfo.mem_lower});
         tty.printk("mem upper: 0x{x:0>8} Kb\n", .{basic_meminfo.mem_upper});
@@ -231,12 +228,28 @@ pub fn print_mmap() void {
     }
 }
 
+fn get_section_name(offset: usize) ?[]const u8 {
+    if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS)) |t| {
+        const shstrtab_header = multiboot.get_section_header(t, t.shndx) orelse return null;
+
+        const shstrtab_ptr: [*]u8 = @ptrFromInt(shstrtab_header.sh_addr + 0xc0000000);
+        const shstrtab = shstrtab_ptr[0..shstrtab_header.sh_size];
+
+        if (offset > shstrtab.len) return null;
+
+        var i: usize = offset;
+        while (i < shstrtab.len and shstrtab[i] != 0) i += 1;
+
+        return shstrtab[offset..i];
+    }
+    return null;
+}
+
 pub fn print_elf() void {
-    const multiboot = @import("../multiboot.zig");
-    const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS)) |t| {
         var iter = multiboot.section_hdr_it{ .base = t };
-        tty.printk("{s: <32} {s: <8} {s: <8} {s: <8} {s: <8}\n", .{
+        tty.printk("{s: >17} {s: <3} {s: <8} {s: <8} {s: <8} {s: <8}\n", .{
+            "name",
             "flags",
             "virtual",
             "physical",
@@ -244,15 +257,33 @@ pub fn print_elf() void {
             "type",
         });
         while (iter.next()) |e| {
-            tty.printk("{b:0>32} {x:0>8} {x:0>8} {x:0>8} {}\n", .{
+            var name = get_section_name(e.sh_name) orelse "";
+            name = name[0..@min(17, name.len)];
+            tty.printk("{s: <17} {x:0>3}   {x:0>8} {x:0>8} {x:0>8} {s}\n", .{
+                name,
                 @as(u32, @bitCast(e.sh_flags)),
                 e.sh_addr,
                 e.sh_offset,
                 e.sh_size,
-                @intFromEnum(e.sh_type),
+                @tagName(e.sh_type)[4..],
             });
         }
     }
+}
+
+const multiboot = @import("../multiboot.zig");
+const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
+
+pub fn get_section_header_by_name(name: []const u8) ?multiboot.section_entry {
+    if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS)) |t| {
+        var iter = multiboot.section_hdr_it{ .base = t };
+        while (iter.next()) |e| {
+            const section_name = get_section_name(e.sh_name) orelse continue;
+            if (@import("std").mem.eql(u8, name, section_name)) return e.*;
+        }
+        while (true) {}
+    }
+    return null;
 }
 
 pub fn show_palette() void {
