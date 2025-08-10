@@ -1,10 +1,12 @@
 const std = @import("std");
+const c = @import("colors");
 const logger = std.log.scoped(.debug);
 const allocator = @import("memory.zig").bigAlloc.allocator();
 const utils = @import("shell/utils.zig");
+const tty = @import("tty/tty.zig");
 
 var sections: std.debug.Dwarf.SectionArray = std.debug.Dwarf.null_section_array;
-var dwarf_info: ?std.debug.Dwarf = null;
+pub var dwarf_info: ?std.debug.Dwarf = null;
 
 pub fn init() void {
     const eh_frame_header = utils.get_section_header_by_name(".eh_frame") orelse {
@@ -73,11 +75,10 @@ pub fn init() void {
 }
 
 pub fn dumpCurrentStackTrace() !void {
-    try dumpStackTrace(std.debug.StackIterator.init(@returnAddress(), null));
+    try dumpStackTrace(std.debug.StackIterator.init(@returnAddress(), @frameAddress()));
 }
 
 pub fn dumpStackTrace(stack_it: std.debug.StackIterator) !void {
-    const tty = @import("tty/tty.zig");
     var it: std.debug.StackIterator = stack_it;
 
     if (dwarf_info == null)
@@ -96,4 +97,70 @@ pub fn dumpStackTrace(stack_it: std.debug.StackIterator) !void {
         }
     }
     tty.printk("\n", .{});
+}
+
+pub fn dumpCurrentStackTraceVerbose() !void {
+    try dumpStackTraceVerbose(std.debug.StackIterator.init(@returnAddress(), @frameAddress()));
+}
+
+pub fn dumpStackTraceVerbose(stack_it: std.debug.StackIterator) !void {
+    var it: std.debug.StackIterator = stack_it;
+    var old_fp: usize = it.fp;
+
+    while (it.next()) |_addr| {
+        const sym = dwarf_info.?.getSymbol(allocator, _addr) catch |err| {
+            tty.printk("Failed to get symbol: {s}\n", .{@errorName(err)});
+            continue;
+        };
+
+        tty.printk("═" ** tty.width, .{});
+        tty.printk("{s}{s: ^80}{s}\n", .{ c.cyan, sym.name, c.reset });
+
+        tty.printk("frame:\n- ebp: 0x{x}\n- esp: 0x{x}\n- ret: 0x{x}\n\n", .{ it.fp, old_fp, _addr });
+
+        if (sym.source_location) |loc| {
+            tty.printk("file: {s}:{d}:{d}\n\n", .{ loc.file_name, loc.line, loc.column });
+        } else {
+            tty.printk("file: ???:?:?\n\n", .{});
+        }
+
+        const size = it.fp - old_fp;
+        tty.printk("memory dump ({d} bytes):\n", .{size});
+        memory_dump(old_fp, it.fp);
+        tty.printk("\n", .{});
+
+        old_fp = it.fp;
+    }
+}
+
+pub fn memory_dump(start_address: usize, end_address: usize) void {
+    const start: usize = @min(start_address, end_address);
+    const end: usize = @max(start_address, end_address);
+
+    var i: usize = 0;
+    while (start +| i < end) : (i +|= 16) {
+        var ptr: usize = start +| i;
+        var offset: usize = 0;
+        var offsetPreview: usize = 0;
+        var line: [67]u8 = [_]u8{' '} ** 67;
+
+        _ = std.fmt.bufPrint(&line, "{x:0>8}: ", .{start +| i}) catch {};
+
+        while (ptr +| 1 < start +| i +| 16 and ptr < end) : ({
+            ptr +|= 2;
+            offset += 5;
+            offsetPreview += 2;
+        }) {
+            const byte1: u8 = @as(*allowzero u8, @ptrFromInt(ptr)).*;
+            const byte2: u8 = @as(*allowzero u8, @ptrFromInt(ptr +| 1)).*;
+
+            _ = std.fmt.bufPrint(line[10 + offset ..], "{x:0>2}{x:0>2} ", .{ byte1, byte2 }) catch {};
+            _ = std.fmt.bufPrint(line[51 + offsetPreview ..], "{s}{s}", .{
+                [_]u8{if (std.ascii.isPrint(byte1)) byte1 else '.'},
+                [_]u8{if (std.ascii.isPrint(byte2)) byte2 else '.'},
+            }) catch {};
+        }
+
+        tty.printk("{s}\n", .{line});
+    }
 }
