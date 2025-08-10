@@ -9,13 +9,8 @@ const colors = @import("colors");
 // As this builtin definitions are only used with graphic mode, it's ok to use printk for now
 const printk = tty.printk;
 
-pub fn stack(shell: anytype, _: anytype) CmdError!void {
-    if (@import("build_options").optimize != .Debug) {
-        utils.print_error(shell, "{s}", .{"The stack builtin is only available in debug mode"});
-        return CmdError.OtherError;
-    }
-    utils.dump_stack();
-    utils.print_stack();
+pub fn stack(_: anytype, _: [][]u8) CmdError!void {
+    @import("../../debug.zig").dump_current_stack_trace_verbose() catch {};
 }
 
 fn _help_available_commands() void {
@@ -52,7 +47,7 @@ pub fn hexdump(_: anytype, args: [][]u8) CmdError!void {
     }
     const begin: usize = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
     const len: usize = std.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
-    utils.memory_dump(begin, begin +| len);
+    @import("../../debug.zig").memory_dump(begin, begin +| len, null);
 }
 
 pub fn mmap(_: anytype, _: [][]u8) CmdError!void {
@@ -187,7 +182,7 @@ pub fn krealloc(shell: anytype, args: [][]u8) CmdError!void {
         utils.print_error(shell, "Failed to realloc 0x{x}: {s}", .{ addr, @errorName(e) });
         return CmdError.OtherError;
     };
-    tty.printk("Realloc 0x{x} to 0x{x} (new_len: {d})\n", .{ addr, @intFromPtr(&obj[0]), obj.len });
+    printk("Realloc 0x{x} to 0x{x} (new_len: {d})\n", .{ addr, @intFromPtr(&obj[0]), obj.len });
 }
 
 pub fn slabinfo(_: anytype, _: [][]u8) CmdError!void {
