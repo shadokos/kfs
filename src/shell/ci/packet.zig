@@ -26,7 +26,7 @@ pub fn Packet(comptime T: type) type {
             if (self.err) |_| self.type = .Error;
             var buffer = std.ArrayList(u8).init(allocator);
             std.fmt.format(buffer.writer(), fmt, args) catch {};
-            self.data = buffer.slice;
+            self.data = buffer.items;
             defer buffer.deinit();
             self.printValue(self.*);
             _ = self.writer.write("\n") catch {};
