@@ -252,3 +252,4 @@ pub fn memory_dump_writer(writer: *std.io.Writer, start_address: usize, end_addr
     }
     writer.flush() catch {};
 }
+

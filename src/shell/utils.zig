@@ -64,131 +64,6 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
     }
 }
 
-pub inline fn print_stack() void {
-    if (@import("build_options").optimize != .Debug) {
-        print_error("{s}", .{"The dump_stack function is only available in debug mode"});
-        return;
-    }
-
-    const ebp: usize = @frameAddress();
-    var esp: usize = 0;
-    var si: StackIterator = StackIterator.init(null, ebp);
-    var old_fp: usize = 0;
-    var link: bool = false;
-    var pc: ?usize = null;
-
-    asm volatile ("movl %esp, %[esp]"
-        : [esp] "=r" (esp),
-    );
-
-    tty.printk("{s}EBP{s}, {s}ESP{s}, {s}PC{s}\n", .{
-        c.yellow, c.reset,
-        c.red,    c.reset,
-        c.blue,   c.reset,
-    });
-    tty.printk("   ┌" ++ "─" ** 12 ++ "┐ <- {s}0x{x:0>8}{s}\n", .{ c.red, esp, c.reset });
-    while (true) {
-        var size = si.fp - esp;
-
-        if (pc) |_| size -= @sizeOf(usize);
-        if (size > 0)
-            tty.printk("{s}│     ...    │ {s}{d}{s} bytes\n{s}{s}", .{
-                if (link) "│  " else "   ", c.green,                         size, c.reset,
-                if (link) "│  " else "   ", "├" ++ "─" ** 12 ++ "┤\n",
-            });
-        old_fp = si.fp;
-        esp = si.fp + @sizeOf(usize);
-        if (si.next()) |addr| {
-            pc = addr;
-            tty.printk("{s}│ {s}0x{x:0>8}{s} │ <- {s}0x{x:0>8}{s}\n", .{
-                if (link) "└> " else "   ",
-                c.yellow,
-                si.fp,
-                c.reset,
-                c.yellow,
-                old_fp,
-                c.reset,
-            });
-            link = true;
-            if (si.fp > @intFromPtr(stack_bottom)) break;
-            tty.printk("   └─┬" ++ "─" ** 10 ++ "┘\n", .{});
-            tty.printk("┌" ++ "─" ** 4 ++ "┘\n", .{});
-            tty.printk("│  ┌" ++ "─" ** 12 ++ "┐\n", .{});
-            tty.printk("│  │ {s}0x{x:0>8}{s} │ <- {s}0x{x:0>8}{s}\n", .{
-                c.blue, addr, c.reset,
-                c.red,  esp,  c.reset,
-            });
-            tty.printk("│  ├" ++ "─" ** 12 ++ "┤\n", .{});
-        } else {
-            tty.printk("{s}│ {s}0x{x:0>8}{s} │ <- {s}0x{x:0>8}{s}\n", .{
-                if (link) "└> " else "   ",
-                c.yellow,
-                @as(*align(1) const usize, @ptrFromInt(si.fp)).*,
-                c.reset,
-                c.yellow,
-                si.fp,
-                c.reset,
-            });
-            break;
-        }
-    }
-    tty.printk("   └" ++ "─" ** 12 ++ "┘\n", .{});
-}
-
-pub inline fn dump_stack() void {
-    if (@import("build_options").optimize != .Debug) {
-        print_error("{s}", .{"The dump_stack function is only available in debug mode"});
-        return;
-    }
-
-    const ebp: usize = @frameAddress();
-    var esp: usize = 0;
-    var si: StackIterator = StackIterator.init(null, ebp);
-    var pc: ?usize = null;
-
-    asm volatile ("movl %esp, %[esp]"
-        : [esp] "=r" (esp),
-    );
-
-    while (true) {
-        const size = si.fp - esp + @sizeOf(usize);
-
-        tty.printk(
-            \\{s}STACK FRAME{s}
-            \\Size: {s}0x{x}{s} ({s}{d}{s}) bytes
-            \\ebp: {s}0x{x}{s}, esp: {s}0x{x}{s}
-        ,
-            .{
-                "═" ** 11 ++ "╤" ++ "═" ** (tty.width - 12),
-                "│\n" ++ "─" ** 11 ++ "┘\n",
-                c.green,
-                size,
-                c.reset,
-                c.green,
-                size,
-                c.reset,
-                c.yellow,
-                si.fp,
-                c.reset,
-                c.red,
-                esp,
-                c.reset,
-            },
-        );
-        if (pc) |addr| tty.printk(", pc: {s}0x{x}{s}", .{ c.blue, addr, c.reset });
-        tty.printk("\n\nhex dump:\n", .{});
-
-        memory_dump(si.fp + @sizeOf(usize), esp);
-        esp = si.fp + @sizeOf(usize);
-        tty.printk("\n", .{});
-        if (si.next()) |addr| {
-            if (si.fp > @intFromPtr(stack_bottom)) break;
-            pc = addr;
-        } else break;
-    }
-    tty.printk("═" ** tty.width ++ "\n", .{});
-}
-
 pub fn print_mmap() void {
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_BASIC_MEMINFO)) |basic_meminfo| {
         tty.printk("mem lower: 0x{x:0>8} Kb\n", .{basic_meminfo.mem_lower});
@@ -281,7 +156,6 @@ pub fn get_section_header_by_name(name: []const u8) ?multiboot.section_entry {
             const section_name = get_section_name(e.sh_name) orelse continue;
             if (@import("std").mem.eql(u8, name, section_name)) return e.*;
         }
-        while (true) {}
     }
     return null;
 }
