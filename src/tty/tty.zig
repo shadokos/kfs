@@ -603,6 +603,11 @@ pub inline fn get_writer() std.io.AnyWriter {
     return tty_array[current_tty].writer().any();
 }
 
+/// return the buffered writer of the current tty
+pub inline fn get_buffered_writer() *std.io.Writer {
+    return ttyBufferWriter[current_tty];
+}
+
 /// The BufferWriter type for Tty
 var buffers: [max_tty + 1][width * height]u8 = undefined;
 

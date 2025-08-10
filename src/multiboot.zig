@@ -120,8 +120,8 @@ pub const section_hdr_it = extern struct {
     index: usize = 0,
 
     const tag_type = get_tag_type(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS);
-    pub fn next(self: *@This()) ?*section_entry {
-        const ret: *section_entry = @ptrFromInt(@intFromPtr(self.base) + @sizeOf(tag_type) +
+    pub fn next(self: *@This()) ?*align(1) section_entry {
+        const ret: *align(1) section_entry = @ptrFromInt(@intFromPtr(self.base) + @sizeOf(tag_type) +
             self.base.entsize * self.index);
         if (self.base.entsize == 0 or @intFromPtr(ret) >= @intFromPtr(self.base) + self.base.size)
             return null;
@@ -130,7 +130,12 @@ pub const section_hdr_it = extern struct {
     }
 };
 
-fn get_tag_type(comptime n: comptime_int) type {
+const elf_tag = get_tag_type(multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS);
+pub fn get_section_header(base: *elf_tag, index: usize) ?*align(1) section_entry {
+    return @ptrFromInt(@intFromPtr(base) + @sizeOf(elf_tag) + base.entsize * index);
+}
+
+pub fn get_tag_type(comptime n: comptime_int) type {
     const array: [multiboot2_h.MULTIBOOT_TAG_TYPE_LOAD_BASE_ADDR + 1]type = .{
         extern struct { // MULTIBOOT_TAG_TYPE_END
         },
