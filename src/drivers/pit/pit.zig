@@ -70,7 +70,7 @@ pub const ReadBackCommand = packed struct {
     cmd: MonoState(u2, 0b11) = .{},
 };
 
-pub fn send_command(cmd: ModeCmdRegister) void {
+pub fn write_mode_cmd(cmd: ModeCmdRegister) void {
     cpu.outb(mode_cmd_register, @bitCast(cmd));
 }
 
@@ -94,7 +94,7 @@ pub fn send_read_back(cmd: ReadBackCommand) void {
     cpu.outb(mode_cmd_register, @bitCast(cmd));
 }
 
-pub fn read_back_channel(channel: SelectChannel) ReadBackStatus {
+pub fn read_status(channel: SelectChannel) ReadBackStatus {
     const channel_port = get_channel_port(channel);
     send_read_back(.{
         .channel_0 = channel == .Channel_0,
@@ -104,7 +104,29 @@ pub fn read_back_channel(channel: SelectChannel) ReadBackStatus {
     return @bitCast(cpu.inb(channel_port));
 }
 
-pub fn init_channel(comptime channel: SelectChannel, frequency: u32) void {
+// Program PIT Channel 0 to fire a one-shot interrupt after `timeout_us` microseconds.
+// Uses mode InterruptOnTerminalCount with low+high byte access.
+pub fn set_timeout_us(timeout_us: u64) void {
+    const channel_port = get_channel_port(.Channel_0);
+
+    // Compute reload value (1..65536), using rounding.
+    var count: u64 = (timeout_us * FREQUENCY + 500_000) / 1_000_000;
+    if (count == 0) count = 1; // minimum delay
+    if (count > 0x10000) count = 0x10000; // 0x10000 == 65536 when written as 0
+
+    write_mode_cmd(ModeCmdRegister{
+        .BCD_binary_Mode = false,
+        .operating_mode = OperatingMode.InterruptOnTerminalCount,
+        .access_mode = AccessMode.AccessModeBoth,
+        .select_channel = .Channel_0,
+    });
+    // Writing 0 for the 16-bit reload value programs 65536.
+    const reload_value: u32 = @truncate(count & 0xFFFF);
+    cpu.outb(channel_port, @truncate(reload_value));
+    cpu.outb(channel_port, @truncate(reload_value >> 8));
+}
+
+pub fn program_periodic(comptime channel: SelectChannel, frequency: u32) void {
     pit_logger.debug("Initializing {s} with frequency {d} hz", .{ @tagName(channel), frequency });
 
     const channel_port = get_channel_port(channel);
@@ -126,7 +148,7 @@ pub fn init_channel(comptime channel: SelectChannel, frequency: u32) void {
     interval_ns = 1_000_000_000 / real_frequency;
     init_logger.debug("Using frequency {d} hz, interval {d} ns", .{ real_frequency, interval_ns });
 
-    send_command(ModeCmdRegister{
+    write_mode_cmd(ModeCmdRegister{
         .BCD_binary_Mode = false,
         .operating_mode = OperatingMode.SquareWaveGenerator,
         .access_mode = AccessMode.AccessModeBoth,
@@ -135,7 +157,7 @@ pub fn init_channel(comptime channel: SelectChannel, frequency: u32) void {
     cpu.outb(channel_port, @truncate(reload_value));
     cpu.outb(channel_port, @truncate(reload_value >> 8));
 
-    const status = read_back_channel(channel);
+    const status = read_status(channel);
     init_logger.debug("Read back status: 0b{b:0>8}", .{@as(u8, @bitCast(status))});
     pit_logger.debug("{s} initialized", .{@tagName(channel)});
 }
