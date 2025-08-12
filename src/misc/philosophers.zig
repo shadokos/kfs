@@ -6,7 +6,6 @@ const allocator = @import("../memory.zig").smallAlloc.allocator();
 
 const task = @import("../task/task.zig");
 const wait = @import("../task/wait.zig");
-const scheduler = @import("../task/scheduler.zig");
 const Mutex = @import("../task/semaphore.zig").Mutex;
 
 var start_time: u64 = 0;
@@ -38,14 +37,72 @@ pub const Philosopher = struct {
         };
     }
 
+    // Compute a safe time to think: max 0, bounded so that at least time_to_eat remains before death.
+    pub fn compute_think_time(self: *Self) usize {
+        const now = get_time_since_boot() - start_time;
+        const since_last_meal: usize = @intCast(now - self.last_meal);
+        if (since_last_meal >= time_to_die) return 0;
+        if (nb_philosophers == 1) return 0;
+        if (time_to_die <= time_to_eat) return 0;
+
+        const remaining_before_death = time_to_die - since_last_meal;
+        if (remaining_before_death <= time_to_eat) return 0;
+
+        return (remaining_before_death - time_to_eat) / 2;
+    }
+
+    // Sleep up to duration, but die if we reach death deadline during the sleep.
+    pub fn sleep_until(self: *Self, duration: usize) void {
+        const now = get_time_since_boot() - start_time;
+        const since_last_meal: usize = @intCast(now - self.last_meal);
+
+        if (since_last_meal >= time_to_die) {
+            self.die();
+            return;
+        }
+
+        const remaining_before_death = time_to_die - since_last_meal;
+
+        if (duration >= remaining_before_death) {
+            @import("../task/sleep.zig").sleep(remaining_before_death) catch {};
+            self.die();
+        } else {
+            @import("../task/sleep.zig").sleep(duration) catch {};
+        }
+        tty.flush();
+    }
+
+    // Set end_of_simulation and exit, releasing any held forks.
+    pub fn die(self: *Self) noreturn {
+        eos_mutex.acquire();
+        if (!end_of_simulation) {
+            tty.printk("{} {} died\n", .{ get_time_since_boot() - start_time, self.id });
+            tty.flush();
+            end_of_simulation = true;
+        }
+        eos_mutex.release();
+        // Will release forks (if any) and exit(0).
+        self.check_eos();
+        // check_eos exits; this point is unreachable, but keep noreturn contract.
+        while (true) {}
+    }
+
     pub fn take_forks(self: *Self) void {
         self.left.acquire();
         self.forks_flag.left = true;
         self.check_eos();
+        // If we've already exceeded our deadline while waiting for the left fork, self-detect death.
+        if (@as(usize, @intCast((get_time_since_boot() - start_time) - self.last_meal)) > time_to_die) {
+            self.die();
+        }
         tty.printk("{} {} has taken a fork\n", .{ get_time_since_boot() - start_time, self.id });
+
         self.right.acquire();
         self.forks_flag.right = true;
         self.check_eos();
+        if (@as(usize, @intCast((get_time_since_boot() - start_time) - self.last_meal)) > time_to_die) {
+            self.die();
+        }
         tty.printk("{} {} has taken a fork\n", .{ get_time_since_boot() - start_time, self.id });
     }
 
@@ -60,8 +117,7 @@ pub const Philosopher = struct {
         self.last_meal = get_time_since_boot() - start_time;
         self.check_eos();
         tty.printk("{} {} is eating\n", .{ self.last_meal, self.id });
-        @import("../task/sleep.zig").sleep(time_to_eat) catch {};
-        tty.flush();
+        self.sleep_until(time_to_eat);
     }
 
     fn check_eos(self: *Self) void {
@@ -84,19 +140,30 @@ fn philosopher_task(data: usize) u8 {
     const philosopher: *Philosopher = @ptrFromInt(data);
 
     if (philosopher.id % 2 == 1) {
-        @import("../task/sleep.zig").sleep(time_to_eat / 2) catch {};
+        philosopher.sleep_until(time_to_eat / 2);
     }
 
     while (true) {
+        // Early self-death check
+        if (@as(usize, @intCast((get_time_since_boot() - start_time) - philosopher.last_meal)) > time_to_die) {
+            philosopher.die();
+        }
+
+        // Think with bounded time to reduce contention and avoid late deaths
+        tty.printk("{} {} is thinking\n", .{ get_time_since_boot() - start_time, philosopher.id });
+        const think_time = philosopher.compute_think_time();
+        if (think_time > 0) {
+            philosopher.sleep_until(think_time);
+        }
+
         philosopher.take_forks();
         philosopher.eat();
         philosopher.drop_forks();
+
         philosopher.check_eos();
         tty.printk("{} {} is sleeping\n", .{ get_time_since_boot() - start_time, philosopher.id });
-        @import("../task/sleep.zig").sleep(time_to_sleep) catch {};
-        tty.flush();
+        philosopher.sleep_until(time_to_sleep);
         philosopher.check_eos();
-        tty.printk("{} {} is thinking\n", .{ get_time_since_boot() - start_time, philosopher.id });
     }
     return 0;
 }
@@ -129,20 +196,6 @@ pub fn main(nb: u8, ttd: usize, tte: usize, tts: usize) void {
         _ = d.spawn(philosopher_task, @intFromPtr(&philosophers[i])) catch @panic("Failed to spawn philosopher task");
     }
 
-    const status: bool = b: while (true) {
-        for (philosophers) |philo| {
-            eos_mutex.acquire();
-            if (get_time_since_boot() - start_time - philo.last_meal > time_to_die) {
-                tty.printk("{} {} died\n", .{ get_time_since_boot() - start_time, philo.id });
-                end_of_simulation = true;
-                eos_mutex.release();
-                break :b true;
-            }
-            eos_mutex.release();
-        }
-        _ = scheduler.schedule();
-    };
-
     const current_pid = task.getpid();
     for (philosophers) |philo| {
         var stat: wait.Status = undefined;
@@ -155,5 +208,7 @@ pub fn main(nb: u8, ttd: usize, tte: usize, tts: usize) void {
         ) catch std.log.warn("Failed to wait for philosopher {}", .{philo.id});
     }
 
+    const status: bool = end_of_simulation;
     tty.printk("End of simulation {}\n", .{status});
+    tty.flush();
 }
