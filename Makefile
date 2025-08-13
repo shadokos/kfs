@@ -5,6 +5,8 @@ BOOTLOADER ?= $(shell echo $$(ls ".bootloader-"* 2>/dev/null || echo limine) | c
 OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo ReleaseSafe) | cut -d'-' -f2)
 
 BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
+QEMU_BOOT_DRIVE ?= -cdrom kfs.iso
+QEMU_DRIVE ?=
 
 .PHONY: all
 all: build
@@ -17,7 +19,8 @@ all: build
 
 .PHONY: run
 run: build
-	qemu-system-i386 -cdrom kfs.iso
+	qemu-system-i386 $(QEMU_BOOT_DRIVE) ${QEMU_DRIVE}
+
 
 .PHONY: build
 build: .optimize-$(OPTIMIZE) .bootloader-$(BOOTLOADER)
@@ -51,7 +54,7 @@ fast: .optimize-ReleaseFast .bootloader-$(BOOTLOADER)
 .PHONY: debug-server
 debug-server: debug
 	pkill -f 'qemu.* -[^ ]*s' || true
-	qemu-system-i386 -cdrom kfs.iso -s -S 1>/dev/null 2>/dev/null &
+	qemu-system-i386 $(QEMU_BOOT_DRIVE) $(QEMU_DRIVE) -s -S 1>/dev/null 2>/dev/null &
 
 .PHONY: clean
 clean:
