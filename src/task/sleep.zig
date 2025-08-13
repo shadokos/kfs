@@ -8,8 +8,8 @@ fn unblock_task(t: *task.TaskDescriptor, _: *usize) void {
 }
 
 pub fn usleep(micro: u64) !void {
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
 
     const t = scheduler.get_current_task();
 
