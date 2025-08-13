@@ -3,7 +3,7 @@ const tty = @import("../../tty/tty.zig");
 const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
 const cpu = @import("../../cpu.zig");
-const pit = @import("../pit/pit.zig");
+const timer = @import("../../timer.zig");
 const colors = @import("colors");
 
 const acpi_logger = @import("std").log.scoped(.driver_acpi);
@@ -252,12 +252,12 @@ pub fn enable() ACPI_error!void {
     var time: u32 = 0;
     const interval: u32 = 10; // interval between checks in ms
     while (time < acpi.TIMEOUT) : (time += interval) {
-        pit.sleep(interval);
+        timer.busy_sleep(interval);
         if (_is_enabled(.pm1a)) break;
     }
     if (acpi.fadt.pm1b_control_block != 0) {
         while (time < acpi.TIMEOUT) : (time += interval) {
-            pit.sleep(interval);
+            timer.busy_sleep(interval);
             if (_is_enabled(.pm1b)) break;
         }
     }
