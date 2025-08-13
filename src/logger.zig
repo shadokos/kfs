@@ -2,6 +2,7 @@ const log = @import("std").log;
 const tty = @import("tty/tty.zig");
 const colors = @import("colors");
 const screen_of_death = @import("screen_of_death.zig").screen_of_death;
+const scheduler = @import("task/scheduler.zig");
 
 pub fn kernel_log(
     comptime message_level: log.Level,
@@ -26,7 +27,7 @@ pub fn kernel_log(
     );
     tty.flush();
     if (message_level == .err and scope == .default) {
-        @import("task/scheduler.zig").lock();
+        scheduler.enter_critical();
         if (@import("build_options").ci) {
             var com_port = @import("shell/ci/shell.zig").com_port_1;
             var packet = @import("shell/ci/packet.zig").Packet([]u8).init(com_port.get_writer().any());
@@ -40,11 +41,12 @@ pub fn kernel_log(
             screen_of_death(format, args);
             while (true) @import("cpu.zig").halt();
         } else {
-            @import("drivers/pic/pic.zig").disable_all_irqs();
-            @import("drivers/pic/pic.zig").enable_irq(.Keyboard);
+            const pic = @import("drivers/pic/pic.zig");
+            pic.disable_all_irqs();
+            pic.enable_irq(.Keyboard);
 
-            for (0..@import("task/scheduler.zig").lock_count) |_|
-                @import("task/scheduler.zig").unlock();
+            for (0..scheduler.lock_depth) |_|
+                scheduler.exit_critical();
 
             tty.get_tty().config.c_lflag.ECHO = false;
             tty.get_tty().config.c_lflag.ECHONL = false;

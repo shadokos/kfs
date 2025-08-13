@@ -283,7 +283,7 @@ pub const TaskDescriptor = struct {
     }
 
     pub noinline fn spawn(self: *Self, function: *const fn (usize) u8, data: usize) !void {
-        scheduler.lock();
+        scheduler.enter_critical();
         var is_parent: u8 = 0;
         asm volatile (
             \\ movb $0, (%[is_parent])
@@ -317,7 +317,7 @@ pub const TaskDescriptor = struct {
               [self] "r" (self),
               [tmp] "q" (0),
         );
-        scheduler.unlock();
+        scheduler.exit_critical();
     }
 
     pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.c) noreturn {
@@ -326,7 +326,7 @@ pub const TaskDescriptor = struct {
         scheduler.set_current_task(self);
         gdt.tss.esp0 = @as(usize, @intFromPtr(&self.stack)) + self.stack.len;
         gdt.flush();
-        scheduler.unlock();
+        scheduler.exit_critical();
         exit(function(data));
     }
 };
@@ -338,15 +338,15 @@ pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor
         \\ push %eax
     );
     asm volatile (
-        \\push %[lock_count]
+        \\push %[lock_depth]
         :
-        : [lock_count] "r" (scheduler.lock_count),
+        : [lock_depth] "r" (scheduler.lock_depth),
     );
 
     prev.esp = cpu.get_esp();
     cpu.set_esp(next.esp);
 
-    scheduler.lock_count = asm volatile (
+    scheduler.lock_depth = asm volatile (
         \\pop %eax
         : [_] "={eax}" (-> u32),
     );
@@ -358,8 +358,8 @@ pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor
 }
 
 pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
 
     if (prev.state == .Running) {
         ready_queue.push(prev);
@@ -391,7 +391,7 @@ pub fn getpid() TaskDescriptor.Pid {
 }
 
 pub fn exit(code: u8) noreturn {
-    scheduler.lock();
+    scheduler.enter_critical();
 
     const task = scheduler.get_current_task();
     task.state = .Zombie;

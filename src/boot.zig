@@ -55,8 +55,8 @@ export fn _entry() linksection(".bootstrap_code") callconv(.naked) noreturn {
 }
 
 export fn init(eax: u32, ebx: u32) callconv(.c) void {
-    // Locks the scheduler (disables interrupts, and increments lock_count)
-    @import("task/scheduler.zig").lock();
+    // Locks the scheduler (disables interrupts, and increments lock_depth)
+    @import("task/scheduler.zig").enter_critical();
 
     if (eax == multiboot2_h.MULTIBOOT2_BOOTLOADER_MAGIC) {
         multiboot_info = @ptrFromInt(paging.high_half + ebx); // TODO!
@@ -71,7 +71,7 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
 
     @import("drivers/pic/pic.zig").init();
 
-    // Sets up the IDT, and unlocks the scheduler (decrements lock_count, and enables interrupts)
+    // Sets up the IDT, and unlocks the scheduler (decrements lock_depth, and enables interrupts)
     @import("interrupts.zig").init();
 
     @import("memory.zig").init();

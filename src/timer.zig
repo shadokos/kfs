@@ -151,8 +151,8 @@ fn consume_events() void {
 
 fn timer_handler(_: interrupts.InterruptFrame) void {
     const scheduler = @import("task/scheduler.zig");
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
 
     ticks += 1;
     now_us += if (programmed_us != 0) programmed_us else quantum_us;
