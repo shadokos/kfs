@@ -17,8 +17,8 @@ pub fn Semaphore(max_count: u32) type {
         }) = .{},
 
         pub inline fn acquire(self: *Self) void {
-            scheduler.lock();
-            defer scheduler.unlock();
+            scheduler.enter_critical();
+            defer scheduler.exit_critical();
 
             if (self.count < self.max_count) {
                 self.count += 1;
@@ -30,8 +30,8 @@ pub fn Semaphore(max_count: u32) type {
         }
 
         pub inline fn release(self: *Self) void {
-            scheduler.lock();
-            defer scheduler.unlock();
+            scheduler.enter_critical();
+            defer scheduler.exit_critical();
 
             if (self.queue.queue.first) |first| {
                 const _t: *task.TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", first));
