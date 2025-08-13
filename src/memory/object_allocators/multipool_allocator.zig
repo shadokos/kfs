@@ -137,6 +137,7 @@ pub const MultipoolAllocator = struct {
         _ = ctx;
         _ = alignment;
         _ = ret_addr;
+        if (memory.len == 0) return;
         globalCache.cache.free(@ptrCast(@alignCast(memory.ptr))) catch |e| switch (e) {
             error.InvalidArgument => logger.warn("freeing invalid pointer {*}", .{memory.ptr}),
             else => @panic(@errorName(e)),
