@@ -379,3 +379,15 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         return CmdError.InvalidParameter;
     }
 }
+
+pub fn pci_device(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const pci = @import("../../drivers/pci/pci.zig");
+    const device_id = std.fmt.parseInt(u16, args[1], 0) catch return CmdError.InvalidParameter;
+    const device = pci.get_device(device_id) orelse {
+        utils.print_error(shell, "No device found with ID {d}", .{device_id});
+        return CmdError.InvalidParameter;
+    };
+    device.printDeviceInfo(printk);
+}
