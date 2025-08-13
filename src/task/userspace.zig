@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const gdt = @import("../gdt.zig");
 const cpu = @import("../cpu.zig");
 const memory = @import("../memory.zig");
@@ -10,8 +10,8 @@ const RegionSet = @import("../memory/region_set.zig").RegionSet;
 const regions = @import("../memory/regions.zig");
 
 fn map_userspace(vm: *VirtualSpace) void {
-    const up_start = ft.mem.alignBackward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_start" })), 4096);
-    const up_end = ft.mem.alignForward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_end" })), 4096);
+    const up_start = std.mem.alignBackward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_start" })), 4096);
+    const up_end = std.mem.alignForward(u32, @intFromPtr(@extern(*u8, .{ .name = "userspace_end" })), 4096);
 
     const region = RegionSet.create_region() catch @panic("cannot map userspace");
     errdefer RegionSet.destroy_region(region) catch unreachable;

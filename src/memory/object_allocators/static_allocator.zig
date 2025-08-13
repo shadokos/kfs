@@ -1,5 +1,6 @@
-const ft = @import("ft");
+const std = @import("std");
 const LinearAllocator = @import("linear_allocator.zig").LinearAllocator;
+const Alignment = std.mem.Alignment;
 
 /// implement LinearAllocator on a statically allocated array
 pub fn StaticAllocator(comptime size: usize) type {
@@ -42,37 +43,48 @@ pub fn StaticAllocator(comptime size: usize) type {
             return self.check_init().lock();
         }
 
-        fn vtable_free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
-            // const self: *Self = @ptrCast(@alignCast(ctx));
-            _ = buf_align;
-            _ = ret_addr;
-            _ = buf;
-            _ = ctx;
-        }
-
-        fn vtable_alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
+        fn vtable_alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize) ?[*]u8 {
             const self: *Self = @ptrCast(@alignCast(ctx));
-            _ = ptr_align;
+            _ = alignment; // TODO: use proper alignment
             _ = ret_addr;
             return @alignCast((self.alloc(u8, len) catch return null).ptr);
         }
 
-        fn vtable_resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
-            _ = buf_align;
-            _ = ret_addr;
-            _ = new_len;
-            _ = buf;
+        fn vtable_resize(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) bool {
             _ = ctx;
+            _ = memory;
+            _ = alignment;
+            _ = new_len;
+            _ = ret_addr;
             return false;
         }
 
-        const vTable = ft.mem.Allocator.VTable{
+        fn vtable_remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+            _ = ctx;
+            _ = memory;
+            _ = alignment;
+            _ = new_len;
+            _ = ret_addr;
+            // Static allocator doesn't support remapping
+            return null;
+        }
+
+        fn vtable_free(ctx: *anyopaque, memory: []u8, alignment: Alignment, ret_addr: usize) void {
+            _ = ctx;
+            _ = memory;
+            _ = alignment;
+            _ = ret_addr;
+            // Static allocator doesn't actually free memory
+        }
+
+        const vTable = std.mem.Allocator.VTable{
             .alloc = &vtable_alloc,
             .resize = &vtable_resize,
+            .remap = &vtable_remap,
             .free = &vtable_free,
         };
 
-        pub fn allocator(self: *Self) ft.mem.Allocator {
+        pub fn allocator(self: *Self) std.mem.Allocator {
             return .{ .ptr = self, .vtable = &vTable };
         }
     };

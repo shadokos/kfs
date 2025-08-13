@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const task = @import("task.zig");
 const TaskDescriptor = task.TaskDescriptor;
 const scheduler = @import("scheduler.zig");
@@ -8,8 +8,8 @@ const Monostate = @import("../misc/monostate.zig").Monostate;
 const Cache = @import("../memory/object_allocators/slab/cache.zig").Cache;
 const globalCache = &@import("../memory.zig").globalCache;
 const Errno = @import("../errno.zig").Errno;
-const logger = @import("ft").log.scoped(.signal);
 const Mutex = @import("semaphore.zig").Mutex;
+const logger = std.log.scoped(.signal);
 
 pub const DefaultAction = enum {
     Ignore,
@@ -117,7 +117,7 @@ pub const SignalQueue = struct {
     queue: QueueType = .{},
     ignorable: bool = true,
 
-    const QueueType = ft.DoublyLinkedList(siginfo_t);
+    const QueueType = std.DoublyLinkedList(siginfo_t);
     pub var cache: *Cache = undefined;
     const Self = @This();
 

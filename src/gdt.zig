@@ -1,4 +1,4 @@
-const logger = @import("ft").log.scoped(.gdt);
+const logger = @import("std").log.scoped(.gdt);
 const cpu = @import("cpu.zig");
 const Monostate = @import("misc/monostate.zig").Monostate;
 

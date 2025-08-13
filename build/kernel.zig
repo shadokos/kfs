@@ -32,9 +32,6 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
     build_options.addOption(bool, "ci", context.ci);
     kernel.root_module.addOptions("build_options", build_options);
 
-    const ft_module = context.builder.createModule(
-        .{ .root_source_file = .{ .cwd_relative = "./src/ft/ft.zig" } },
-    );
     const colors_module = context.builder.createModule(
         .{ .root_source_file = .{ .cwd_relative = "./src/misc/colors.zig" } },
     );
@@ -42,16 +39,9 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
         .{ .root_source_file = .{ .cwd_relative = "./src/config.zig" } },
     );
 
-    // Add "ft" and "config" module in colors_module
-    colors_module.addImport("ft", ft_module);
     colors_module.addImport("config", config_module);
-
-    // Add "ft" and "colors" module in config module
-    config_module.addImport("ft", ft_module);
     config_module.addImport("colors", colors_module);
 
-    // Add "ft, "colors" and "config" modules to the kernel
-    kernel.root_module.addImport("ft", ft_module);
     kernel.root_module.addImport("colors", colors_module);
     kernel.root_module.addImport("config", config_module);
 

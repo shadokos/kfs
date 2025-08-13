@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 
 pub const Bit = enum(u1) {
     Taken,
@@ -23,7 +23,7 @@ pub const BitMap = struct {
 
     /// return the number of usize needed to store nb_obj bits
     pub fn compute_len(nb_obj: usize) usize {
-        return ft.math.divCeil(usize, nb_obj, nbits) catch unreachable;
+        return std.math.divCeil(usize, nb_obj, nbits) catch unreachable;
     }
 
     /// return the number of bytes needed to store nb_obj bits

@@ -1,12 +1,12 @@
-const ft = @import("ft");
+const std = @import("std");
 const tty = @import("tty.zig");
 
 pub fn vt100(comptime history_size: u32) type {
     return struct {
         /// handle move escape codes
         fn handle_move(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
-            const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-            const n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 1;
+            const len = std.mem.indexOfSentinel(u8, 0, buffer);
+            const n: i32 = std.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 1;
             switch (buffer[len - 1]) {
                 'A' => {
                     terminal.move_cursor(-n, 0);
@@ -26,8 +26,8 @@ pub fn vt100(comptime history_size: u32) type {
 
         /// handle set attributes escape codes
         fn handle_set_attribute(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
-            const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-            const n: u32 = ft.fmt.parseInt(u32, buffer[1 .. len - 1], 10) catch 0;
+            const len = std.mem.indexOfSentinel(u8, 0, buffer);
+            const n: u32 = std.fmt.parseInt(u32, buffer[1 .. len - 1], 10) catch 0;
             switch (n) {
                 @intFromEnum(tty.Attribute.reset) => {
                     terminal.attributes = 0;
@@ -80,8 +80,8 @@ pub fn vt100(comptime history_size: u32) type {
 
         /// handle set clear line escape codes
         fn handle_clearline(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
-            const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-            const n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
+            const len = std.mem.indexOfSentinel(u8, 0, buffer);
+            const n: i32 = std.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
             switch (n) {
                 0 => {
                     for (terminal.pos.col..tty.width) |i| {
@@ -102,8 +102,8 @@ pub fn vt100(comptime history_size: u32) type {
 
         /// handle set clear screen escape codes
         fn handle_clearscreen(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
-            const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-            const n: i32 = ft.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
+            const len = std.mem.indexOfSentinel(u8, 0, buffer);
+            const n: i32 = std.fmt.parseInt(i32, buffer[1 .. len - 1], 10) catch 0;
             const screen_bottom = (terminal.head_line + history_size - terminal.scroll_offset) % history_size;
             var screen_top = (screen_bottom + history_size - tty.height + 1) % history_size;
 
@@ -139,13 +139,13 @@ pub fn vt100(comptime history_size: u32) type {
 
         /// handle set goto escape codes
         fn handle_goto(terminal: *tty.TtyN(history_size), buffer: [:0]const u8) void {
-            const semicolon_pos = ft.mem.indexOfScalarPos(u8, buffer, 1, ';') orelse 0;
+            const semicolon_pos = std.mem.indexOfScalarPos(u8, buffer, 1, ';') orelse 0;
             var v: u32 = 0;
             var h: u32 = 0;
             if (semicolon_pos != 0) {
-                const len = ft.mem.indexOfSentinel(u8, 0, buffer);
-                v = ft.fmt.parseInt(u32, buffer[1..semicolon_pos], 10) catch 0;
-                h = ft.fmt.parseInt(u32, buffer[semicolon_pos + 1 .. len - 1], 10) catch 0;
+                const len = std.mem.indexOfSentinel(u8, 0, buffer);
+                v = std.fmt.parseInt(u32, buffer[1..semicolon_pos], 10) catch 0;
+                h = std.fmt.parseInt(u32, buffer[semicolon_pos + 1 .. len - 1], 10) catch 0;
             }
             const off_v: i32 = -@as(i32, @intCast(terminal.pos.line)) +
                 @mod(@as(i32, @intCast(terminal.head_line)) -
@@ -158,7 +158,7 @@ pub fn vt100(comptime history_size: u32) type {
 
         fn handle_get_pos(terminal: *tty.TtyN(history_size), _: [:0]const u8) void {
             var buffer: [100]u8 = [1]u8{0} ** 100;
-            const slice = ft.fmt.bufPrint(&buffer, "\x1b{d};{d}R", .{
+            const slice = std.fmt.bufPrint(&buffer, "\x1b{d};{d}R", .{
                 terminal.get_state().pos.line,
                 terminal.get_state().pos.col,
             }) catch return;
@@ -175,9 +175,9 @@ pub fn vt100(comptime history_size: u32) type {
 
             while (prefix[i] != 0 and buffer[j] != 0) {
                 if (prefix[i] == '^') {
-                    if (!ft.ascii.isDigit(buffer[j]))
+                    if (!std.ascii.isDigit(buffer[j]))
                         return false;
-                    while (buffer[j] != 0 and ft.ascii.isDigit(buffer[j])) {
+                    while (buffer[j] != 0 and std.ascii.isDigit(buffer[j])) {
                         j += 1;
                     }
                 } else if (prefix[i] != buffer[j]) {

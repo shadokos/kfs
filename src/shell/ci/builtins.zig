@@ -1,13 +1,13 @@
 const CmdError = @import("../Shell.zig").CmdError;
 const Packet = @import("packet.zig").Packet;
-const ft = @import("ft");
+const std = @import("std");
 const utils = @import("../utils.zig");
 
 pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
-    const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    const max_size = if (args.len == 3) ft.fmt.parseInt(
+    const nb = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const max_size = if (args.len == 3) std.fmt.parseInt(
         usize,
         args[2],
         0,
@@ -28,8 +28,8 @@ pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
 pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len < 2) return CmdError.InvalidNumberOfArguments;
 
-    const nb = ft.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
-    const max_size = if (args.len == 3) ft.fmt.parseInt(
+    const nb = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
+    const max_size = if (args.len == 3) std.fmt.parseInt(
         usize,
         args[2],
         0,

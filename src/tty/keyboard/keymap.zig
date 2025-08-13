@@ -1,5 +1,5 @@
+const std = @import("std");
 const InputKey = @import("scanmap.zig").InputKey;
-const ft = @import("ft");
 const keymaps = @import("keymap_index.zig");
 const keyboard = @import("../keyboard.zig");
 
@@ -58,7 +58,7 @@ pub inline fn L(comptime scancode: u16) u16 {
 /// set the keymap to use
 pub fn set_keymap(name: []const u8) error{KeymapNotFound}!void {
     inline for (@typeInfo(keymaps).@"struct".decls) |decl| {
-        if (ft.mem.eql(u8, decl.name, name)) {
+        if (std.mem.eql(u8, decl.name, name)) {
             current_map = &@field(keymaps, decl.name);
             return;
         }

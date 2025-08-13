@@ -1,4 +1,5 @@
-const ft = @import("ft");
+const std = @import("std");
+const Alignment = std.mem.Alignment;
 const printk = @import("../../../tty/tty.zig").printk;
 const PageAllocator = @import("../../page_allocator.zig");
 const paging = @import("../../paging.zig");
@@ -8,7 +9,9 @@ const SlabState = @import("slab.zig").SlabState;
 const BitMap = @import("../../../misc/bitmap.zig").BitMap;
 const mapping = @import("../../mapping.zig");
 const Mutex = @import("../../../task/semaphore.zig").Mutex;
-const logger = ft.log.scoped(.cache);
+
+// DEPRECATED
+const logger = std.log.scoped(.cache);
 
 const CACHE_NAME_LEN = 20;
 
@@ -42,12 +45,12 @@ pub const Cache = struct {
         var new = Cache{
             .page_allocator = page_allocator,
             .pages_per_slab = @as(usize, 1) << order,
-            .size_obj = ft.mem.alignForward(usize, obj_size, obj_align),
+            .size_obj = std.mem.alignForward(usize, obj_size, obj_align),
             .align_obj = obj_align,
         };
 
         // Compute the available space for the slab ((page_size * 2^order) - size of slab header)
-        const available = (paging.page_size * new.pages_per_slab) - ft.mem.alignForward(
+        const available = (paging.page_size * new.pages_per_slab) - std.mem.alignForward(
             usize,
             @sizeOf(Slab),
             obj_align,
@@ -162,7 +165,7 @@ pub const Cache = struct {
         if (available >= count)
             return;
         const needed = count - available;
-        const slabs_needed = ft.math.divCeil(usize, needed, self.obj_per_slab) catch unreachable;
+        const slabs_needed = std.math.divCeil(usize, needed, self.obj_per_slab) catch unreachable;
         try self.unsafe_grow(slabs_needed);
     }
 
@@ -177,7 +180,7 @@ pub const Cache = struct {
     }
 
     pub fn unsafe_free(_: *Self, ptr: *usize) (Slab.Error || BitMap.Error)!void {
-        const addr = ft.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size);
+        const addr = std.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size);
         const page_descriptor = mapping.get_page_frame_descriptor(
             @ptrFromInt(addr),
         ) catch return Slab.Error.InvalidArgument;
@@ -241,7 +244,7 @@ pub const Cache = struct {
     // End of thread safe methods
 
     pub fn get_page_frame_descriptor(_: *Self, obj: *usize) *page_frame_descriptor {
-        const addr = ft.mem.alignBackward(usize, @intFromPtr(obj), paging.page_size);
+        const addr = std.mem.alignBackward(usize, @intFromPtr(obj), paging.page_size);
         return mapping.get_page_frame_descriptor(@ptrFromInt(addr)) catch @panic("todo");
     }
 
@@ -287,42 +290,56 @@ pub const Cache = struct {
         printk("\n", .{});
     }
 
-    fn vtable_free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
+    fn vtable_alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize) ?[*]u8 {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        if (buf_align > self.align_obj)
-            @panic("Invalid alignment for slab allocator cache");
-        _ = ret_addr; // todo: take this variable into account
-
-        self.free(@alignCast(@ptrCast(buf))) catch @panic("invalid free");
-    }
-
-    fn vtable_alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
-        const self: *Self = @ptrCast(@alignCast(ctx));
-        if (ptr_align > self.align_obj)
-            @panic("Invalid alignment for slab allocator cache");
-        _ = ret_addr; // todo: take this variable into account
+        const alignment_bytes = alignment.toByteUnits();
+        if (alignment_bytes > self.align_obj)
+            return null; // Invalid alignment for this cache
+        _ = ret_addr;
         if (len != self.size_obj) {
             return null;
         }
         return @ptrCast(self.alloc_one() catch null);
     }
 
-    fn vtable_resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
+    fn vtable_resize(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) bool {
         const self: *Self = @ptrCast(@alignCast(ctx));
-        if (buf_align > self.align_obj)
-            @panic("Invalid alignment for slab allocator cache");
-        _ = ret_addr; // todo: take this variable into account
-        _ = buf; // todo: take this variable into account
+        const alignment_bytes = alignment.toByteUnits();
+        if (alignment_bytes > self.align_obj)
+            return false;
+        _ = ret_addr;
+        _ = memory;
         return new_len == self.size_obj;
     }
 
-    const vTable = ft.mem.Allocator.VTable{
+    fn vtable_remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+        _ = ctx;
+        _ = memory;
+        _ = alignment;
+        _ = new_len;
+        _ = ret_addr;
+        // Slab allocator doesn't support remapping
+        return null;
+    }
+
+    fn vtable_free(ctx: *anyopaque, memory: []u8, alignment: Alignment, ret_addr: usize) void {
+        const self: *Self = @ptrCast(@alignCast(ctx));
+        const alignment_bytes = alignment.toByteUnits();
+        if (alignment_bytes > self.align_obj)
+            @panic("Invalid alignment for slab allocator cache");
+        _ = ret_addr;
+
+        self.free(@alignCast(@ptrCast(memory.ptr))) catch @panic("invalid free");
+    }
+
+    const vTable = std.mem.Allocator.VTable{
         .alloc = &vtable_alloc,
         .resize = &vtable_resize,
+        .remap = &vtable_remap,
         .free = &vtable_free,
     };
 
-    pub fn allocator(self: *Self) ft.mem.Allocator {
+    pub fn allocator(self: *Self) std.mem.Allocator {
         return .{ .ptr = self, .vtable = &vTable };
     }
 };

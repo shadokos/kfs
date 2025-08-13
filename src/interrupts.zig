@@ -1,11 +1,12 @@
+const std = @import("std");
 const cpu = @import("cpu.zig");
 const gdt = @import("gdt.zig");
 const pic = @import("drivers/pic/pic.zig");
-const ft = @import("ft");
 const signal = @import("task/signal.zig");
 const scheduler = @import("task/scheduler.zig");
 const ucontext = @import("task/ucontext.zig");
-const logger = ft.log.scoped(.intr);
+
+const logger = std.log.scoped(.intr);
 
 pub const InterruptFrame = extern struct {
     edi: u32,
@@ -233,7 +234,7 @@ pub fn unset_gate(id: u8) void {
 pub const Stub = *const fn () callconv(.Naked) void;
 
 comptime {
-    asm (ft.fmt.comptimePrint(
+    asm (std.fmt.comptimePrint(
             \\ _rfi_sigreturn:
             \\ mov ${}, %eax
             \\ int $0x80
@@ -334,11 +335,11 @@ pub fn default_handler(
     const handlers = struct {
         pub fn exception(_: InterruptFrame) void {
             const e = @as(Exceptions, @enumFromInt(id));
-            ft.log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
+            std.log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
         }
         pub fn exception_err(_: InterruptFrame) void {
             const e = @as(Exceptions, @enumFromInt(id));
-            ft.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), 0 });
+            std.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), 0 });
         }
         pub fn irq(_: InterruptFrame) void {
             const _id = pic.get_irq_from_interrupt_id(id);
@@ -349,10 +350,10 @@ pub fn default_handler(
             // So we can ignore the interrupt then.
             if (pic.ack_spurious_interrupt(@intFromEnum(_id))) return;
             pic.ack(_id);
-            ft.log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
+            std.log.scoped(.irq).err("{d} ({s}) unhandled", .{ @intFromEnum(_id), @tagName(_id) });
         }
         pub fn interrupt(_: InterruptFrame) void {
-            ft.log.scoped(.interrupt).err("{d} unhandled", .{id});
+            std.log.scoped(.interrupt).err("{d} unhandled", .{id});
         }
     };
     return switch (t) {

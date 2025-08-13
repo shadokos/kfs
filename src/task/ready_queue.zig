@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const scheduler = @import("scheduler.zig");
 const TaskDescriptor = @import("task.zig").TaskDescriptor;
 
@@ -7,7 +7,7 @@ const TaskDescriptor = @import("task.zig").TaskDescriptor;
 // removing it twice (which would break the DoublyLinkedList len)
 // If we wanna save some memory, we could set the data type to void (as @SizeOf(void) == 0), but then we would have
 // to do some linear search to perform our checks.
-const Queue = ft.DoublyLinkedList(bool);
+const Queue = std.DoublyLinkedList(bool);
 
 pub const Node = Queue.Node;
 

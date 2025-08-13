@@ -1,11 +1,11 @@
-const ft = @import("ft");
+const std = @import("std");
 const Monostate = @import("../misc/monostate.zig").Monostate;
 
 /// page index type
 pub const idx_t = usize;
 
 /// order type (for buddy allocation)
-pub const order_t = ft.meta.Int(.unsigned, ft.math.log2(@typeInfo(idx_t).int.bits));
+pub const order_t = std.meta.Int(.unsigned, std.math.log2(@typeInfo(idx_t).int.bits));
 
 /// flags of a page frame
 pub const page_flags = packed struct {
@@ -26,14 +26,14 @@ pub const page_directory_size = 1024;
 
 pub const page_size = 4096;
 
-pub const page_bits = ft.math.log2(page_size);
+pub const page_bits = std.math.log2(page_size);
 
 /// page
 pub const page = [page_size]u8;
 
 pub const PhysicalPtr = u32;
 pub const PhysicalUsize = u32;
-pub const PhysicalPtrDiff = ft.meta.Int(.signed, @typeInfo(PhysicalPtr).int.bits + 1);
+pub const PhysicalPtrDiff = std.meta.Int(.signed, @typeInfo(PhysicalPtr).int.bits + 1);
 
 pub const VirtualPtr = *allowzero void;
 pub const VirtualPagePtr = *allowzero align(4096) page;

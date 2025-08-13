@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const config = @import("config");
 const RGB = @import("rgb.zig").RGB;
 const VGA_RGB = @import("rgb.zig").VGA_RGB;
@@ -59,9 +59,9 @@ pub const XYZ = packed struct {
         var g = @as(f32, @floatFromInt(color.g)) / 255.0;
         var b = @as(f32, @floatFromInt(color.b)) / 255.0;
 
-        r = if (r > 0.04045) ft.math.pow(f32, (r + 0.055) / 1.055, 2.4) else r / 12.92;
-        g = if (g > 0.04045) ft.math.pow(f32, (g + 0.055) / 1.055, 2.4) else g / 12.92;
-        b = if (b > 0.04045) ft.math.pow(f32, (b + 0.055) / 1.055, 2.4) else b / 12.92;
+        r = if (r > 0.04045) std.math.pow(f32, (r + 0.055) / 1.055, 2.4) else r / 12.92;
+        g = if (g > 0.04045) std.math.pow(f32, (g + 0.055) / 1.055, 2.4) else g / 12.92;
+        b = if (b > 0.04045) std.math.pow(f32, (b + 0.055) / 1.055, 2.4) else b / 12.92;
 
         r *= 100.0;
         g *= 100.0;
@@ -83,14 +83,14 @@ pub const XYZ = packed struct {
         var g = x * -0.9689 + y * 1.8758 + z * 0.0415;
         var b = x * 0.0557 + y * -0.2040 + z * 1.0570;
 
-        r = if (r > 0.0031308) 1.055 * ft.math.pow(f32, r, 1.0 / 2.4) - 0.055 else 12.92 * r;
-        g = if (g > 0.0031308) 1.055 * ft.math.pow(f32, g, 1.0 / 2.4) - 0.055 else 12.92 * g;
-        b = if (b > 0.0031308) 1.055 * ft.math.pow(f32, b, 1.0 / 2.4) - 0.055 else 12.92 * b;
+        r = if (r > 0.0031308) 1.055 * std.math.pow(f32, r, 1.0 / 2.4) - 0.055 else 12.92 * r;
+        g = if (g > 0.0031308) 1.055 * std.math.pow(f32, g, 1.0 / 2.4) - 0.055 else 12.92 * g;
+        b = if (b > 0.0031308) 1.055 * std.math.pow(f32, b, 1.0 / 2.4) - 0.055 else 12.92 * b;
 
         return RGB{
-            .r = @intFromFloat(ft.math.clamp(r * 255.0, 0.0, 255.0)),
-            .g = @intFromFloat(ft.math.clamp(g * 255.0, 0.0, 255.0)),
-            .b = @intFromFloat(ft.math.clamp(b * 255.0, 0.0, 255.0)),
+            .r = @intFromFloat(std.math.clamp(r * 255.0, 0.0, 255.0)),
+            .g = @intFromFloat(std.math.clamp(g * 255.0, 0.0, 255.0)),
+            .b = @intFromFloat(std.math.clamp(b * 255.0, 0.0, 255.0)),
         };
     }
 
@@ -153,9 +153,9 @@ pub fn LAB(comptime ref: Profile.Items) type {
             var y = color.y / ref_values.y;
             var z = color.z / ref_values.z;
 
-            x = if (x > 0.008856) ft.math.pow(f32, x, 1.0 / 3.0) else (7.787 * x) + (16.0 / 116.0);
-            y = if (y > 0.008856) ft.math.pow(f32, y, 1.0 / 3.0) else (7.787 * y) + (16.0 / 116.0);
-            z = if (z > 0.008856) ft.math.pow(f32, z, 1.0 / 3.0) else (7.787 * z) + (16.0 / 116.0);
+            x = if (x > 0.008856) std.math.pow(f32, x, 1.0 / 3.0) else (7.787 * x) + (16.0 / 116.0);
+            y = if (y > 0.008856) std.math.pow(f32, y, 1.0 / 3.0) else (7.787 * y) + (16.0 / 116.0);
+            z = if (z > 0.008856) std.math.pow(f32, z, 1.0 / 3.0) else (7.787 * z) + (16.0 / 116.0);
 
             return .{
                 .l = (116.0 * y) - 16.0,
@@ -169,9 +169,9 @@ pub fn LAB(comptime ref: Profile.Items) type {
             var x = self.a / 500.0 + y;
             var z = y - self.b / 200.0;
 
-            y = if (ft.math.pow(f32, y, 3.0) > 0.008856) ft.math.pow(f32, y, 3.0) else (y - 16.0 / 116.0) / 7.787;
-            x = if (ft.math.pow(f32, x, 3.0) > 0.008856) ft.math.pow(f32, x, 3.0) else (x - 16.0 / 116.0) / 7.787;
-            z = if (ft.math.pow(f32, z, 3.0) > 0.008856) ft.math.pow(f32, z, 3.0) else (z - 16.0 / 116.0) / 7.787;
+            y = if (std.math.pow(f32, y, 3.0) > 0.008856) std.math.pow(f32, y, 3.0) else (y - 16.0 / 116.0) / 7.787;
+            x = if (std.math.pow(f32, x, 3.0) > 0.008856) std.math.pow(f32, x, 3.0) else (x - 16.0 / 116.0) / 7.787;
+            z = if (std.math.pow(f32, z, 3.0) > 0.008856) std.math.pow(f32, z, 3.0) else (z - 16.0 / 116.0) / 7.787;
 
             return .{
                 .x = x * ref_values.x,
@@ -221,7 +221,7 @@ pub fn LAB(comptime ref: Profile.Items) type {
             if (var_a == 0 and var_b > 0) return 90;
             if (var_a == 0 and var_b < 0) return 270;
 
-            const angle = ft.math.radiansToDegrees(ft.math.atan2(var_b, var_a));
+            const angle = std.math.radiansToDegrees(std.math.atan2(var_b, var_a));
             if (var_a > 0 and var_b > 0) return angle;
             if (var_a < 0) return angle + 180;
             if (var_a > 0 and var_b < 0) return angle + 360;
@@ -238,8 +238,8 @@ pub fn LAB(comptime ref: Profile.Items) type {
             const Cb = (C1 + C2) / 2.0;
 
             // calculate G (chroma weight)
-            const pow7 = ft.math.pow(f32, Cb, 7.0);
-            const G = 0.5 * (1.0 - @sqrt(pow7 / (pow7 + ft.math.pow(f32, 25.0, 7.0))));
+            const pow7 = std.math.pow(f32, Cb, 7.0);
+            const G = 0.5 * (1.0 - @sqrt(pow7 / (pow7 + std.math.pow(f32, 25.0, 7.0))));
 
             // calculate modified A values
             const a1p = (1.0 + G) * self.a;
@@ -268,7 +268,7 @@ pub fn LAB(comptime ref: Profile.Items) type {
                 } else {
                     dH = dhp + 360.0;
                 }
-                dH = 2.0 * @sqrt(C1p * C2p) * @sin(ft.math.degreesToRadians(dH / 2.0));
+                dH = 2.0 * @sqrt(C1p * C2p) * @sin(std.math.degreesToRadians(dH / 2.0));
             }
 
             // calculate average L', C'
@@ -291,17 +291,17 @@ pub fn LAB(comptime ref: Profile.Items) type {
             @setEvalBranchQuota(2000);
 
             // calculate T
-            const T = 1.0 - 0.17 * @cos(ft.math.degreesToRadians(Hp - 30.0)) +
-                0.24 * @cos(ft.math.degreesToRadians(2.0 * Hp)) +
-                0.32 * @cos(ft.math.degreesToRadians(3.0 * Hp + 6.0)) -
-                0.20 * @cos(ft.math.degreesToRadians(4.0 * Hp - 63.0));
+            const T = 1.0 - 0.17 * @cos(std.math.degreesToRadians(Hp - 30.0)) +
+                0.24 * @cos(std.math.degreesToRadians(2.0 * Hp)) +
+                0.32 * @cos(std.math.degreesToRadians(3.0 * Hp + 6.0)) -
+                0.20 * @cos(std.math.degreesToRadians(4.0 * Hp - 63.0));
 
             // calculate ΔΘ
             const dTheta = 30.0 * @exp(-((Hp - 275.0) / 25.0) * ((Hp - 275.0) / 25.0));
 
             // calculate RC
-            const pow7_Cp = ft.math.pow(f32, Cp, 7.0);
-            const RC = 2.0 * @sqrt(pow7_Cp / (pow7_Cp + ft.math.pow(f32, 25.0, 7.0)));
+            const pow7_Cp = std.math.pow(f32, Cp, 7.0);
+            const RC = 2.0 * @sqrt(pow7_Cp / (pow7_Cp + std.math.pow(f32, 25.0, 7.0)));
 
             // calculate SL, SC, SH
             const SL = 1.0 + ((0.015 * (Lp - 50.0) * (Lp - 50.0)) /
@@ -310,7 +310,7 @@ pub fn LAB(comptime ref: Profile.Items) type {
             const SH = 1.0 + 0.015 * Cp * T;
 
             // calculate RT
-            const RT = -@sin(ft.math.degreesToRadians(2.0 * dTheta)) * RC;
+            const RT = -@sin(std.math.degreesToRadians(2.0 * dTheta)) * RC;
 
             const k = config.theme.k_de;
 

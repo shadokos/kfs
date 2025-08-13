@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const paging = @import("paging.zig");
 const regions = @import("regions.zig");
 const Region = regions.Region;
@@ -38,7 +38,7 @@ fn page_fault_from_i386(frame: InterruptFrame) PageFault {
     };
     const error_object: I386ErrorType = @bitCast(frame.code);
     const cr2 = cpu.get_cr2();
-    const page: usize = ft.mem.alignBackward(usize, cr2, paging.page_size);
+    const page: usize = std.mem.alignBackward(usize, cr2, paging.page_size);
     return PageFault{
         .present = error_object.present,
         .type = switch (error_object.type) {
@@ -60,7 +60,7 @@ fn kernel_page_fault(fault: PageFault) void {
         unreachable;
     } else if (mapping.is_page_mapped(fault.entry)) {
         @import("regions.zig").make_present(fault.faulting_page) catch |e| {
-            ft.log.err("PAGE FAULT!\n\tcannot map address 0x{x:0>8}:\n\t{s}", .{
+            std.log.err("PAGE FAULT!\n\tcannot map address 0x{x:0>8}:\n\t{s}", .{
                 @intFromPtr(fault.faulting_address),
                 @errorName(e),
             });
@@ -102,7 +102,7 @@ fn user_page_fault(fault: PageFault) void {
         }
     } else if (mapping.is_page_mapped(fault.entry)) {
         @import("regions.zig").make_present(fault.faulting_page) catch |e| {
-            ft.log.err("PAGE FAULT!\n\tcannot map address 0x{x:0>8}:\n\t{s}", .{
+            std.log.err("PAGE FAULT!\n\tcannot map address 0x{x:0>8}:\n\t{s}", .{
                 @intFromPtr(fault.faulting_address),
                 @errorName(e),
             });
@@ -126,7 +126,7 @@ fn page_fault_handler(frame: InterruptFrame) void {
 }
 
 fn panic(fault: PageFault) void {
-    ft.log.err(
+    std.log.err(
         \\PAGE FAULT!
         \\  address 0x{x:0>8} is not mapped
         \\  action type: {s}

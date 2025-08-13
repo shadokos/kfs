@@ -1,11 +1,11 @@
-const ft = @import("ft");
+const std = @import("std");
 const paging = @import("paging.zig");
 const printk = @import("../tty/tty.zig").printk;
 
 pub fn Fuzzer(comptime bag_size: comptime_int) type {
     return struct {
         /// instance of the tested allocator
-        allocator: ft.mem.Allocator,
+        allocator: std.mem.Allocator,
         /// bag of allocated chunks
         chunks: [bag_size]Alloc = undefined,
         /// current size of the bag
@@ -15,14 +15,14 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
         /// number of free made (for stats)
         n_free: usize = 0,
         /// random object used for rng
-        rand: ft.Random = undefined,
+        rand: std.Random = undefined,
         /// the strategy used for this fuzzing
         strategy: Strategy,
         /// writer used for output
-        writer: ft.io.AnyWriter,
+        writer: std.io.AnyWriter,
 
         /// global instance of the xoroshiro algorithm
-        var xoro = ft.Random.Xoroshiro128.init(42);
+        var xoro = std.Random.Xoroshiro128.init(42);
 
         /// type of an allocation
         const Alloc = []u8;
@@ -43,8 +43,8 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
 
         /// init a fuzzer object
         pub fn init(
-            _allocator: ft.mem.Allocator,
-            _writer: ft.io.AnyWriter,
+            _allocator: std.mem.Allocator,
+            _writer: std.io.AnyWriter,
             _strategy: ?Strategy,
         ) Self {
             return Self{
@@ -168,7 +168,7 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
 
         /// print the current status of the fuzzer
         pub fn status(self: *Self) void {
-            self.writer.print("Status:\n", .{self.n_alloc}) catch {};
+            self.writer.print("Status:\n", .{}) catch {};
             self.writer.print("\x1b[31m{d: <6}\x1b[0m allocations\n", .{self.n_alloc}) catch {};
             self.writer.print("\x1b[31m{d: <6}\x1b[0m free\n", .{self.n_free}) catch {};
             self.writer.print("\x1b[31m{d: <6}\x1b[0m active\n", .{self.size}) catch {};

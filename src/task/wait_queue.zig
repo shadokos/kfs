@@ -8,7 +8,7 @@ const Payload = struct {
     queue: *Queue,
 };
 
-const Queue = @import("ft").DoublyLinkedList(Payload);
+const Queue = @import("std").DoublyLinkedList(Payload);
 
 pub const Node = Queue.Node;
 

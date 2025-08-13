@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const paging = @import("paging.zig");
 const VirtualSpaceAllocator = @import("virtual_space_allocator.zig").VirtualSpaceAllocator;
 const mapping = @import("mapping.zig");
@@ -196,12 +196,12 @@ pub const VirtualSpace = struct {
         physical: paging.PhysicalPtr,
         size: usize,
     ) !paging.VirtualPtr {
-        const physical_pages = ft.mem.alignBackward(
+        const physical_pages = std.mem.alignBackward(
             paging.PhysicalPtr,
             physical,
             paging.page_size,
         );
-        const npages = (ft.mem.alignForward(
+        const npages = (std.mem.alignForward(
             paging.PhysicalPtr,
             physical + size,
             paging.page_size,
@@ -214,7 +214,7 @@ pub const VirtualSpace = struct {
     pub fn unmap_object(self: *Self, virtual: paging.VirtualPtr, n: usize) !void {
         const first_page: usize = @as(usize, @intFromPtr(virtual)) / paging.page_size;
 
-        const npage = ft.math.divCeil(
+        const npage = std.math.divCeil(
             usize,
             @as(usize, @intFromPtr(virtual)) % paging.page_size + n,
             paging.page_size,

@@ -1,4 +1,3 @@
-const ft = @import("ft");
 const task = @import("task.zig");
 const task_set = @import("task_set.zig");
 const ready_queue = @import("ready_queue.zig");

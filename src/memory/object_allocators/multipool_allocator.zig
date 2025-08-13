@@ -1,9 +1,11 @@
-const ft = @import("ft");
+const std = @import("std");
 const Slab = @import("slab/slab.zig").Slab;
 const Cache = @import("slab/cache.zig").Cache;
 const PageAllocator = @import("../page_allocator.zig");
 const globalCache = &@import("../../memory.zig").globalCache;
-const logger = ft.log.scoped(.physical_memory);
+const Alignment = std.mem.Alignment;
+
+const logger = std.log.scoped(.physical_memory);
 
 pub const MultipoolAllocator = struct {
     const Self = @This();
@@ -102,19 +104,9 @@ pub const MultipoolAllocator = struct {
         } else return error.InvalidArgument;
     }
 
-    fn vtable_free(ctx: *anyopaque, buf: []u8, buf_align: u8, ret_addr: usize) void {
-        _ = ctx;
-        _ = buf_align;
-        _ = ret_addr;
-        globalCache.cache.free(@ptrCast(@alignCast(buf.ptr))) catch |e| switch (e) {
-            error.InvalidArgument => logger.warn("freeing invalid pointer {*}", .{buf.ptr}),
-            else => @panic(@errorName(e)),
-        };
-    }
-
-    fn vtable_alloc(ctx: *anyopaque, len: usize, ptr_align: u8, ret_addr: usize) ?[*]u8 {
+    fn vtable_alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize) ?[*]u8 {
         const self: *Self = @alignCast(@ptrCast(ctx));
-        _ = ptr_align;
+        _ = alignment; // TODO: handle alignment properly
         _ = ret_addr;
         return @as([*]u8, @ptrFromInt(@intFromPtr(self._kmalloc(len) catch |e| {
             logger.debug("{s}", .{@errorName(e)});
@@ -122,22 +114,43 @@ pub const MultipoolAllocator = struct {
         })));
     }
 
-    fn vtable_resize(ctx: *anyopaque, buf: []u8, buf_align: u8, new_len: usize, ret_addr: usize) bool {
+    fn vtable_resize(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) bool {
         const self: *Self = @ptrCast(@alignCast(ctx));
         _ = ret_addr;
-        _ = buf_align;
-        const actual_size = self.obj_size(buf.ptr) catch return false;
-        if (new_len < actual_size) return true;
+        _ = alignment;
+        const actual_size = self.obj_size(memory.ptr) catch return false;
+        if (new_len <= actual_size) return true;
         return false;
     }
 
-    const vTable = ft.mem.Allocator.VTable{
+    fn vtable_remap(ctx: *anyopaque, memory: []u8, alignment: Alignment, new_len: usize, ret_addr: usize) ?[*]u8 {
+        _ = ctx;
+        _ = memory;
+        _ = alignment;
+        _ = new_len;
+        _ = ret_addr;
+        // Multipool allocator doesn't support remapping
+        return null;
+    }
+
+    fn vtable_free(ctx: *anyopaque, memory: []u8, alignment: Alignment, ret_addr: usize) void {
+        _ = ctx;
+        _ = alignment;
+        _ = ret_addr;
+        globalCache.cache.free(@ptrCast(@alignCast(memory.ptr))) catch |e| switch (e) {
+            error.InvalidArgument => logger.warn("freeing invalid pointer {*}", .{memory.ptr}),
+            else => @panic(@errorName(e)),
+        };
+    }
+
+    const vTable = std.mem.Allocator.VTable{
         .alloc = &vtable_alloc,
         .resize = &vtable_resize,
+        .remap = &vtable_remap,
         .free = &vtable_free,
     };
 
-    pub fn allocator(self: *Self) ft.mem.Allocator {
+    pub fn allocator(self: *Self) std.mem.Allocator {
         return .{ .ptr = self, .vtable = &vTable };
     }
 };

@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const tty = @import("../../tty/tty.zig");
 const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
@@ -6,7 +6,7 @@ const cpu = @import("../../cpu.zig");
 const pit = @import("../pit/pit.zig");
 const colors = @import("colors");
 
-const acpi_logger = @import("ft").log.scoped(.driver_acpi);
+const acpi_logger = @import("std").log.scoped(.driver_acpi);
 
 const ACPI = @import("types/acpi.zig").ACPI;
 const S5Object = @import("types/s5.zig").S5Object;
@@ -55,7 +55,7 @@ fn _entry_type(comptime name: []const u8) type {
     const names = .{ "RSDT", "FACP", "DSDT" };
     var index: ?usize = null;
 
-    for (names, 0..) |n, i| if (ft.mem.eql(u8, n, name)) {
+    for (names, 0..) |n, i| if (std.mem.eql(u8, n, name)) {
         index = i;
     };
 
@@ -142,7 +142,7 @@ fn _find_entry(rsdt: PTR(RSDT), comptime name: []const u8) ACPI_error!PTR(_entry
     for (entry_addr[0..entries]) |entry| {
         const header: PTR(ACPISDT_Header) = map(ACPISDT_Header, entry);
 
-        if (ft.mem.eql(u8, &header.signature, name)) {
+        if (std.mem.eql(u8, &header.signature, name)) {
             acpi_logger.debug("{s}: Search:\t{s}OK{s}\t({s}0x{x:0>8}{s})", .{
                 colors.magenta ++ name ++ colors.reset,
                 colors.green,
@@ -197,7 +197,7 @@ fn _get_s5(dsdt: PTR(DSDT)) ACPI_error!PTR(S5Object) {
     const data: PTRI(u8) = @ptrFromInt(@as(usize, @intFromPtr(&dsdt.data)));
 
     for (0..dsdt.header.length) |i| {
-        if (ft.mem.eql(u8, data[i .. i + 5], "_S5_\x12")) {
+        if (std.mem.eql(u8, data[i .. i + 5], "_S5_\x12")) {
             if (!(data[i - 1] == 0x08 or (data[i - 1] == 0x5C and data[i - 2] == 0x08))) continue;
 
             acpi_logger.debug(
