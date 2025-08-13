@@ -15,7 +15,7 @@ fn exec_child(_: usize) u8 {
     if (current_task.vm) |vm|
         vm.transfer();
     const frame = current_task.ucontext.uc_mcontext;
-    scheduler.unlock();
+    scheduler.exit_critical();
     interrupts.ret_from_interrupt(&frame);
 }
 
@@ -39,7 +39,7 @@ pub fn do_raw() void {
     current_task.ucontext.uc_mcontext.eax = @bitCast(new_task.pid);
     current_task.ucontext.uc_mcontext.ebx = 0;
 
-    scheduler.lock();
+    scheduler.enter_critical();
     new_task.spawn(&exec_child, undefined) catch @panic("todo errno");
-    scheduler.unlock();
+    scheduler.exit_critical();
 }

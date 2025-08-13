@@ -31,8 +31,8 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
         const Self = @This();
 
         fn internal_block(self: *Self, task: *TaskDescriptor, interruptible: bool, data: ?*void) void {
-            scheduler.lock();
-            defer scheduler.unlock();
+            scheduler.enter_critical();
+            defer scheduler.exit_critical();
             if (arg.predicate(@alignCast(@ptrCast(task)), data))
                 return;
 
@@ -57,8 +57,8 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
         }
 
         pub fn try_unblock(self: *Self) void {
-            scheduler.lock();
-            defer scheduler.unlock();
+            scheduler.enter_critical();
+            defer scheduler.exit_critical();
 
             var node = self.queue.first;
             while (node) |n| {
@@ -75,8 +75,8 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
         }
 
         pub fn unblock_all(self: *Self) void {
-            scheduler.lock();
-            defer scheduler.unlock();
+            scheduler.enter_critical();
+            defer scheduler.exit_critical();
 
             var node = self.queue.first;
             while (node) |n| {
@@ -92,8 +92,8 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
 }
 
 pub fn interrupt(task: *TaskDescriptor) void {
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
     if (task.state != .Blocked)
         return;
 
@@ -108,8 +108,8 @@ pub fn interrupt(task: *TaskDescriptor) void {
 }
 
 pub fn force_remove(task: *TaskDescriptor) void {
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
     if (task.state != .Blocked and task.state != .BlockedUninterruptible)
         return;
 
