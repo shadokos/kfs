@@ -172,7 +172,7 @@ pub fn init() void {
     idtr.offset = @intFromPtr(&idt);
     cpu.load_idt(&idtr);
     logger.info("Idt initialized", .{});
-    scheduler.unlock();
+    scheduler.exit_critical();
     logger.info("Interrupts enabled", .{});
 }
 
@@ -258,7 +258,7 @@ export fn wrapper(
     const privilege_transition = frame.iret.cs.privilege == .User;
 
     if (!interrupt_enable)
-        scheduler.lock_count += 1;
+        scheduler.lock_depth += 1;
 
     if (privilege_transition)
         scheduler.get_current_task().ucontext.uc_mcontext = frame.*;
@@ -271,7 +271,7 @@ export fn wrapper(
     }
 
     if (!interrupt_enable)
-        scheduler.lock_count -|= 1;
+        scheduler.lock_depth -|= 1;
 
     ret_from_interrupt(frame);
 }

@@ -18,8 +18,8 @@ pub const QueueNode = struct {
 pub var ready_queue = Queue{};
 
 pub fn push(new_node: *TaskDescriptor) void {
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
 
     // For performance reasons, the idle task should never be in the ready_queue.
     // The scheduler will switch to the idle task only if there is no task to run.
@@ -33,8 +33,8 @@ pub fn push(new_node: *TaskDescriptor) void {
 }
 
 pub fn pop() ?*Queue.Node {
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
 
     const node = ready_queue.popFirst();
     if (node) |n| {
@@ -45,8 +45,8 @@ pub fn pop() ?*Queue.Node {
 }
 
 pub fn remove(t: *TaskDescriptor) void {
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
 
     if (t.rq_node.data == false) return;
 
