@@ -18,7 +18,7 @@ pub fn read(drive_idx: usize, lba: u32, count: u16, buf: []u8, timeout: ?usize) 
 
 /// Write data to ATA drive
 pub fn write(drive_idx: usize, lba: u32, count: u16, buf: []const u8, timeout: ?usize) types.Error!void {
-    try performOperation(drive_idx, lba, count, buf, timeout, .write);
+    try performOperation(drive_idx, lba, count, @constCast(buf), timeout, .write);
 }
 
 // === INTERNAL OPERATIONS ===

@@ -22,6 +22,78 @@ pub const mode_cmd_register = 0x43; // Read
 
 pub var interval_ns: u32 = 0;
 
+pub const TSCInfo = struct {
+    frequency_hz: u64 = 0,
+    calibrated: bool = false,
+    cycles_per_ns: f64 = 0.0,
+    ns_per_cycle: f64 = 0.0,
+};
+
+pub fn read_tsc() u64 {
+    return cpu.rdtsc();
+}
+
+const tsc = @import("../../tsc/tsc.zig");
+
+pub fn calibrate_tsc() void {
+    pit_logger.info("Calibrating TSC using PIT...", .{});
+
+    const pit_freq = 1000; // 1kHz
+    const calibration_ms = 100;
+    const divisor = FREQUENCY / pit_freq;
+
+    // Configure PIT channel 2
+    write_mode_cmd(ModeCmdRegister{
+        .BCD_binary_Mode = false,
+        .operating_mode = OperatingMode.SquareWaveGenerator,
+        .access_mode = AccessMode.AccessModeBoth,
+        .select_channel = .Channel_2,
+    });
+    cpu.outb(ch2_data, @truncate(divisor));
+    cpu.outb(ch2_data, @truncate(divisor >> 8));
+
+    // Disable interrupts during calibration
+    const flags = cpu.save_and_disable_interrupts();
+    defer cpu.restore_interrupts(flags);
+
+    // Wait for the first falling edge to synchronize
+    const prev = read_status(.Channel_2).OutputPinState;
+    while (read_status(.Channel_2).OutputPinState == prev) {}
+
+    // Take initial measurements
+    const start_tsc = cpu.read_tsc();
+    const expected_pit_ticks = (pit_freq * calibration_ms) / 1000;
+
+    var pit_ticks_counted: u32 = 0;
+    var last_state: u1 = read_status(.Channel_2).OutputPinState;
+    while (pit_ticks_counted < expected_pit_ticks) {
+        const state = read_status(.Channel_2).OutputPinState;
+        if (state == 1 and last_state == 0) {
+            pit_ticks_counted += 1;
+        }
+        last_state = state;
+    }
+
+    const end_tsc = cpu.read_tsc();
+    const tsc_cycles = end_tsc -% start_tsc;
+    const actual_time_ns = calibration_ms * 1_000_000;
+
+    tsc.calibrated_frequency = (tsc_cycles * 1_000_000_000) / actual_time_ns;
+    tsc.tsc_per_ms = tsc.calibrated_frequency / 1_000;
+    tsc.tsc_per_us = tsc.calibrated_frequency / 1_000_000;
+
+    const ns_per_cycle_x1000 = @as(u32, @intFromFloat((@as(f64, @floatFromInt(actual_time_ns)) / @as(f64, @floatFromInt(tsc_cycles))) * 1000));
+    const whole_part = ns_per_cycle_x1000 / 1000;
+    const frac_part = ns_per_cycle_x1000 % 1000;
+
+    pit_logger.info("TSC calibrated: {} Hz ({}.{:0>3} ns/cycle)", .{
+        tsc.calibrated_frequency,
+        whole_part,
+        frac_part
+    });
+}
+
+
 pub const OperatingMode = enum(u3) {
     InterruptOnTerminalCount,
     HardwareRetriggerableOneShot,

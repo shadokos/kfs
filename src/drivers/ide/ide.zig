@@ -43,7 +43,7 @@ pub fn write(
     return switch (drive_info.drive_type) {
         .ATA => ata.write(drive_idx, lba, count, buf, timeout),
         .ATAPI => error.InvalidDrive, // CD-ROM are read-only
-        else => error.invaliddrive,
+        else => error.InvalidDrive,
     };
 }
 

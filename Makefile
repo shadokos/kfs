@@ -6,7 +6,7 @@ OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo ReleaseSafe) | 
 
 BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
 QEMU_BOOT_DRIVE ?= -cdrom kfs.iso
-QEMU_DRIVE ?=
+QEMU_DRIVE ?= -hda disk.img
 
 .PHONY: all
 all: build
@@ -19,7 +19,7 @@ all: build
 
 .PHONY: run
 run: build
-	qemu-system-i386 $(QEMU_BOOT_DRIVE) ${QEMU_DRIVE}
+	qemu-system-i386 $(QEMU_BOOT_DRIVE) ${QEMU_DRIVE} -m 3G
 
 
 .PHONY: build

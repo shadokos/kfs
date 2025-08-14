@@ -78,6 +78,8 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("debug.zig").init();
 
+    @import("tsc/tsc.zig").init();
+
     @import("timer.zig").init();
 
     @import("drivers/ps2/ps2.zig").init();
@@ -101,6 +103,13 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
     @import("drivers/pci/pci.zig").init() catch @panic("Failed to initialize PCI subsystem");
 
     @import("drivers/ide/ide.zig").init() catch @panic("Failed to initialize IDE controller");
+
+    @import("block/block.zig").init() catch |e| log.err("Failed to initialize block subsystem: {s}", .{@errorName(e)});
+
+    @import("drivers/ide/fast_io.zig").setMode(.Adaptive);
+
+    // Optional: Tune for your use case
+    @import("drivers/ide/fast_io.zig").tuneForLatency();  // For interactive systems
 
     const idle_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create idle task");
 
