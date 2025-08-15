@@ -1,6 +1,9 @@
 const std = @import("std");
 const logger = std.log.scoped(.block_device);
 
+// Standard logical block size for all block devices
+pub const STANDARD_BLOCK_SIZE: u32 = 512;
+
 pub const BlockError = error{
     DeviceNotFound,
     DeviceExists,
@@ -14,6 +17,7 @@ pub const BlockError = error{
     MediaNotPresent,
     DeviceBusy,
     CorruptedData,
+    OutOfMemory,
 };
 
 pub const DeviceType = enum {
@@ -58,6 +62,7 @@ pub const DeviceInfo = struct {
     firmware_version: []const u8,
     supports_dma: bool,
     current_speed: u32,
+    physical_block_size: u32, // Added to track actual hardware block size
 };
 
 pub const Operations = struct {
@@ -73,7 +78,7 @@ pub const Operations = struct {
 pub const BlockDevice = struct {
     name: [16]u8,
     device_type: DeviceType,
-    block_size: u32,
+    block_size: u32 = STANDARD_BLOCK_SIZE,
     total_blocks: u64,
     max_transfer: u32,
     features: Features,

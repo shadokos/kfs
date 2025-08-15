@@ -1,6 +1,8 @@
+// src/storage/buffer_cache.zig
 const std = @import("std");
 const BlockDevice = @import("block_device.zig").BlockDevice;
 const BlockError = @import("block_device.zig").BlockError;
+const STANDARD_BLOCK_SIZE = @import("block_device.zig").STANDARD_BLOCK_SIZE;
 const ArrayList = std.ArrayList;
 const Mutex = @import("../task/semaphore.zig").Mutex;
 const allocator = @import("../memory.zig").bigAlloc.allocator();
@@ -41,7 +43,6 @@ pub const Buffer = struct {
 
 const HASH_SIZE = 256;
 const MAX_BUFFERS = 1024;
-const BUFFER_POOL_SIZE = MAX_BUFFERS * 4096;
 
 pub const BufferCache = struct {
     hash_table: [HASH_SIZE]?*Buffer,
@@ -63,10 +64,12 @@ pub const BufferCache = struct {
     const Self = @This();
 
     pub fn init() !Self {
+        const buffer_pool_size = MAX_BUFFERS * STANDARD_BLOCK_SIZE;
+
         var cache = Self{
             .hash_table = [_]?*Buffer{null} ** HASH_SIZE,
             .free_list = ArrayList(*Buffer).init(allocator),
-            .buffer_pool = try allocator.alignedAlloc(u8, 16, BUFFER_POOL_SIZE),
+            .buffer_pool = try allocator.alignedAlloc(u8, 16, buffer_pool_size),
             .buffers = try allocator.alloc(Buffer, MAX_BUFFERS),
         };
 
@@ -75,12 +78,14 @@ pub const BufferCache = struct {
             buffer.* = .{
                 .device = undefined,
                 .block = 0,
-                .data = @alignCast(cache.buffer_pool[offset .. offset + 4096]),
+                .data = @alignCast(cache.buffer_pool[offset .. offset + STANDARD_BLOCK_SIZE]),
                 .flags = .{},
             };
             try cache.free_list.append(buffer);
-            offset += 4096;
+            offset += STANDARD_BLOCK_SIZE;
         }
+
+        logger.info("Buffer cache initialized with {} buffers of {} bytes", .{ MAX_BUFFERS, STANDARD_BLOCK_SIZE });
 
         return cache;
     }
@@ -181,7 +186,8 @@ pub const BufferCache = struct {
         buffer.flags.locked = true;
         defer buffer.flags.locked = false;
 
-        try buffer.device.write(buffer.block, 1, buffer.data);
+        // Always write STANDARD_BLOCK_SIZE bytes
+        try buffer.device.write(buffer.block, 1, buffer.data[0..STANDARD_BLOCK_SIZE]);
         buffer.flags.dirty = false;
         self.stats.writebacks += 1;
     }
@@ -218,7 +224,8 @@ pub const BufferCache = struct {
         buffer.flags.locked = true;
         defer buffer.flags.locked = false;
 
-        device.read(block, 1, buffer.data[0..device.block_size]) catch |err| {
+        // Always read STANDARD_BLOCK_SIZE bytes
+        device.read(block, 1, buffer.data[0..STANDARD_BLOCK_SIZE]) catch |err| {
             buffer.flags.err = true;
             return err;
         };
@@ -288,5 +295,10 @@ pub const BufferCache = struct {
         logger.info("  Misses: {}", .{self.stats.misses});
         logger.info("  Evictions: {}", .{self.stats.evictions});
         logger.info("  Writebacks: {}", .{self.stats.writebacks});
+        logger.info("  Cache size: {} buffers x {} bytes = {} KB", .{
+            MAX_BUFFERS,
+            STANDARD_BLOCK_SIZE,
+            (MAX_BUFFERS * STANDARD_BLOCK_SIZE) / 1024,
+        });
     }
 };
