@@ -2,7 +2,7 @@ const std = @import("std");
 const storage = @import("storage.zig");
 const ide = @import("../drivers/ide/ide.zig");
 const logger = std.log.scoped(.storage_benchmark);
-const tsc = @import("../tsc/tsc.zig");
+const tsc = @import("../drivers/tsc/tsc.zig");
 
 const allocator = @import("../memory.zig").bigAlloc.allocator();
 
@@ -28,14 +28,15 @@ pub const BenchmarkResult = struct {
 
     pub fn print(self: *const BenchmarkResult) void {
         logger.info("{s}:", .{@tagName(self.operation)});
-        logger.info("  Blocks: {} x {} bytes", .{self.block_count, self.block_size});
-        logger.info("  Time: {} us", .{self.time_us});
+        logger.info("  Blocks: {} x {} bytes", .{ self.block_count, self.block_size });
+        logger.info("  Time: {} µs", .{self.time_us});
         logger.info("  Throughput: {d:.2} MB/s", .{self.throughput_mbps});
         logger.info("  IOPS: {d:.0}", .{self.iops});
         if (self.cache_hits > 0 or self.cache_misses > 0) {
             const hit_rate = if (self.cache_hits + self.cache_misses > 0)
                 (self.cache_hits * 100) / (self.cache_hits + self.cache_misses)
-            else 0;
+            else
+                0;
             logger.info("  Cache hit rate: {}%", .{hit_rate});
         }
     }
@@ -43,12 +44,12 @@ pub const BenchmarkResult = struct {
 
 pub const BenchmarkSuite = struct {
     device_name: []const u8,
-    start_block: u64,
+    start_block: u32,
     results: std.ArrayList(BenchmarkResult),
 
     const Self = @This();
 
-    pub fn init(device_name: []const u8, start_block: u64) Self {
+    pub fn init(device_name: []const u8, start_block: u32) Self {
         return .{
             .device_name = device_name,
             .start_block = start_block,
@@ -80,10 +81,12 @@ pub const BenchmarkSuite = struct {
             .time_us = elapsed_us,
             .throughput_mbps = if (elapsed_us > 0)
                 (@as(f64, @floatFromInt(total_bytes)) / @as(f64, @floatFromInt(elapsed_us)))
-            else 0,
+            else
+                0,
             .iops = if (elapsed_us > 0)
                 (@as(f64, @floatFromInt(block_count)) * 1_000_000) / @as(f64, @floatFromInt(elapsed_us))
-            else 0,
+            else
+                0,
         };
 
         try self.results.append(result);
@@ -120,10 +123,12 @@ pub const BenchmarkSuite = struct {
             .time_us = elapsed_us,
             .throughput_mbps = if (elapsed_us > 0)
                 (@as(f64, @floatFromInt(total_bytes)) / @as(f64, @floatFromInt(elapsed_us)))
-            else 0,
+            else
+                0,
             .iops = if (elapsed_us > 0)
                 (@as(f64, @floatFromInt(block_count)) * 1_000_000) / @as(f64, @floatFromInt(elapsed_us))
-            else 0,
+            else
+                0,
         };
 
         try self.results.append(result);
@@ -154,10 +159,12 @@ pub const BenchmarkSuite = struct {
             .time_us = elapsed_us,
             .throughput_mbps = if (elapsed_us > 0)
                 (@as(f64, @floatFromInt(operation_count * device.block_size)) / @as(f64, @floatFromInt(elapsed_us)))
-            else 0,
+            else
+                0,
             .iops = if (elapsed_us > 0)
                 (@as(f64, @floatFromInt(operation_count)) * 1_000_000) / @as(f64, @floatFromInt(elapsed_us))
-            else 0,
+            else
+                0,
         };
 
         try self.results.append(result);
@@ -191,10 +198,12 @@ pub const BenchmarkSuite = struct {
             .time_us = elapsed_us,
             .throughput_mbps = if (elapsed_us > 0)
                 (@as(f64, @floatFromInt(total_operations * device.block_size)) / @as(f64, @floatFromInt(elapsed_us)))
-            else 0,
+            else
+                0,
             .iops = if (elapsed_us > 0)
                 (@as(f64, @floatFromInt(total_operations)) * 1_000_000) / @as(f64, @floatFromInt(elapsed_us))
-            else 0,
+            else
+                0,
             .cache_hits = cache.stats.hits,
             .cache_misses = cache.stats.misses,
         };
@@ -292,9 +301,9 @@ pub fn measureLatency(device_name: []const u8, iterations: u32) !void {
     const avg_us = total_us / iterations;
 
     logger.info("Direct I/O latency:", .{});
-    logger.info("  Average: {} us", .{avg_us});
-    logger.info("  Min: {} us", .{min_us});
-    logger.info("  Max: {} us", .{max_us});
+    logger.info("  Average: {} µs", .{avg_us});
+    logger.info("  Min: {} µs", .{min_us});
+    logger.info("  Max: {} µs", .{max_us});
 
     total_us = 0;
     min_us = std.math.maxInt(u64);
@@ -314,9 +323,9 @@ pub fn measureLatency(device_name: []const u8, iterations: u32) !void {
     const cached_avg_us = total_us / iterations;
 
     logger.info("Cached I/O latency:", .{});
-    logger.info("  Average: {} us", .{cached_avg_us});
-    logger.info("  Min: {} us", .{min_us});
-    logger.info("  Max: {} us", .{max_us});
+    logger.info("  Average: {} µs", .{cached_avg_us});
+    logger.info("  Min: {} µs", .{min_us});
+    logger.info("  Max: {} µs", .{max_us});
 
     const cache = storage.getCache();
     cache.printStats();
@@ -352,12 +361,12 @@ pub fn stressTest(device_name: []const u8, duration_ms: u64) !void {
         const start_block = 10000 + rng.random().intRangeAtMost(u64, 0, 1000);
 
         if (is_write) {
-            device.write(start_block, block_count, buffer[0..block_count * device.block_size]) catch {
+            device.write(start_block, block_count, buffer[0 .. block_count * device.block_size]) catch {
                 errors += 1;
                 continue;
             };
         } else {
-            device.read(start_block, block_count, buffer[0..block_count * device.block_size]) catch {
+            device.read(start_block, block_count, buffer[0 .. block_count * device.block_size]) catch {
                 errors += 1;
                 continue;
             };
@@ -368,11 +377,13 @@ pub fn stressTest(device_name: []const u8, duration_ms: u64) !void {
     }
 
     const actual_duration_us = tsc.get_time_us() - start_time;
-    const throughput_mbps = (@as(f64, @floatFromInt(bytes_transferred)) / @as(f64, @floatFromInt(actual_duration_us)));
-    const ops_per_sec = (@as(f64, @floatFromInt(operations)) * 1_000_000) / @as(f64, @floatFromInt(actual_duration_us));
+    const throughput_mbps =
+        @as(f64, @floatFromInt(bytes_transferred)) / @as(f64, @floatFromInt(actual_duration_us));
+    const ops_per_sec =
+        (@as(f64, @floatFromInt(operations)) * 1_000_000) / @as(f64, @floatFromInt(actual_duration_us));
 
     logger.info("Stress Test Results:", .{});
-    logger.info("  Duration: {} us", .{actual_duration_us});
+    logger.info("  Duration: {} µs", .{actual_duration_us});
     logger.info("  Operations: {}", .{operations});
     logger.info("  Bytes transferred: {}", .{bytes_transferred});
     logger.info("  Errors: {}", .{errors});

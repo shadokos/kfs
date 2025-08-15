@@ -1,186 +1,112 @@
 const std = @import("std");
 const cpu = @import("../../cpu.zig");
-const logger = std.log.scoped(.atapi);
-
 const constants = @import("constants.zig");
 const types = @import("types.zig");
 const common = @import("common.zig");
 const Channel = @import("channel.zig");
-const controller = @import("controller.zig");
-const request_manager = @import("request_manager.zig");
 
-// === PUBLIC API ===
+pub fn performPolling(channel: *Channel, drive: *types.DriveInfo, op: *@import("ide.zig").IDEOperation) types.IDEError!void {
+    // const select: u8 = if (drive.position == .Master) 0xA0 else 0xB0;
+    // cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
+    // common.waitNs(400);
+    //
 
-/// Send generic ATAPI command with packet data
-pub fn sendCommand(
-    drive_idx: usize,
-    packet: []const u8,
-    data_buf: []u8,
-    timeout: ?usize,
-) types.Error!u16 {
-    if (drive_idx >= controller.getDriveCount()) return error.InvalidDrive;
-    if (packet.len != constants.ATAPI.PACKET_SIZE) return error.InvalidPacket;
+    common.selectLBADevice(drive, channel.base, op.lba);
 
-    const drive_info = controller.getDriveInfo(drive_idx).?;
-    if (!drive_info.isATAPI()) return error.InvalidDrive;
+    _ = try common.waitForReady(channel.base, 1000);
 
-    var packet_data: [constants.ATAPI.PACKET_SIZE]u8 = undefined;
-    @memcpy(&packet_data, packet);
-
-    var request = types.Request{
-        .channel = drive_info.channel,
-        .drive = drive_info.drive,
-        .command = constants.ATA.CMD_PACKET,
-        .lba = 0,
-        .count = 1,
-        .buffer = .{ .read = data_buf },
-        .packet_data = packet_data,
-        .is_atapi = true,
-        .current_sector = 0, // Used to count bytes read
-    };
-
-    try request_manager.sendRequest(&request, timeout);
-    return @truncate(request.current_sector); // Returns number of bytes read
-}
-
-/// Read data from CD-ROM using SCSI READ(10) command
-pub fn readCDROM(
-    drive_idx: usize,
-    lba: u32,
-    count: u16,
-    buf: []u8,
-    timeout: ?usize,
-) types.Error!void {
-    if (buf.len < @as(usize, count) * 2048) return error.BufferTooSmall;
-
-    // Create SCSI READ(10) packet
-    var packet: [constants.ATAPI.PACKET_SIZE]u8 = .{0} ** constants.ATAPI.PACKET_SIZE;
-    packet[0] = constants.ATAPI.CMD_READ10;
-    packet[2] = @truncate(lba >> 24);
-    packet[3] = @truncate(lba >> 16);
-    packet[4] = @truncate(lba >> 8);
-    packet[5] = @truncate(lba);
-    packet[7] = @truncate(count >> 8);
-    packet[8] = @truncate(count);
-
-    _ = try sendCommand(drive_idx, &packet, buf, timeout);
-}
-
-// === INTERNAL OPERATIONS ===
-
-/// Send ATAPI packet command to hardware
-pub fn sendCommandToHardware(channel: *Channel, request: *types.Request) !void {
-    // Select ATAPI drive
-    const select: u8 = if (request.drive == .Master) 0xA0 else 0xB0;
-    cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
-    cpu.io_wait();
-
-    _ = try channel.waitForReady();
-
-    // Configure for PACKET command
-    cpu.outb(channel.base + constants.ATA.REG_FEATURES, 0x00); // PIO mode
-    cpu.outb(channel.base + constants.ATA.REG_LBA_MID, 0xFE); // Maximum transfer size
+    cpu.outb(channel.base + constants.ATA.REG_FEATURES, 0x00);
+    cpu.outb(channel.base + constants.ATA.REG_LBA_MID, 0xFE);
     cpu.outb(channel.base + constants.ATA.REG_LBA_HIGH, 0xFF);
 
-    // Clear pending interrupts
-    _ = cpu.inb(channel.base + constants.ATA.REG_STATUS);
-
-    // Send PACKET command
     cpu.outb(channel.base + constants.ATA.REG_COMMAND, constants.ATA.CMD_PACKET);
 
-    // Wait for DRQ to send packet data
-    const status = try channel.waitForData();
-    if (status & constants.ATA.STATUS_ERROR != 0) {
-        request.err = parseError(cpu.inb(channel.base + constants.ATA.REG_ERROR_READ));
-        return request.err.?;
+    _ = try common.waitForData(channel.base, 1000);
+
+    var packet: [12]u8 = .{0} ** 12;
+    packet[0] = constants.ATAPI.CMD_READ10;
+    packet[2] = @truncate(op.lba >> 24);
+    packet[3] = @truncate(op.lba >> 16);
+    packet[4] = @truncate(op.lba >> 8);
+    packet[5] = @truncate(op.lba);
+    packet[7] = @truncate(op.count >> 8);
+    packet[8] = @truncate(op.count);
+
+    for (0..6) |i| {
+        const low = packet[i * 2];
+        const high = packet[i * 2 + 1];
+        const word: u16 = (@as(u16, high) << 8) | low;
+        cpu.outw(channel.base + constants.ATA.REG_DATA, word);
     }
 
-    // Send ATAPI packet (12 bytes = 6 words)
-    if (request.packet_data) |packet| {
-        for (0..6) |i| {
-            const low = packet[i * 2];
-            const high = if (i * 2 + 1 < packet.len) packet[i * 2 + 1] else 0;
-            const word: u16 = (@as(u16, high) << 8) | low;
-            cpu.outw(channel.base + constants.ATA.REG_DATA, word);
-        }
-    }
-}
+    var bytes_read: usize = 0;
+    const expected_bytes = @as(usize, op.count) * 2048;
 
-/// Handle ATAPI packet command interrupt
-pub fn handleInterrupt(channel: *Channel, request: *types.Request) void {
-    // Read status register
-    const status = cpu.inb(channel.base + constants.ATA.REG_STATUS);
+    while (bytes_read < expected_bytes) {
+        const status = try common.waitForDataOrCompletion(channel.base, 5000);
+        if ((status & constants.ATA.STATUS_DRQ) == 0) break;
 
-    // Check for errors
-    if (status & constants.ATA.STATUS_ERROR != 0) {
-        const error_reg = cpu.inb(channel.base + constants.ATA.REG_ERROR_READ);
-        logger.err("error: status=0x{X:0>2}, error=0x{X:0>2}", .{ status, error_reg });
-        request.err = parseError(error_reg);
-        request.completed = true;
-        channel.queue.try_unblock();
-        return;
-    }
+        const byte_count_low = cpu.inb(channel.base + constants.ATA.REG_LBA_MID);
+        const byte_count_high = cpu.inb(channel.base + constants.ATA.REG_LBA_HIGH);
+        const byte_count = (@as(u16, byte_count_high) << 8) | byte_count_low;
 
-    // Data phase
-    if (status & constants.ATA.STATUS_DRQ != 0) {
-        handleDataPhase(channel, request);
-        return;
-    }
+        if (byte_count == 0) break;
 
-    // Check for completion
-    if ((status & constants.ATA.STATUS_BUSY) == 0) {
-        logger.debug("Command completed, total bytes: {}", .{request.current_sector});
-        request.completed = true;
-        channel.queue.try_unblock();
-    }
-}
+        const bytes_to_read = @min(byte_count, expected_bytes - bytes_read);
+        const word_count = (bytes_to_read + 1) / 2;
 
-// === PRIVATE FUNCTIONS ===
+        for (0..word_count) |i| {
+            const word = cpu.inw(channel.base + constants.ATA.REG_DATA);
+            const offset = bytes_read + i * 2;
 
-/// Handle ATAPI data phase
-fn handleDataPhase(channel: *Channel, request: *types.Request) void {
-    // Read byte count from LBA Mid/High registers
-    const byte_count_low = cpu.inb(channel.base + constants.ATA.REG_LBA_MID);
-    const byte_count_high = cpu.inb(channel.base + constants.ATA.REG_LBA_HIGH);
-    const byte_count = (@as(u16, byte_count_high) << 8) | byte_count_low;
-
-    logger.debug("Data phase: {} bytes available", .{byte_count});
-
-    if (byte_count > 0) {
-        const available_space = request.buffer.read.len - request.current_sector;
-        const bytes_to_read = @min(byte_count, available_space);
-
-        if (bytes_to_read > 0) {
-            // Read data by words (2 bytes)
-            const word_count = (bytes_to_read + 1) / 2;
-            for (0..word_count) |i| {
-                const word = cpu.inw(channel.base + constants.ATA.REG_DATA);
-                const offset = request.current_sector + i * 2;
-
-                if (offset < request.buffer.read.len) {
-                    request.buffer.read[offset] = @truncate(word);
-                }
-                if (offset + 1 < request.buffer.read.len) {
-                    request.buffer.read[offset + 1] = @truncate(word >> 8);
-                }
+            if (offset < op.buffer.read.len) {
+                op.buffer.read[offset] = @truncate(word);
             }
-
-            request.current_sector += @intCast(bytes_to_read);
-            logger.debug("Read {} bytes, total: {}", .{ bytes_to_read, request.current_sector });
-        }
-
-        // Discard excess bytes
-        if (bytes_to_read < byte_count) {
-            const remaining_words = (byte_count - bytes_to_read + 1) / 2;
-            for (0..remaining_words) |_| {
-                _ = cpu.inw(channel.base + constants.ATA.REG_DATA);
+            if (offset + 1 < op.buffer.read.len) {
+                op.buffer.read[offset + 1] = @truncate(word >> 8);
             }
-            logger.debug("Discarded {} excess bytes", .{byte_count - bytes_to_read});
         }
+
+        bytes_read += bytes_to_read;
     }
 }
 
-/// Parse ATAPI error register
-fn parseError(error_reg: u8) types.Error {
-    return common.parseATAPIError(error_reg);
-}
+// pub fn sendCommand(channel: *Channel, request: *Channel.Request) types.IDEError!void {
+//     // const select: u8 = if (request.drive == .Master) 0xA0 else 0xB0;
+//     // cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
+//     // common.waitNs(400);
+//
+//     common.selectLBADevice(drive: *types.DriveInfo, channel.base, undefined)
+//
+//     _ = try common.waitForReady(channel.base, 1000);
+//
+//     cpu.outb(channel.base + constants.ATA.REG_FEATURES, 0x00);
+//     cpu.outb(channel.base + constants.ATA.REG_LBA_MID, 0xFE);
+//     cpu.outb(channel.base + constants.ATA.REG_LBA_HIGH, 0xFF);
+//
+//     _ = cpu.inb(channel.base + constants.ATA.REG_STATUS);
+//
+//     cpu.outb(channel.base + constants.ATA.REG_COMMAND, constants.ATA.CMD_PACKET);
+//
+//     const status = try common.waitForData(channel.base, 1000);
+//     if (status & constants.ATA.STATUS_ERROR != 0) {
+//         request.err = common.parseError(channel.base);
+//         return request.err.?;
+//     }
+//
+//     var packet: [12]u8 = .{0} ** 12;
+//     packet[0] = constants.ATAPI.CMD_READ10;
+//     packet[2] = @truncate(request.lba >> 24);
+//     packet[3] = @truncate(request.lba >> 16);
+//     packet[4] = @truncate(request.lba >> 8);
+//     packet[5] = @truncate(request.lba);
+//     packet[7] = @truncate(request.count >> 8);
+//     packet[8] = @truncate(request.count);
+//
+//     for (0..6) |i| {
+//         const low = packet[i * 2];
+//         const high = packet[i * 2 + 1];
+//         const word: u16 = (@as(u16, high) << 8) | low;
+//         cpu.outw(channel.base + constants.ATA.REG_DATA, word);
+//     }
+// }

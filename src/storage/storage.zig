@@ -97,7 +97,7 @@ pub fn findDevice(name: []const u8) ?*BlockDevice {
 
 pub fn readCached(
     device_name: []const u8,
-    start_block: u64,
+    start_block: u32,
     count: u32,
     buffer: []u8,
 ) BlockError!void {
@@ -199,7 +199,7 @@ pub fn printDeviceStats(device_name: []const u8) void {
 }
 
 pub const test_utils = struct {
-    const tsc = @import("../tsc/tsc.zig");
+    const tsc = @import("../drivers/tsc/tsc.zig");
 
     pub fn testBasicReadWrite(device_name: []const u8) !void {
         const device = findDevice(device_name) orelse {
@@ -255,7 +255,7 @@ pub const test_utils = struct {
 
         buffer_cache.stats = .{};
 
-        const test_blocks = [_]u64{10, 20, 30, 40, 50};
+        const test_blocks = [_]u64{ 10, 20, 30, 40, 50 };
 
         logger.info("Test 1: Initial cache misses", .{});
         for (test_blocks) |block_num| {
@@ -269,7 +269,7 @@ pub const test_utils = struct {
         }
 
         if (buffer_cache.stats.misses != test_blocks.len) {
-            logger.err("Expected {} misses, got {}", .{test_blocks.len, buffer_cache.stats.misses});
+            logger.err("Expected {} misses, got {}", .{ test_blocks.len, buffer_cache.stats.misses });
             return error.CacheError;
         }
         logger.info("  {} cache misses as expected", .{buffer_cache.stats.misses});
@@ -283,7 +283,7 @@ pub const test_utils = struct {
 
         const new_hits = buffer_cache.stats.hits - initial_hits;
         if (new_hits != test_blocks.len) {
-            logger.err("Expected {} hits, got {}", .{test_blocks.len, new_hits});
+            logger.err("Expected {} hits, got {}", .{ test_blocks.len, new_hits });
             return error.CacheError;
         }
         logger.info("  {} cache hits as expected", .{new_hits});
@@ -315,7 +315,8 @@ pub const test_utils = struct {
         const read_time_ms = (read_end - read_start) / 1000;
         const read_speed_mb: f32 = if (read_time_ms > 0)
             @as(f32, @floatFromInt(test_mb * 1000)) / @as(f32, @floatFromInt(read_time_ms))
-        else 0.0;
+        else
+            0.0;
         logger.info("  Time: {} ms", .{read_time_ms});
         logger.info("  Speed: ~{d:.2} MB/s", .{read_speed_mb});
 
@@ -329,7 +330,8 @@ pub const test_utils = struct {
             const write_time_ms = (write_end - write_start) / 1000;
             const write_speed_mb: f32 = if (write_time_ms > 0)
                 @as(f32, @floatFromInt(test_mb * 1000)) / @as(f32, @floatFromInt(write_time_ms))
-            else 0.0;
+            else
+                0.0;
             logger.info("  Time: {} ms", .{write_time_ms});
             logger.info("  Speed: ~{d:.2} MB/s", .{write_speed_mb});
         }

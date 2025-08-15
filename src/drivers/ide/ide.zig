@@ -1,109 +1,94 @@
 const std = @import("std");
-const logger = std.log.scoped(.ide);
+const logger = std.log.scoped(.ide_driver);
+const discovery = @import("discovery.zig");
+const ata = @import("ata.zig");
+const atapi = @import("atapi.zig");
+const common = @import("common.zig");
 
 pub const constants = @import("constants.zig");
-pub const types = @import("types.zig");
-pub const ata = @import("ata.zig");
-pub const atapi = @import("atapi.zig");
-pub const controller = @import("controller.zig");
+pub const Channel = @import("channel.zig");
+pub const DriveInfo = @import("types.zig").DriveInfo;
+pub const DriveType = @import("types.zig").DriveType;
+pub const Capacity = @import("types.zig").Capacity;
+pub const IDEError = @import("types.zig").IDEError;
+pub const Buffer = @import("types.zig").Buffer;
 
-// === GENERAL API ===
+const allocator = @import("../../memory.zig").smallAlloc.allocator();
 
-/// Read data from a drive (auto-detects type)
-pub fn read(
+var channels: std.ArrayListAligned(Channel, 4) = undefined;
+var drives: std.ArrayList(DriveInfo) = undefined;
+var initialized = false;
+
+pub const IDEOperation = struct {
     drive_idx: usize,
     lba: u32,
     count: u16,
-    buf: []u8,
-    timeout: ?usize,
-) types.Error!void {
-    const drive_info = controller.getDriveInfo(drive_idx) orelse {
-        return error.InvalidDrive;
-    };
+    buffer: Buffer,
+    is_write: bool,
+    callback: ?*const fn (result: IDEError!void) void = null,
+};
 
-    return switch (drive_info.drive_type) {
-        .ATA => ata.read(drive_idx, lba, count, buf, timeout),
-        .ATAPI => atapi.readCDROM(drive_idx, lba, count, buf, timeout),
-        else => error.InvalidDrive,
-    };
+pub fn init() !void {
+    if (initialized) return;
+
+    channels = std.ArrayListAligned(Channel, 4).init(allocator);
+    drives = std.ArrayList(DriveInfo).init(allocator);
+
+    try discovery.discoverControllers(&channels);
+    try discovery.detectDrives(&channels, &drives);
+
+    initialized = true;
+    logger.info("IDE driver initialized with {} drives", .{drives.items.len});
 }
 
-/// Write data to a drive (ATA only)
-pub fn write(
-    drive_idx: usize,
-    lba: u32,
-    count: u16,
-    buf: []const u8,
-    timeout: ?usize,
-) types.Error!void {
-    const drive_info = controller.getDriveInfo(drive_idx) orelse {
-        return error.InvalidDrive;
-    };
+pub fn deinit() void {
+    if (!initialized) return;
 
-    return switch (drive_info.drive_type) {
-        .ATA => ata.write(drive_idx, lba, count, buf, timeout),
-        .ATAPI => error.InvalidDrive, // CD-ROM are read-only
-        else => error.invaliddrive,
-    };
+    channels.deinit();
+    drives.deinit();
+    initialized = false;
 }
 
-// === DRIVE INFORMATION API ===
-
-/// Get drive information by index
-pub fn getDriveInfo(drive_idx: usize) ?types.DriveInfo {
-    return controller.getDriveInfo(drive_idx);
-}
-
-/// Get total number of detected drives
 pub fn getDriveCount() usize {
-    return controller.getDriveCount();
+    return drives.items.len;
 }
 
-/// Get drive capacity
-pub fn getDriveCapacity(drive_idx: usize) types.Error!types.Capacity {
-    const drive_info = controller.getDriveInfo(drive_idx) orelse {
-        return error.InvalidDrive;
-    };
+pub fn getDriveInfo(drive_idx: usize) ?DriveInfo {
+    if (drive_idx >= drives.items.len) return null;
+    return drives.items[drive_idx];
+}
 
-    // For ATAPI drives, capacity might change if media is inserted/removed
-    if (drive_info.drive_type == .ATAPI) {
-        // TODO: Implement dynamic capacity reading for ATAPI
-        // For now, return the cached capacity
+pub fn performOperation(op: *IDEOperation) IDEError!void {
+    if (op.drive_idx >= drives.items.len) return IDEError.InvalidDrive;
+
+    const drive = &drives.items[op.drive_idx];
+    const channel = getChannelForDrive(drive) orelse return IDEError.InvalidDrive;
+
+    if (drive.drive_type == .ATAPI and op.is_write) {
+        return IDEError.NotSupported;
     }
 
-    return drive_info.capacity;
+    try performPollingOperation(channel, drive, op);
+
+    if (op.callback) |cb| {
+        cb({});
+    }
 }
 
-/// Check if a drive is removable
-pub fn isDriveRemovable(drive_idx: usize) bool {
-    const drive_info = controller.getDriveInfo(drive_idx) orelse return false;
-    return drive_info.removable;
+fn performPollingOperation(channel: *Channel, drive: *DriveInfo, op: *IDEOperation) IDEError!void {
+    channel.mutex.acquire();
+    defer channel.mutex.release();
+
+    if (drive.drive_type == .ATA) {
+        try ata.performPolling(channel, drive, op);
+    } else {
+        try atapi.performPolling(channel, drive, op);
+    }
 }
 
-/// Get drive type
-pub fn getDriveType(drive_idx: usize) ?types.DriveType {
-    const drive_info = controller.getDriveInfo(drive_idx) orelse return null;
-    return drive_info.drive_type;
-}
-
-// === UTILITY FUNCTIONS ===
-
-/// List all drives (wrapper for controller function)
-pub fn listDrives() void {
-    controller.listDrives();
-}
-
-// === INITIALIZATION ===
-
-/// Initialize the IDE driver system
-pub fn init() !void {
-    try controller.init();
-    controller.listDrives();
-    logger.info("{d} drives initialized", .{controller.getDriveCount()});
-    logger.info("IDE driver initialized with PCI support", .{});
-}
-
-/// Clean up IDE resources
-pub fn deinit() void {
-    controller.deinit();
+fn getChannelForDrive(drive: *const DriveInfo) ?*Channel {
+    for (channels.items) |*ch| {
+        if (ch.channel_type == drive.channel) return ch;
+    }
+    return null;
 }

@@ -1,135 +1,71 @@
-const ft = @import("ft");
+const std = @import("std");
 const cpu = @import("../../cpu.zig");
-const logger = ft.log.scoped(.ata);
-
-const types = @import("types.zig");
+const timer = @import("../../timer.zig");
 const constants = @import("constants.zig");
+const types = @import("types.zig");
 const common = @import("common.zig");
 const Channel = @import("channel.zig");
-const controller = @import("controller.zig");
-const request_manager = @import("request_manager.zig");
 
-// === PUBLIC API ===
+pub fn performPolling(channel: *Channel, drive: *types.DriveInfo, op: *@import("ide.zig").IDEOperation) types.IDEError!void {
+    if (op.lba > 0xFFFFFFF) return types.IDEError.OutOfBounds;
 
-/// Read data from ATA drive
-pub fn read(drive_idx: usize, lba: u32, count: u16, buf: []u8, timeout: ?usize) types.Error!void {
-    try performOperation(drive_idx, lba, count, buf, timeout, .read);
-}
+    const total_chunks = getTotalChunks(op.count);
 
-/// Write data to ATA drive
-pub fn write(drive_idx: usize, lba: u32, count: u16, buf: []const u8, timeout: ?usize) types.Error!void {
-    try performOperation(drive_idx, lba, count, buf, timeout, .write);
-}
+    for (0..total_chunks) |chunk_idx| {
+        const chunk_info = getChunkInfo(op.count, chunk_idx);
+        if (chunk_info.count == 0) break;
 
-// === INTERNAL OPERATIONS ===
+        const chunk_lba = op.lba + (chunk_idx * 255);
+        const lba32 = @as(u32, @truncate(chunk_lba));
 
-fn performOperation(
-    drive_idx: usize,
-    lba: u32,
-    count: u16,
-    buf: []u8,
-    timeout: ?usize,
-    operation_type: enum { read, write },
-) types.Error!void {
-    if (drive_idx >= controller.getDriveCount()) return error.InvalidDrive;
-    const drive_info = controller.getDriveInfo(drive_idx).?;
-    if (!drive_info.isATA()) return error.InvalidDrive;
-    if (count == 0) return error.InvalidCount;
-    if (buf.len < @as(usize, count) * 512) return error.BufferTooSmall;
+        common.selectLBADevice(drive, channel.base, lba32);
 
-    // Handle 256 sector chunks
-    var remaining = count;
-    var current_lba = lba;
-    var offset: usize = 0;
+        _ = try common.waitForReady(channel.base, 1000);
 
-    while (remaining > 0) {
-        const chunk = @min(remaining, 256);
-        var request = types.Request{
-            .channel = drive_info.channel,
-            .drive = drive_info.drive,
-            .command = switch (operation_type) {
-                .read => constants.ATA.CMD_READ_SECTORS,
-                .write => constants.ATA.CMD_WRITE_SECTORS,
-            },
-            .lba = current_lba,
-            .count = chunk,
-            .buffer = switch (operation_type) {
-                .read => .{ .read = buf[offset .. offset + (@as(usize, chunk) * 512)] },
-                .write => .{ .write = buf[offset .. offset + (@as(usize, chunk) * 512)] },
-            },
-            .is_atapi = false,
-        };
+        cpu.outb(channel.base + constants.ATA.REG_SEC_COUNT, chunk_info.count);
+        cpu.outb(channel.base + constants.ATA.REG_LBA_LOW, @truncate(lba32));
+        cpu.outb(channel.base + constants.ATA.REG_LBA_MID, @truncate(lba32 >> 8));
+        cpu.outb(channel.base + constants.ATA.REG_LBA_HIGH, @truncate(lba32 >> 16));
 
-        try request_manager.sendRequest(&request, timeout);
+        const cmd = if (op.is_write) constants.ATA.CMD_WRITE_SECTORS else constants.ATA.CMD_READ_SECTORS;
+        cpu.outb(channel.base + constants.ATA.REG_COMMAND, cmd);
 
-        remaining -= chunk;
-        current_lba += chunk;
-        offset += @as(usize, chunk) * 512;
-    }
-}
+        for (0..chunk_info.count) |i| {
+            _ = try common.waitForData(channel.base, 5000);
 
-/// Send ATA command to hardware
-pub fn sendCommandToHardware(channel: *Channel, request: *types.Request) !void {
-    // Select drive and configure LBA mode
-    const regDev = common.selectLBADevice(request.drive, request.lba);
-    cpu.outb(channel.base + constants.ATA.REG_DEVICE, regDev);
-    cpu.io_wait();
-
-    _ = try channel.waitForReady();
-
-    // Configure registers
-    cpu.outb(channel.base + constants.ATA.REG_SEC_COUNT, @truncate(request.count));
-    cpu.outb(channel.base + constants.ATA.REG_LBA_LOW, @truncate(request.lba));
-    cpu.outb(channel.base + constants.ATA.REG_LBA_MID, @truncate(request.lba >> 8));
-    cpu.outb(channel.base + constants.ATA.REG_LBA_HIGH, @truncate(request.lba >> 16));
-
-    // Clear pending interrupts
-    _ = cpu.inb(channel.base + constants.ATA.REG_STATUS);
-
-    // Send command
-    cpu.outb(channel.base + constants.ATA.REG_COMMAND, request.command);
-
-    // Handle write operations
-    if (request.command == constants.ATA.CMD_WRITE_SECTORS) {
-        const status = try channel.waitForData();
-        if (status & constants.ATA.STATUS_ERROR != 0) {
-            request.err = common.parseATAError(channel.base);
-            return request.err.?;
+            const offset = chunk_info.offset + i * 512;
+            if (op.is_write) {
+                common.writeSectorPIO(channel.base, op.buffer.write[offset .. offset + 512]);
+            } else {
+                common.readSectorPIO(channel.base, op.buffer.read[offset .. offset + 512]);
+            }
         }
 
-        common.writeSectorPIO(channel.base, request.buffer.write[0..512]);
-        request.current_sector = 1;
+        if (op.is_write) {
+            _ = try common.waitForReady(channel.base, 1000);
+        }
     }
 }
 
-/// Handle ATA interrupt
-pub fn handleInterrupt(channel: *Channel, request: *types.Request, status: u8) void {
-    _ = status;
+fn getChunkInfo(total_count: u16, chunk_index: usize) struct { count: u8, offset: usize } {
+    const max_chunk_size: u16 = 255;
+    const chunks_before = chunk_index;
+    const sectors_before = chunks_before * max_chunk_size;
 
-    switch (request.command) {
-        constants.ATA.CMD_READ_SECTORS => {
-            const offset = request.current_sector * 512;
-            common.readSectorPIO(channel.base, request.buffer.read[offset .. offset + 512]);
-            request.current_sector += 1;
-
-            if (request.current_sector >= request.count) {
-                request.completed = true;
-                channel.queue.try_unblock();
-            }
-        },
-        constants.ATA.CMD_WRITE_SECTORS => {
-            if (request.current_sector < request.count) {
-                const offset = request.current_sector * 512;
-                common.writeSectorPIO(channel.base, request.buffer.write[offset .. offset + 512]);
-                request.current_sector += 1;
-            } else {
-                request.completed = true;
-                channel.queue.try_unblock();
-            }
-        },
-        else => {
-            request.completed = true;
-            channel.queue.try_unblock();
-        },
+    if (sectors_before >= total_count) {
+        return .{ .count = 0, .offset = 0 };
     }
+
+    const remaining = total_count - @as(u16, @truncate(sectors_before));
+    const chunk_size = @min(remaining, max_chunk_size);
+
+    return .{
+        .count = @as(u8, @truncate(chunk_size)),
+        .offset = sectors_before * 512,
+    };
+}
+
+fn getTotalChunks(count: u16) usize {
+    const max_chunk_size: u16 = 255;
+    return (count + max_chunk_size - 1) / max_chunk_size;
 }

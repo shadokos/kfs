@@ -94,7 +94,7 @@ pub const IDEBlockDevice = struct {
         return name;
     }
 
-    fn ideRead(dev: *BlockDevice, start_block: u64, count: u32, buffer: []u8) BlockError!void {
+    fn ideRead(dev: *BlockDevice, start_block: u32, count: u32, buffer: []u8) BlockError!void {
         const self: *Self = @fieldParentPtr("base", dev);
 
         if (self.drive_info.drive_type == .ATAPI) {
@@ -119,7 +119,7 @@ pub const IDEBlockDevice = struct {
         };
     }
 
-    fn ideWrite(dev: *BlockDevice, start_block: u64, count: u32, buffer: []const u8) BlockError!void {
+    fn ideWrite(dev: *BlockDevice, start_block: u32, count: u32, buffer: []const u8) BlockError!void {
         const self: *Self = @fieldParentPtr("base", dev);
 
         if (self.drive_info.drive_type != .ATA) {

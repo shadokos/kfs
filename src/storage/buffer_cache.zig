@@ -8,7 +8,7 @@ const logger = std.log.scoped(.buffer_cache);
 
 pub const Buffer = struct {
     device: *BlockDevice,
-    block: u64,
+    block: u32,
     data: []align(16) u8,
     flags: Flags,
     ref_count: u32 = 0,
@@ -186,7 +186,7 @@ pub const BufferCache = struct {
         self.stats.writebacks += 1;
     }
 
-    pub fn get(self: *Self, device: *BlockDevice, block: u64) !*Buffer {
+    pub fn get(self: *Self, device: *BlockDevice, block: u32) !*Buffer {
         self.mutex.acquire();
         defer self.mutex.release();
 
