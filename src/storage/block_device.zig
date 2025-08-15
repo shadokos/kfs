@@ -2,18 +2,18 @@ const std = @import("std");
 const logger = std.log.scoped(.block_device);
 
 pub const BlockError = error{
-DeviceNotFound,
-DeviceExists,
-BufferTooSmall,
-OutOfBounds,
-WriteProtected,
-NotSupported,
-IoError,
-NoFreeBuffers,
-InvalidOperation,
-MediaNotPresent,
-DeviceBusy,
-CorruptedData,
+    DeviceNotFound,
+    DeviceExists,
+    BufferTooSmall,
+    OutOfBounds,
+    WriteProtected,
+    NotSupported,
+    IoError,
+    NoFreeBuffers,
+    InvalidOperation,
+    MediaNotPresent,
+    DeviceBusy,
+    CorruptedData,
 };
 
 pub const DeviceType = enum {
@@ -61,10 +61,10 @@ pub const DeviceInfo = struct {
 };
 
 pub const Operations = struct {
-    read: *const fn (dev: *BlockDevice, start_block: u64, count: u32, buffer: []u8) BlockError!void,
-    write: *const fn (dev: *BlockDevice, start_block: u64, count: u32, buffer: []const u8) BlockError!void,
+    read: *const fn (dev: *BlockDevice, start_block: u32, count: u32, buffer: []u8) BlockError!void,
+    write: *const fn (dev: *BlockDevice, start_block: u32, count: u32, buffer: []const u8) BlockError!void,
     flush: ?*const fn (dev: *BlockDevice) BlockError!void = null,
-    trim: ?*const fn (dev: *BlockDevice, start_block: u64, count: u32) BlockError!void = null,
+    trim: ?*const fn (dev: *BlockDevice, start_block: u32, count: u32) BlockError!void = null,
     get_info: ?*const fn (dev: *BlockDevice) DeviceInfo = null,
     media_changed: ?*const fn (dev: *BlockDevice) bool = null,
     revalidate: ?*const fn (dev: *BlockDevice) BlockError!void = null,
@@ -84,7 +84,7 @@ pub const BlockDevice = struct {
 
     const Self = @This();
 
-    pub fn read(self: *Self, start_block: u64, count: u32, buffer: []u8) BlockError!void {
+    pub fn read(self: *Self, start_block: u32, count: u32, buffer: []u8) BlockError!void {
         if (buffer.len < count * self.block_size) return BlockError.BufferTooSmall;
         if (start_block + count > self.total_blocks) return BlockError.OutOfBounds;
         if (!self.features.readable) return BlockError.NotSupported;
@@ -95,7 +95,7 @@ pub const BlockDevice = struct {
         self.stats.blocks_read += count;
     }
 
-    pub fn write(self: *Self, start_block: u64, count: u32, buffer: []const u8) BlockError!void {
+    pub fn write(self: *Self, start_block: u32, count: u32, buffer: []const u8) BlockError!void {
         if (buffer.len < count * self.block_size) return BlockError.BufferTooSmall;
         if (start_block + count > self.total_blocks) return BlockError.OutOfBounds;
         if (!self.features.writable) return BlockError.WriteProtected;
@@ -112,7 +112,7 @@ pub const BlockDevice = struct {
         }
     }
 
-    pub fn trim(self: *Self, start_block: u64, count: u32) BlockError!void {
+    pub fn trim(self: *Self, start_block: u32, count: u32) BlockError!void {
         if (!self.features.supports_trim) return BlockError.NotSupported;
         if (self.ops.trim) |trim_fn| {
             try trim_fn(self, start_block, count);

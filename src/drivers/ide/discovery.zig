@@ -1,30 +1,19 @@
 const std = @import("std");
-const pci = @import("../pci/pci.zig");
 const cpu = @import("../../cpu.zig");
-const ArrayList = std.ArrayList;
+const pci = @import("../pci/pci.zig");
+const timer = @import("../../timer.zig");
 const logger = std.log.scoped(.ide_discovery);
 
-const constants = @import("constants.zig");
-const types = @import("types.zig");
-const common = @import("common.zig");
-const Channel = @import("channel.zig");
+pub const constants = @import("constants.zig");
+pub const Channel = @import("channel.zig");
+pub const DriveInfo = @import("types.zig").DriveInfo;
+pub const DriveType = @import("types.zig").DriveType;
+pub const Capacity = @import("types.zig").Capacity;
+pub const IDEError = @import("types.zig").IDEError;
 
 const allocator = @import("../../memory.zig").smallAlloc.allocator();
 
-// === PCI CONTROLLER INFO ===
-
-pub const PCIControllerInfo = struct {
-    pci_device: pci.PCIDevice,
-    interface: pci.IDEInterface,
-};
-
-// === PCI DISCOVERY ===
-
-/// Discover PCI IDE controllers
-pub fn discoverPCIControllers() !ArrayList(PCIControllerInfo) {
-    var controllers = ArrayList(PCIControllerInfo).init(allocator);
-    errdefer controllers.deinit();
-
+pub fn discoverControllers(channels: *std.ArrayListAligned(Channel, 4)) !void {
     const ide_controllers = pci.findIDEControllers();
 
     if (ide_controllers) |controller_list| {
@@ -33,60 +22,84 @@ pub fn discoverPCIControllers() !ArrayList(PCIControllerInfo) {
         for (controller_list) |controller| {
             const interface = controller.getIDEInterface() orelse continue;
 
-            logger.info("IDE controller found: {}:{}.{} - Interface: {s}", .{
-                controller.bus,
-                controller.device,
-                controller.function,
-                @tagName(interface),
-            });
+            var primary_base: u16 = 0x1F0;
+            var primary_ctrl: u16 = 0x3F6;
+            var secondary_base: u16 = 0x170;
+            var secondary_ctrl: u16 = 0x376;
 
-            controller.enableDevice();
+            if (interface.isPCINative()) {
+                primary_base = @truncate(controller.bars[0] & 0xFFFC);
+                primary_ctrl = @truncate(controller.bars[1] & 0xFFFC);
+                secondary_base = @truncate(controller.bars[2] & 0xFFFC);
+                secondary_ctrl = @truncate(controller.bars[3] & 0xFFFC);
+            }
 
-            try controllers.append(PCIControllerInfo{
-                .pci_device = controller,
-                .interface = interface,
-            });
+            if (primary_base != 0) {
+                try channels.append(Channel{
+                    .base = primary_base,
+                    .ctrl = primary_ctrl,
+                    .channel_type = .Primary,
+                    .irq = if (interface.isPCINative()) controller.irq_line else 14,
+                });
+            }
+
+            if (secondary_base != 0) {
+                try channels.append(Channel{
+                    .base = secondary_base,
+                    .ctrl = secondary_ctrl,
+                    .channel_type = .Secondary,
+                    .irq = if (interface.isPCINative()) controller.irq_line else 15,
+                });
+            }
         }
     }
 
-    if (controllers.items.len == 0) {
-        logger.warn("No IDE controllers found via PCI, using legacy ports", .{});
-        try addLegacyController(&controllers);
+    if (channels.items.len == 0) {
+        try channels.append(Channel{
+            .base = 0x1F0,
+            .ctrl = 0x3F6,
+            .channel_type = .Primary,
+            .irq = 14,
+        });
+        try channels.append(Channel{
+            .base = 0x170,
+            .ctrl = 0x376,
+            .channel_type = .Secondary,
+            .irq = 15,
+        });
+    }
+}
+
+pub fn detectDrives(channels: *std.ArrayListAligned(Channel, 4), drives: *std.ArrayList(DriveInfo)) !void {
+    for (channels.items) |*channel| {
+        for ([_]Channel.DrivePosition{ .Master, .Slave }) |position| {
+            if (try detectDrive(channel, position)) |drive_info| {
+                try drives.append(drive_info);
+            }
+        }
+    }
+}
+
+pub fn detectDrive(channel: *Channel, position: Channel.DrivePosition) !?DriveInfo {
+    // First, try ATA detection
+    if (try detectATADrive(channel, position)) |drive_info| {
+        logger.debug("ATA drive detected on {s} {s}", .{ @tagName(channel.channel_type), @tagName(position) });
+        return drive_info;
     }
 
-    return controllers;
+    // Then try ATAPI detection
+    if (try detectATAPIDrive(channel, position)) |drive_info| {
+        logger.debug("ATAPI drive detected on {s} {s}", .{ @tagName(channel.channel_type), @tagName(position) });
+        return drive_info;
+    }
+
+    return null;
 }
 
-/// Add legacy IDE controller
-fn addLegacyController(controllers: *ArrayList(PCIControllerInfo)) !void {
-    const legacy_device = pci.PCIDevice{
-        .bus = 0,
-        .device = 0,
-        .function = 0,
-        .vendor_id = 0x0000,
-        .device_id = 0x0000,
-        .class_code = .MassStorage,
-        .subclass = 0x01,
-        .prog_if = 0x00,
-        .revision = 0,
-        .header_type = 0,
-        .bars = .{ 0x1F0, 0x3F6, 0x170, 0x376, 0x0000, 0 },
-        .irq_line = 14,
-        .irq_pin = 1,
-    };
-
-    try controllers.append(PCIControllerInfo{
-        .pci_device = legacy_device,
-        .interface = .ISACompatibility,
-    });
-}
-
-// === DRIVE DETECTION ===
-
-/// Detect ATA drive on specified channel and position
-pub fn detectATADrive(channel: *Channel, drive: types.DriveInfo.DrivePosition) ?types.DriveInfo {
+/// Detect ATA drive
+fn detectATADrive(channel: *Channel, position: Channel.DrivePosition) !?DriveInfo {
     // Select drive
-    const select: u8 = if (drive == .Master) 0xA0 else 0xB0;
+    const select: u8 = if (position == .Master) 0xA0 else 0xB0;
     cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
     cpu.io_wait();
 
@@ -103,20 +116,20 @@ pub fn detectATADrive(channel: *Channel, drive: types.DriveInfo.DrivePosition) ?
     }
 
     // Wait for response
-    status = common.waitForDataPolling(channel.base, 1000) catch return null;
+    status = waitForData(channel.base, 1000) catch return null;
 
     if (status & constants.ATA.STATUS_ERROR != 0) {
         return null;
     }
 
     // Read IDENTIFY data
-    return parseATAIdentify(channel, drive);
+    return parseATAIdentifyData(channel, position);
 }
 
-/// Detect ATAPI drive on specified channel and position
-pub fn detectATAPIDrive(channel: *Channel, drive: types.DriveInfo.DrivePosition) ?types.DriveInfo {
+/// Detect ATAPI drive
+fn detectATAPIDrive(channel: *Channel, position: Channel.DrivePosition) !?DriveInfo {
     // Select drive
-    const select: u8 = if (drive == .Master) 0xA0 else 0xB0;
+    const select: u8 = if (position == .Master) 0xA0 else 0xB0;
     cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
     cpu.io_wait();
 
@@ -127,7 +140,7 @@ pub fn detectATAPIDrive(channel: *Channel, drive: types.DriveInfo.DrivePosition)
     cpu.io_wait();
 
     // Wait for stabilization
-    _ = common.waitForReadyPolling(channel.base, 1000) catch return null;
+    _ = waitForReady(channel.base, 1000) catch return null;
 
     // Check ATAPI signature
     const lba_mid = cpu.inb(channel.base + constants.ATA.REG_LBA_MID);
@@ -135,23 +148,23 @@ pub fn detectATAPIDrive(channel: *Channel, drive: types.DriveInfo.DrivePosition)
 
     if (lba_mid == 0x14 and lba_high == 0xEB) {
         // ATAPI signature found
-        logger.debug("ATAPI drive detected on {s} {s}", .{ @tagName(channel.channel), @tagName(drive) });
+        logger.debug("ATAPI signature found on {s} {s}", .{ @tagName(channel.channel_type), @tagName(position) });
 
         // Send IDENTIFY PACKET DEVICE command
         cpu.outb(channel.base + constants.ATA.REG_COMMAND, constants.ATA.CMD_IDENTIFY_PACKET);
         cpu.io_wait();
 
-        const status = common.waitForDataPolling(channel.base, 1000) catch return null;
+        const status = waitForData(channel.base, 1000) catch return null;
         if (status & constants.ATA.STATUS_ERROR != 0) return null;
 
-        return parseATAPIIdentify(channel, drive);
+        return parseATAPIIdentifyData(channel, position);
     }
 
     return null;
 }
 
 /// Parse ATA IDENTIFY response
-fn parseATAIdentify(channel: *Channel, drive: types.DriveInfo.DrivePosition) ?types.DriveInfo {
+fn parseATAIdentifyData(channel: *Channel, position: Channel.DrivePosition) DriveInfo {
     var raw: [256]u16 = undefined;
     for (0..256) |i| {
         raw[i] = cpu.inw(channel.base + constants.ATA.REG_DATA);
@@ -183,24 +196,24 @@ fn parseATAIdentify(channel: *Channel, drive: types.DriveInfo.DrivePosition) ?ty
     const total: u64 = (@as(u64, sec_hi) << 16) | sec_lo;
 
     logger.debug("ATA {s} {s}: {s} ({} sectors)", .{
-        @tagName(channel.channel),
-        @tagName(drive),
+        @tagName(channel.channel_type),
+        @tagName(position),
         model_arr[0..model_len],
         total,
     });
 
-    return types.DriveInfo{
+    return DriveInfo{
         .drive_type = .ATA,
-        .channel = channel.channel,
-        .drive = drive,
+        .channel = channel.channel_type,
+        .position = position,
         .model = model_arr,
-        .capacity = types.Capacity.init(total, 512),
+        .capacity = Capacity{ .sectors = total, .sector_size = 512 },
         .removable = false,
     };
 }
 
 /// Parse ATAPI IDENTIFY response
-fn parseATAPIIdentify(channel: *Channel, drive: types.DriveInfo.DrivePosition) ?types.DriveInfo {
+fn parseATAPIIdentifyData(channel: *Channel, position: Channel.DrivePosition) DriveInfo {
     var raw: [256]u16 = undefined;
     for (0..256) |i| {
         raw[i] = cpu.inw(channel.base + constants.ATA.REG_DATA);
@@ -229,37 +242,37 @@ fn parseATAPIIdentify(channel: *Channel, drive: types.DriveInfo.DrivePosition) ?
     const removable = (raw[0] & 0x80) != 0;
 
     logger.debug("ATAPI {s} {s}: {s} (removable: {s})", .{
-        @tagName(channel.channel),
-        @tagName(drive),
+        @tagName(channel.channel_type),
+        @tagName(position),
         model_arr[0..model_len],
         if (removable) "yes" else "no",
     });
 
     // Try to get capacity (may fail if no media)
-    var capacity = types.Capacity.init(0, 2048);
-    if (getATAPICapacity(channel, drive)) |cap| {
+    var capacity = Capacity{ .sectors = 0, .sector_size = 2048 };
+    if (getATAPICapacityImproved(channel, position)) |cap| {
         capacity = cap;
-    } else |_| {
-        logger.debug("Could not read ATAPI capacity (no media?)", .{});
+    } else |err| {
+        logger.debug("Could not read ATAPI capacity: {s} (no media?)", .{@errorName(err)});
     }
 
-    return types.DriveInfo{
+    return DriveInfo{
         .drive_type = .ATAPI,
-        .channel = channel.channel,
-        .drive = drive,
+        .channel = channel.channel_type,
+        .position = position,
         .model = model_arr,
         .capacity = capacity,
         .removable = removable,
     };
 }
 
-/// Get ATAPI drive capacity
-fn getATAPICapacity(channel: *Channel, drive: types.DriveInfo.DrivePosition) !types.Capacity {
-    const select: u8 = if (drive == .Master) 0xA0 else 0xB0;
+/// Get ATAPI drive capacity (improved version)
+fn getATAPICapacityImproved(channel: *Channel, position: Channel.DrivePosition) !Capacity {
+    const select: u8 = if (position == .Master) 0xA0 else 0xB0;
     cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
     cpu.io_wait();
 
-    _ = try common.waitForReadyPolling(channel.base, 1000);
+    _ = try waitForReady(channel.base, 1000);
 
     // Configure for PACKET command
     cpu.outb(channel.base + constants.ATA.REG_FEATURES, 0x00);
@@ -270,13 +283,13 @@ fn getATAPICapacity(channel: *Channel, drive: types.DriveInfo.DrivePosition) !ty
     cpu.outb(channel.base + constants.ATA.REG_COMMAND, constants.ATA.CMD_PACKET);
 
     // Wait for DRQ
-    const status = try common.waitForDataPolling(channel.base, 1000);
+    const status = try waitForData(channel.base, 1000);
     if (status & constants.ATA.STATUS_ERROR != 0) {
-        return error.ReadError;
+        return IDEError.ReadError;
     }
 
     // Send READ CAPACITY packet
-    var packet: [constants.ATAPI.PACKET_SIZE]u8 = .{0} ** constants.ATAPI.PACKET_SIZE;
+    var packet: [12]u8 = .{0} ** 12;
     packet[0] = constants.ATAPI.CMD_READ_CAPACITY;
 
     // Send packet (6 words)
@@ -288,7 +301,7 @@ fn getATAPICapacity(channel: *Channel, drive: types.DriveInfo.DrivePosition) !ty
     }
 
     // Wait for data
-    _ = try common.waitForDataPolling(channel.base, 1000);
+    _ = try waitForData(channel.base, 1000);
 
     // Read response (8 bytes)
     var response: [8]u8 = undefined;
@@ -309,5 +322,52 @@ fn getATAPICapacity(channel: *Channel, drive: types.DriveInfo.DrivePosition) !ty
         (@as(u32, response[6]) << 8) |
         response[7];
 
-    return types.Capacity.init(last_lba + 1, block_size);
+    return Capacity{ .sectors = last_lba + 1, .sector_size = block_size };
+}
+
+// Utility functions needed for discovery
+fn waitForReady(base: u16, timeout_ms: usize) IDEError!u8 {
+    const deadline = timer.get_time_since_boot() + timeout_ms;
+
+    while (true) {
+        const status = cpu.inb(base + constants.ATA.REG_STATUS);
+        if ((status & constants.ATA.STATUS_BUSY) == 0) {
+            if (status & constants.ATA.STATUS_ERROR != 0) {
+                return parseError(base);
+            }
+            return status;
+        }
+        if (timer.get_time_since_boot() >= deadline) {
+            return IDEError.Timeout;
+        }
+        cpu.io_wait();
+    }
+}
+
+fn waitForData(base: u16, timeout_ms: usize) IDEError!u8 {
+    const deadline = timer.get_time_since_boot() + timeout_ms;
+
+    while (true) {
+        const status = cpu.inb(base + constants.ATA.REG_STATUS);
+        if ((status & (constants.ATA.STATUS_BUSY | constants.ATA.STATUS_DRQ)) == constants.ATA.STATUS_DRQ) {
+            return status;
+        }
+        if (timer.get_time_since_boot() >= deadline) {
+            return IDEError.Timeout;
+        }
+        cpu.io_wait();
+    }
+}
+
+fn parseError(base: u16) IDEError {
+    const err = cpu.inb(base + constants.ATA.REG_ERROR_READ);
+    if (err & constants.ATA.ERROR_BAD_BLOCK != 0) return IDEError.BadBlock;
+    if (err & constants.ATA.ERROR_UNCORRECTABLE != 0) return IDEError.UncorrectableError;
+    if (err & constants.ATA.ERROR_MEDIA_CHANGED != 0) return IDEError.MediaChanged;
+    if (err & constants.ATA.ERROR_ID_MARK_NOT_FOUND != 0) return IDEError.SectorNotFound;
+    if (err & constants.ATA.ERROR_MEDIA_CHANGE_REQ != 0) return IDEError.MediaChangeRequested;
+    if (err & constants.ATA.ERROR_CMD_ABORTED != 0) return IDEError.CommandAborted;
+    if (err & constants.ATA.ERROR_TRACK0_NOT_FOUND != 0) return IDEError.Track0NotFound;
+    if (err & constants.ATA.ERROR_ADDR_MARK_NOT_FOUND != 0) return IDEError.AddressMarkNotFound;
+    return IDEError.UnknownError;
 }
