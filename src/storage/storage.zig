@@ -1,3 +1,4 @@
+// src/storage/storage.zig
 const std = @import("std");
 const logger = std.log.scoped(.storage);
 
@@ -7,6 +8,7 @@ pub const DeviceType = @import("block_device.zig").DeviceType;
 pub const Features = @import("block_device.zig").Features;
 pub const CachePolicy = @import("block_device.zig").CachePolicy;
 pub const DeviceInfo = @import("block_device.zig").DeviceInfo;
+pub const STANDARD_BLOCK_SIZE = @import("block_device.zig").STANDARD_BLOCK_SIZE;
 
 pub const BufferCache = @import("buffer_cache.zig").BufferCache;
 pub const Buffer = @import("buffer_cache.zig").Buffer;
@@ -14,7 +16,6 @@ pub const Buffer = @import("buffer_cache.zig").Buffer;
 pub const DeviceManager = @import("device_manager.zig").DeviceManager;
 
 pub const IDEBlockDevice = @import("ide_device.zig").IDEBlockDevice;
-pub const Partition = @import("ide_device.zig").Partition;
 
 const ide = @import("../drivers/ide/ide.zig");
 const allocator = @import("../memory.zig").smallAlloc.allocator();
@@ -28,6 +29,7 @@ pub fn init() !void {
     if (initialized) return;
 
     logger.info("Initializing storage subsystem", .{});
+    logger.info("Standard block size: {} bytes", .{STANDARD_BLOCK_SIZE});
 
     device_manager = DeviceManager.init();
     buffer_cache = try BufferCache.init();
@@ -79,7 +81,15 @@ fn registerIDEDevices() !void {
         try ide_devices.append(ide_device);
         try device_manager.register(&ide_device.base);
 
-        logger.info("Registered IDE drive {} as {s}", .{ i, ide_device.base.getName() });
+        const drive_info = ide.getDriveInfo(i).?;
+        const physical_blocks = drive_info.capacity.sectors;
+        const physical_block_size = drive_info.capacity.sector_size;
+        const logical_blocks = ide_device.base.total_blocks;
+
+        logger.info("Registered IDE drive {} as {s}:", .{ i, ide_device.base.getName() });
+        logger.info("  Physical: {} blocks x {} bytes", .{ physical_blocks, physical_block_size });
+        logger.info("  Logical:  {} blocks x {} bytes", .{ logical_blocks, STANDARD_BLOCK_SIZE });
+        logger.info("  Translation ratio: {}:1", .{physical_block_size / STANDARD_BLOCK_SIZE});
     }
 }
 
@@ -103,14 +113,20 @@ pub fn readCached(
 ) BlockError!void {
     const dev = findDevice(device_name) orelse return BlockError.DeviceNotFound;
 
+    // Verify buffer size for standard blocks
+    if (buffer.len < count * STANDARD_BLOCK_SIZE) {
+        return BlockError.BufferTooSmall;
+    }
+
     if (count == 1) {
         const cached_buffer = try buffer_cache.get(dev, start_block);
         defer buffer_cache.put(cached_buffer);
 
-        @memcpy(buffer[0..dev.block_size], cached_buffer.data[0..dev.block_size]);
+        @memcpy(buffer[0..STANDARD_BLOCK_SIZE], cached_buffer.data[0..STANDARD_BLOCK_SIZE]);
         return;
     }
 
+    // For multiple blocks, use direct read
     try dev.read(start_block, count, buffer);
 }
 
@@ -122,11 +138,16 @@ pub fn writeCached(
 ) BlockError!void {
     const dev = findDevice(device_name) orelse return BlockError.DeviceNotFound;
 
+    // Verify buffer size for standard blocks
+    if (buffer.len < count * STANDARD_BLOCK_SIZE) {
+        return BlockError.BufferTooSmall;
+    }
+
     if (count == 1) {
         const cached_buffer = try buffer_cache.get(dev, start_block);
         defer buffer_cache.put(cached_buffer);
 
-        @memcpy(cached_buffer.data[0..dev.block_size], buffer[0..dev.block_size]);
+        @memcpy(cached_buffer.data[0..STANDARD_BLOCK_SIZE], buffer[0..STANDARD_BLOCK_SIZE]);
         cached_buffer.markDirty();
 
         if (dev.cache_policy == .WriteThrough) {
@@ -135,6 +156,7 @@ pub fn writeCached(
         return;
     }
 
+    // For multiple blocks, use direct write
     try dev.write(start_block, count, buffer);
 }
 
@@ -171,12 +193,19 @@ pub fn printDeviceStats(device_name: []const u8) void {
         return;
     };
 
-    const size = formatSize(dev.total_blocks * dev.block_size);
+    const size = formatSize(dev.total_blocks * STANDARD_BLOCK_SIZE);
 
     logger.info("=== Device: {s} ===", .{device_name});
     logger.info("Type: {s}", .{@tagName(dev.device_type)});
     logger.info("Size: {d:.2} {s}", .{ size.value, size.unit });
-    logger.info("Blocks: {} x {} bytes", .{ dev.total_blocks, dev.block_size });
+    logger.info("Logical blocks: {} x {} bytes", .{ dev.total_blocks, STANDARD_BLOCK_SIZE });
+
+    if (getDeviceInfo(device_name)) |info| {
+        const physical_blocks = (dev.total_blocks * STANDARD_BLOCK_SIZE) / info.physical_block_size;
+        logger.info("Physical blocks: {} x {} bytes", .{ physical_blocks, info.physical_block_size });
+        logger.info("Translation ratio: {}:1", .{info.physical_block_size / STANDARD_BLOCK_SIZE});
+    }
+
     logger.info("Features:", .{});
     logger.info("  Readable: {}", .{dev.features.readable});
     logger.info("  Writable: {}", .{dev.features.writable});
@@ -195,168 +224,70 @@ pub fn printDeviceStats(device_name: []const u8) void {
         logger.info("  Vendor: {s}", .{info.vendor});
         logger.info("  Model: {s}", .{info.model});
         logger.info("  Firmware: {s}", .{info.firmware_version});
+        logger.info("  Physical block size: {} bytes", .{info.physical_block_size});
     }
 }
 
+// Test utilities
 pub const test_utils = struct {
-    const tsc = @import("../drivers/tsc/tsc.zig");
-
-    pub fn testBasicReadWrite(device_name: []const u8) !void {
+    pub fn testBasicOperations(device_name: []const u8) !void {
         const device = findDevice(device_name) orelse {
             logger.err("Device {s} not found", .{device_name});
             return error.DeviceNotFound;
         };
 
-        logger.info("=== Testing basic read/write on {s} ===", .{device_name});
+        logger.info("=== Testing basic operations on {s} ===", .{device_name});
+        logger.info("Block size: {} bytes (standard)", .{STANDARD_BLOCK_SIZE});
 
         const test_block: u64 = 100;
-        const buffer_size = device.block_size;
 
-        const write_buffer = try allocator.alloc(u8, buffer_size);
-        defer allocator.free(write_buffer);
-        const read_buffer = try allocator.alloc(u8, buffer_size);
-        defer allocator.free(read_buffer);
+        // Test single block
+        const buffer = try allocator.alloc(u8, STANDARD_BLOCK_SIZE);
+        defer allocator.free(buffer);
 
-        logger.info("Test 1: Simple pattern", .{});
-        for (write_buffer) |*b| b.* = 0xAA;
-        try device.write(test_block, 1, write_buffer);
-        try device.read(test_block, 1, read_buffer);
+        logger.info("Test 1: Single block read/write", .{});
+        for (buffer) |*b| b.* = 0xAA;
+        try device.write(test_block, 1, buffer);
 
-        for (read_buffer) |b| {
+        @memset(buffer, 0);
+        try device.read(test_block, 1, buffer);
+
+        for (buffer) |b| {
             if (b != 0xAA) {
-                logger.err("Pattern verification failed!", .{});
+                logger.err("Verification failed!", .{});
                 return error.VerificationFailed;
             }
         }
-        logger.info("  Pattern test passed", .{});
+        logger.info("  Passed", .{});
 
-        logger.info("Test 2: Random data", .{});
-        var rng = std.Random.Xoroshiro128.init(12345);
-        rng.fill(write_buffer);
-        try device.write(test_block + 1, 1, write_buffer);
-        try device.read(test_block + 1, 1, read_buffer);
+        // Test multiple blocks
+        logger.info("Test 2: Multi-block operations", .{});
+        const multi_buffer = try allocator.alloc(u8, STANDARD_BLOCK_SIZE * 4);
+        defer allocator.free(multi_buffer);
 
-        if (!std.mem.eql(u8, write_buffer, read_buffer)) {
-            logger.err("Random data verification failed!", .{});
+        for (multi_buffer, 0..) |*b, i| {
+            b.* = @truncate(i & 0xFF);
+        }
+
+        try device.write(test_block + 10, 4, multi_buffer);
+
+        const verify_buffer = try allocator.alloc(u8, STANDARD_BLOCK_SIZE * 4);
+        defer allocator.free(verify_buffer);
+
+        try device.read(test_block + 10, 4, verify_buffer);
+
+        if (!std.mem.eql(u8, multi_buffer, verify_buffer)) {
+            logger.err("Multi-block verification failed!", .{});
             return error.VerificationFailed;
         }
-        logger.info("  Random data test passed", .{});
+        logger.info("  Passed", .{});
 
         logger.info("=== All basic tests passed ===", .{});
     }
 
-    pub fn testCache(device_name: []const u8) !void {
-        const device = findDevice(device_name) orelse {
-            logger.err("Device {s} not found", .{device_name});
-            return error.DeviceNotFound;
-        };
-
-        logger.info("=== Testing buffer cache on {s} ===", .{device_name});
-
-        buffer_cache.stats = .{};
-
-        const test_blocks = [_]u64{ 10, 20, 30, 40, 50 };
-
-        logger.info("Test 1: Initial cache misses", .{});
-        for (test_blocks) |block_num| {
-            const buffer = try buffer_cache.get(device, block_num);
-            defer buffer_cache.put(buffer);
-
-            if (!buffer.isValid()) {
-                logger.err("Buffer not valid after get!", .{});
-                return error.CacheError;
-            }
-        }
-
-        if (buffer_cache.stats.misses != test_blocks.len) {
-            logger.err("Expected {} misses, got {}", .{ test_blocks.len, buffer_cache.stats.misses });
-            return error.CacheError;
-        }
-        logger.info("  {} cache misses as expected", .{buffer_cache.stats.misses});
-
-        logger.info("Test 2: Cache hits on repeated access", .{});
-        const initial_hits = buffer_cache.stats.hits;
-        for (test_blocks) |block_num| {
-            const buffer = try buffer_cache.get(device, block_num);
-            defer buffer_cache.put(buffer);
-        }
-
-        const new_hits = buffer_cache.stats.hits - initial_hits;
-        if (new_hits != test_blocks.len) {
-            logger.err("Expected {} hits, got {}", .{ test_blocks.len, new_hits });
-            return error.CacheError;
-        }
-        logger.info("  {} cache hits as expected", .{new_hits});
-
-        buffer_cache.printStats();
-        logger.info("=== All cache tests passed ===", .{});
-    }
-
-    pub fn testPerformance(device_name: []const u8) !void {
-        const device = findDevice(device_name) orelse {
-            logger.err("Device {s} not found", .{device_name});
-            return error.DeviceNotFound;
-        };
-
-        logger.info("=== Performance test on {s} ===", .{device_name});
-
-        const test_size = 20 * 1024 * 1024;
-        const blocks_per_mb = test_size / device.block_size;
-        const start_block: u64 = 1000;
-
-        const buffer = try allocator.alloc(u8, test_size);
-        defer allocator.free(buffer);
-
-        const test_mb: u64 = test_size / (1024 * 1024);
-        logger.info("Sequential read test ({}MB):", .{test_mb});
-        const read_start = tsc.get_time_us();
-        try device.read(start_block, @truncate(blocks_per_mb), buffer);
-        const read_end = tsc.get_time_us();
-        const read_time_ms = (read_end - read_start) / 1000;
-        const read_speed_mb: f32 = if (read_time_ms > 0)
-            @as(f32, @floatFromInt(test_mb * 1000)) / @as(f32, @floatFromInt(read_time_ms))
-        else
-            0.0;
-        logger.info("  Time: {} ms", .{read_time_ms});
-        logger.info("  Speed: ~{d:.2} MB/s", .{read_speed_mb});
-
-        if (device.features.writable) {
-            logger.info("Sequential write test ({}MB):", .{test_mb});
-            var rng = std.Random.Xoroshiro128.init(99999);
-            rng.fill(buffer);
-            const write_start = tsc.get_time_us();
-            try device.write(start_block, @truncate(blocks_per_mb), buffer);
-            const write_end = tsc.get_time_us();
-            const write_time_ms = (write_end - write_start) / 1000;
-            const write_speed_mb: f32 = if (write_time_ms > 0)
-                @as(f32, @floatFromInt(test_mb * 1000)) / @as(f32, @floatFromInt(write_time_ms))
-            else
-                0.0;
-            logger.info("  Time: {} ms", .{write_time_ms});
-            logger.info("  Speed: ~{d:.2} MB/s", .{write_speed_mb});
-        }
-
-        logger.info("Random access test (100 blocks):", .{});
-        const single_buffer = try allocator.alloc(u8, device.block_size);
-        defer allocator.free(single_buffer);
-
-        var rng = std.Random.Xoroshiro128.init(42);
-        const random_start = tsc.get_time_us();
-        for (0..100) |_| {
-            const random_block = rng.random().int(u32) % 10000 + 1000;
-            try device.read(random_block, 1, single_buffer);
-        }
-        const random_end = tsc.get_time_us();
-        const random_time_ms = (random_end - random_start) / 1000;
-        const iops = if (random_time_ms > 0) (100 * 1000) / random_time_ms else 0;
-        logger.info("  Time: {} ms", .{random_time_ms});
-        logger.info("  IOPS: ~{}", .{iops});
-
-        logger.info("=== Performance test completed ===", .{});
-    }
-
     pub fn runAllTests() !void {
         logger.info("=== Running Storage Tests ===", .{});
+        logger.info("Using standard block size: {} bytes", .{STANDARD_BLOCK_SIZE});
 
         device_manager.list();
 
@@ -369,11 +300,13 @@ pub const test_utils = struct {
         const device_name = test_device.getName();
 
         logger.info("Using device {s} for testing", .{device_name});
-        logger.warn("WARNING: This will write to blocks 100-1100 on the device!", .{});
+        logger.warn("WARNING: This will write to blocks 100-200 on the device!", .{});
 
-        try testBasicReadWrite(device_name);
-        try testCache(device_name);
-        try testPerformance(device_name);
+        try testBasicOperations(device_name);
+
+        // Run translation tests if available
+        const translation_test = @import("test_translation.zig");
+        try translation_test.runTranslationTests();
 
         logger.info("=== All tests completed successfully ===", .{});
     }

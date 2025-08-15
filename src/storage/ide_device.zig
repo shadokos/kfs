@@ -7,14 +7,18 @@ const Features = @import("block_device.zig").Features;
 const CachePolicy = @import("block_device.zig").CachePolicy;
 const DeviceInfo = @import("block_device.zig").DeviceInfo;
 const Operations = @import("block_device.zig").Operations;
+const STANDARD_BLOCK_SIZE = @import("block_device.zig").STANDARD_BLOCK_SIZE;
 const logger = std.log.scoped(.ide_block);
 
-const allocator = @import("../memory.zig").smallAlloc.allocator();
+const allocator = @import("../memory.zig").bigAlloc.allocator();
 
 pub const IDEBlockDevice = struct {
     base: BlockDevice,
     drive_index: usize,
     drive_info: ide.DriveInfo,
+    physical_block_size: u32, // Actual hardware block size (512 for ATA, 2048 for ATAPI)
+    physical_to_logical_shift: u5, // How many logical blocks per physical block (as shift)
+    temp_buffer: []align(16) u8, // Buffer for partial physical block operations
 
     const ide_ops = Operations{
         .read = ideRead,
@@ -56,13 +60,28 @@ pub const IDEBlockDevice = struct {
         else
             .WriteBack;
 
+        // Calculate the shift value for conversion
+        const physical_block_size = drive_info.capacity.sector_size;
+        const shift = calculateShift(physical_block_size);
+
+        // Calculate total logical blocks (512-byte blocks)
+        const logical_blocks_per_physical = physical_block_size / STANDARD_BLOCK_SIZE;
+        const total_logical_blocks = drive_info.capacity.sectors * logical_blocks_per_physical;
+
+        // Allocate temp buffer for partial block operations
+        const temp_buffer = try allocator.alignedAlloc(u8, 16, physical_block_size);
+        errdefer allocator.free(temp_buffer);
+
         device.* = .{
             .base = .{
                 .name = device_name,
                 .device_type = device_type,
-                .block_size = drive_info.capacity.sector_size,
-                .total_blocks = drive_info.capacity.sectors,
-                .max_transfer = if (drive_info.drive_type == .ATA) 256 else 65535,
+                // .block_size = STANDARD_BLOCK_SIZE, // Always 512 bytes
+                .total_blocks = total_logical_blocks,
+                .max_transfer = if (drive_info.drive_type == .ATA)
+                    256 * logical_blocks_per_physical // Convert physical limit to logical blocks
+                else
+                    65535 * logical_blocks_per_physical,
                 .features = features,
                 .ops = &ide_ops,
                 .private_data = device,
@@ -70,13 +89,35 @@ pub const IDEBlockDevice = struct {
             },
             .drive_index = drive_index,
             .drive_info = drive_info,
+            .physical_block_size = physical_block_size,
+            .physical_to_logical_shift = shift,
+            .temp_buffer = temp_buffer,
         };
+
+        logger.info("Created IDE device {s}: {} logical blocks ({} physical blocks of {} bytes)", .{
+            device.base.getName(),
+            total_logical_blocks,
+            drive_info.capacity.sectors,
+            physical_block_size,
+        });
 
         return device;
     }
 
     pub fn destroy(self: *Self) void {
+        allocator.free(self.temp_buffer);
         allocator.destroy(self);
+    }
+
+    fn calculateShift(physical_block_size: u32) u5 {
+        // Calculate how many times to shift to convert between block sizes
+        // 512 -> 0, 1024 -> 1, 2048 -> 2, 4096 -> 3
+        var size = physical_block_size / STANDARD_BLOCK_SIZE;
+        var shift: u5 = 0;
+        while (size > 1) : (shift += 1) {
+            size >>= 1;
+        }
+        return shift;
     }
 
     fn generateDeviceName(drive_index: usize, drive_info: ide.DriveInfo) ![16]u8 {
@@ -97,26 +138,115 @@ pub const IDEBlockDevice = struct {
     fn ideRead(dev: *BlockDevice, start_block: u32, count: u32, buffer: []u8) BlockError!void {
         const self: *Self = @fieldParentPtr("base", dev);
 
-        if (self.drive_info.drive_type == .ATAPI) {
-            const sectors_per_block = dev.block_size / 2048;
-            if (sectors_per_block == 0) return BlockError.InvalidOperation;
-
-            const actual_count = count * sectors_per_block;
-            if (actual_count > 65535) return BlockError.OutOfBounds;
+        // If physical block size equals logical block size, direct operation
+        if (self.physical_block_size == STANDARD_BLOCK_SIZE) {
+            return ideReadDirect(self, start_block, count, buffer);
         }
 
+        // Otherwise, need to handle block size translation
+        return ideReadWithTranslation(self, start_block, count, buffer);
+    }
+
+    fn ideReadDirect(self: *Self, start_block: u32, count: u32, buffer: []u8) BlockError!void {
+        // Direct 1:1 mapping for ATA drives with 512-byte sectors
         var op = ide.IDEOperation{
             .drive_idx = self.drive_index,
-            .lba = start_block,
+            .lba = @truncate(start_block),
             .count = @truncate(count),
             .buffer = .{ .read = buffer },
             .is_write = false,
         };
 
         ide.performOperation(&op) catch |err| {
-            dev.stats.errors += 1;
+            self.base.stats.errors += 1;
             return mapIDEError(err);
         };
+    }
+
+    fn ideReadWithTranslation(self: *Self, start_logical: u32, count: u32, buffer: []u8) BlockError!void {
+        const logical_per_physical = @as(u32, 1) << self.physical_to_logical_shift;
+
+        // Calculate physical block range
+        const first_physical = start_logical >> self.physical_to_logical_shift;
+        const last_logical = start_logical + count - 1;
+        const last_physical = last_logical >> self.physical_to_logical_shift;
+        const physical_count = last_physical - first_physical + 1;
+
+        // Calculate offsets within first and last physical blocks
+        const first_offset = (start_logical & (logical_per_physical - 1)) * STANDARD_BLOCK_SIZE;
+        const last_end = ((last_logical & (logical_per_physical - 1)) + 1) * STANDARD_BLOCK_SIZE;
+
+        var buffer_offset: usize = 0;
+
+        // Handle first physical block (may be partial)
+        if (first_offset != 0 or (physical_count == 1 and last_end != self.physical_block_size)) {
+            // Need to read full physical block and extract relevant portion
+            var op = ide.IDEOperation{
+                .drive_idx = self.drive_index,
+                .lba = @truncate(first_physical),
+                .count = 1,
+                .buffer = .{ .read = self.temp_buffer },
+                .is_write = false,
+            };
+
+            ide.performOperation(&op) catch |err| {
+                self.base.stats.errors += 1;
+                return mapIDEError(err);
+            };
+
+            // Copy relevant portion to output buffer
+            const copy_start = first_offset;
+            const copy_end = if (physical_count == 1) last_end else self.physical_block_size;
+            const copy_len = copy_end - copy_start;
+            @memcpy(buffer[0..copy_len], self.temp_buffer[copy_start..copy_end]);
+            buffer_offset += copy_len;
+
+            if (physical_count == 1) return;
+        }
+
+        // Handle middle physical blocks (all complete)
+        const middle_start = if (first_offset == 0) first_physical else first_physical + 1;
+        const middle_count = if (last_end == self.physical_block_size)
+            physical_count - @intFromBool(first_offset != 0)
+        else
+            physical_count - @intFromBool(first_offset != 0) - 1;
+
+        if (middle_count > 0) {
+            var op = ide.IDEOperation{
+                .drive_idx = self.drive_index,
+                .lba = @truncate(middle_start),
+                .count = @truncate(middle_count),
+                .buffer = .{
+                    .read = buffer[buffer_offset .. buffer_offset + middle_count * self.physical_block_size],
+                },
+                .is_write = false,
+            };
+
+            ide.performOperation(&op) catch |err| {
+                self.base.stats.errors += 1;
+                return mapIDEError(err);
+            };
+
+            buffer_offset += middle_count * self.physical_block_size;
+        }
+
+        // Handle last physical block (may be partial)
+        if (physical_count > 1 and last_end != self.physical_block_size and first_offset == 0) {
+            var op = ide.IDEOperation{
+                .drive_idx = self.drive_index,
+                .lba = @truncate(last_physical),
+                .count = 1,
+                .buffer = .{ .read = self.temp_buffer },
+                .is_write = false,
+            };
+
+            ide.performOperation(&op) catch |err| {
+                self.base.stats.errors += 1;
+                return mapIDEError(err);
+            };
+
+            @memcpy(buffer[buffer_offset .. buffer_offset + last_end], self.temp_buffer[0..last_end]);
+        }
     }
 
     fn ideWrite(dev: *BlockDevice, start_block: u32, count: u32, buffer: []const u8) BlockError!void {
@@ -126,18 +256,144 @@ pub const IDEBlockDevice = struct {
             return BlockError.WriteProtected;
         }
 
+        // If physical block size equals logical block size, direct operation
+        if (self.physical_block_size == STANDARD_BLOCK_SIZE) {
+            return ideWriteDirect(self, start_block, count, buffer);
+        }
+
+        // Otherwise, need to handle block size translation
+        return ideWriteWithTranslation(self, start_block, count, buffer);
+    }
+
+    fn ideWriteDirect(self: *Self, start_block: u32, count: u32, buffer: []const u8) BlockError!void {
         var op = ide.IDEOperation{
             .drive_idx = self.drive_index,
-            .lba = start_block,
+            .lba = @truncate(start_block),
             .count = @truncate(count),
             .buffer = .{ .write = buffer },
             .is_write = true,
         };
 
         ide.performOperation(&op) catch |err| {
-            dev.stats.errors += 1;
+            self.base.stats.errors += 1;
             return mapIDEError(err);
         };
+    }
+
+    fn ideWriteWithTranslation(self: *Self, start_logical: u32, count: u32, buffer: []const u8) BlockError!void {
+        const logical_per_physical = @as(u32, 1) << self.physical_to_logical_shift;
+
+        // Calculate physical block range
+        const first_physical = start_logical >> self.physical_to_logical_shift;
+        const last_logical = start_logical + count - 1;
+        const last_physical = last_logical >> self.physical_to_logical_shift;
+        const physical_count = last_physical - first_physical + 1;
+
+        // Calculate offsets within first and last physical blocks
+        const first_offset = (start_logical & (logical_per_physical - 1)) * STANDARD_BLOCK_SIZE;
+        const last_end = ((last_logical & (logical_per_physical - 1)) + 1) * STANDARD_BLOCK_SIZE;
+
+        var buffer_offset: usize = 0;
+
+        // Handle first physical block (may need read-modify-write)
+        if (first_offset != 0 or (physical_count == 1 and last_end != self.physical_block_size)) {
+            // Read existing block
+            var read_op = ide.IDEOperation{
+                .drive_idx = self.drive_index,
+                .lba = @truncate(first_physical),
+                .count = 1,
+                .buffer = .{ .read = self.temp_buffer },
+                .is_write = false,
+            };
+
+            ide.performOperation(&read_op) catch |err| {
+                self.base.stats.errors += 1;
+                return mapIDEError(err);
+            };
+
+            // Modify relevant portion
+            const copy_start = first_offset;
+            const copy_end = if (physical_count == 1) last_end else self.physical_block_size;
+            const copy_len = copy_end - copy_start;
+            @memcpy(self.temp_buffer[copy_start..copy_end], buffer[0..copy_len]);
+            buffer_offset += copy_len;
+
+            // Write back modified block
+            var write_op = ide.IDEOperation{
+                .drive_idx = self.drive_index,
+                .lba = @truncate(first_physical),
+                .count = 1,
+                .buffer = .{ .write = self.temp_buffer },
+                .is_write = true,
+            };
+
+            ide.performOperation(&write_op) catch |err| {
+                self.base.stats.errors += 1;
+                return mapIDEError(err);
+            };
+
+            if (physical_count == 1) return;
+        }
+
+        // Handle middle physical blocks (all complete)
+        const middle_start = if (first_offset == 0) first_physical else first_physical + 1;
+        const middle_count = if (last_end == self.physical_block_size)
+            physical_count - @intFromBool(first_offset != 0)
+        else
+            physical_count - @intFromBool(first_offset != 0) - 1;
+
+        if (middle_count > 0) {
+            var op = ide.IDEOperation{
+                .drive_idx = self.drive_index,
+                .lba = @truncate(middle_start),
+                .count = @truncate(middle_count),
+                .buffer = .{
+                    .write = buffer[buffer_offset .. buffer_offset + middle_count * self.physical_block_size],
+                },
+                .is_write = true,
+            };
+
+            ide.performOperation(&op) catch |err| {
+                self.base.stats.errors += 1;
+                return mapIDEError(err);
+            };
+
+            buffer_offset += middle_count * self.physical_block_size;
+        }
+
+        // Handle last physical block (may need read-modify-write)
+        if (physical_count > 1 and last_end != self.physical_block_size and first_offset == 0) {
+            // Read existing block
+            var read_op = ide.IDEOperation{
+                .drive_idx = self.drive_index,
+                .lba = @truncate(last_physical),
+                .count = 1,
+                .buffer = .{ .read = self.temp_buffer },
+                .is_write = false,
+            };
+
+            ide.performOperation(&read_op) catch |err| {
+                self.base.stats.errors += 1;
+                return mapIDEError(err);
+            };
+
+            // Modify relevant portion
+            @memcpy(self.temp_buffer[0..last_end], buffer[buffer_offset .. buffer_offset + last_end]);
+
+            // Write back modified block
+            var write_op = ide.IDEOperation{
+                .drive_idx = self.drive_index,
+                .lba = @truncate(last_physical),
+                .count = 1,
+                .buffer = .{ .write = self.temp_buffer },
+                .is_write = true,
+            };
+
+            ide.performOperation(&write_op) catch |err| {
+                self.base.stats.errors += 1;
+                return mapIDEError(err);
+            };
+        }
     }
 
     fn ideFlush(dev: *BlockDevice) BlockError!void {
@@ -147,7 +403,7 @@ pub const IDEBlockDevice = struct {
             return;
         }
 
-        var flush_buffer: [512]u8 = undefined;
+        var flush_buffer: [STANDARD_BLOCK_SIZE]u8 = undefined;
         var op = ide.IDEOperation{
             .drive_idx = self.drive_index,
             .lba = 0,
@@ -178,6 +434,7 @@ pub const IDEBlockDevice = struct {
             .firmware_version = "1.0",
             .supports_dma = false,
             .current_speed = 0,
+            .physical_block_size = self.physical_block_size,
         };
     }
 
@@ -196,14 +453,27 @@ pub const IDEBlockDevice = struct {
 
         const new_info = ide.getDriveInfo(self.drive_index) orelse return BlockError.DeviceNotFound;
 
-        dev.block_size = new_info.capacity.sector_size;
-        dev.total_blocks = new_info.capacity.sectors;
-        self.drive_info = new_info;
+        // Recalculate logical blocks
+        const logical_blocks_per_physical = new_info.capacity.sector_size / STANDARD_BLOCK_SIZE;
+        dev.total_blocks = new_info.capacity.sectors * logical_blocks_per_physical;
 
-        logger.info("Revalidated {s}: {} blocks of {} bytes", .{
+        self.drive_info = new_info;
+        self.physical_block_size = new_info.capacity.sector_size;
+        self.physical_to_logical_shift = calculateShift(new_info.capacity.sector_size);
+
+        // Reallocate temp buffer if size changed
+        if (self.temp_buffer.len != self.physical_block_size) {
+            allocator.free(self.temp_buffer);
+            self.temp_buffer = allocator.alignedAlloc(u8, 16, self.physical_block_size) catch {
+                return BlockError.OutOfMemory;
+            };
+        }
+
+        logger.info("Revalidated {s}: {} logical blocks ({} physical blocks of {} bytes)", .{
             dev.getName(),
             dev.total_blocks,
-            dev.block_size,
+            new_info.capacity.sectors,
+            self.physical_block_size,
         });
     }
 
@@ -218,77 +488,5 @@ pub const IDEBlockDevice = struct {
             ide.IDEError.MediaChanged => BlockError.MediaNotPresent,
             else => BlockError.IoError,
         };
-    }
-};
-
-pub const Partition = struct {
-    base: BlockDevice,
-    parent: *BlockDevice,
-    start_block: u64,
-    partition_number: u8,
-
-    const partition_ops = Operations{
-        .read = partitionRead,
-        .write = partitionWrite,
-        .flush = partitionFlush,
-        .trim = null,
-        .get_info = null,
-        .media_changed = null,
-        .revalidate = null,
-    };
-
-    const Self = @This();
-
-    pub fn create(
-        parent: *BlockDevice,
-        partition_number: u8,
-        start_block: u64,
-        block_count: u64,
-    ) !*Self {
-        const partition = try allocator.create(Self);
-        errdefer allocator.destroy(partition);
-
-        var name: [16]u8 = [_]u8{0} ** 16;
-        const parent_name = parent.getName();
-        const str = try std.fmt.bufPrint(&name, "{s}p{}", .{ parent_name, partition_number });
-        name[str.len] = 0;
-
-        partition.* = .{
-            .base = .{
-                .name = name,
-                .device_type = parent.device_type,
-                .block_size = parent.block_size,
-                .total_blocks = block_count,
-                .max_transfer = parent.max_transfer,
-                .features = parent.features,
-                .ops = &partition_ops,
-                .private_data = partition,
-                .cache_policy = parent.cache_policy,
-            },
-            .parent = parent,
-            .start_block = start_block,
-            .partition_number = partition_number,
-        };
-
-        return partition;
-    }
-
-    pub fn destroy(self: *Self) void {
-        allocator.destroy(self);
-    }
-
-    fn partitionRead(dev: *BlockDevice, start_block: u64, count: u32, buffer: []u8) BlockError!void {
-        const self: *Self = @fieldParentPtr("base", dev);
-        return self.parent.read(self.start_block + start_block, count, buffer);
-    }
-
-    fn partitionWrite(dev: *BlockDevice, start_block: u64, count: u32, buffer: []const u8) BlockError!void {
-        const self: *Self = @fieldParentPtr("base", dev);
-        return self.parent.write(self.start_block + start_block, count, buffer);
-    }
-
-    fn partitionFlush(dev: *BlockDevice) BlockError!void {
-        const self: *Self = @fieldParentPtr("base", dev);
-        return self.parent.flush();
     }
 };
