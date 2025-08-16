@@ -4,8 +4,8 @@ const BlockDevice = @import("block_device.zig").BlockDevice;
 const BlockError = @import("block_device.zig").BlockError;
 const STANDARD_BLOCK_SIZE = @import("block_device.zig").STANDARD_BLOCK_SIZE;
 const ArrayList = std.ArrayList;
-const Mutex = @import("../task/semaphore.zig").Mutex;
-const allocator = @import("../memory.zig").bigAlloc.allocator();
+const Mutex = @import("../../task/semaphore.zig").Mutex;
+const allocator = @import("../../memory.zig").bigAlloc.allocator();
 const logger = std.log.scoped(.buffer_cache);
 
 pub const Buffer = struct {
@@ -131,7 +131,7 @@ pub const BufferCache = struct {
             self.lru_tail = buffer;
         }
 
-        buffer.last_access = @import("../timer.zig").get_utime_since_boot();
+        buffer.last_access = @import("../../timer.zig").get_utime_since_boot();
     }
 
     fn removeFromLRU(self: *Self, buffer: *Buffer) void {
