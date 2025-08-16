@@ -1,12 +1,13 @@
 const std = @import("std");
 const cpu = @import("../../cpu.zig");
+const ide = @import("ide.zig");
 const timer = @import("../../timer.zig");
 const constants = @import("constants.zig");
 const types = @import("types.zig");
 const common = @import("common.zig");
 const Channel = @import("channel.zig");
 
-pub fn performPolling(channel: *Channel, drive: *types.DriveInfo, op: *@import("ide.zig").IDEOperation) types.IDEError!void {
+pub fn performPolling(drive: *ide.IDEDrive, op: *ide.IDEOperation) types.IDEError!void {
     if (op.lba > 0xFFFFFFF) return types.IDEError.OutOfBounds;
 
     const total_chunks = getTotalChunks(op.count);
@@ -18,31 +19,31 @@ pub fn performPolling(channel: *Channel, drive: *types.DriveInfo, op: *@import("
         const chunk_lba = op.lba + (chunk_idx * 255);
         const lba32 = @as(u32, @truncate(chunk_lba));
 
-        common.selectLBADevice(drive, channel.base, lba32);
+        common.selectLBADevice(drive, drive.channel.base, lba32);
 
-        _ = try common.waitForReady(channel.base, 1000);
+        _ = try common.waitForReady(drive.channel.base, 1000);
 
-        cpu.outb(channel.base + constants.ATA.REG_SEC_COUNT, chunk_info.count);
-        cpu.outb(channel.base + constants.ATA.REG_LBA_LOW, @truncate(lba32));
-        cpu.outb(channel.base + constants.ATA.REG_LBA_MID, @truncate(lba32 >> 8));
-        cpu.outb(channel.base + constants.ATA.REG_LBA_HIGH, @truncate(lba32 >> 16));
+        cpu.outb(drive.channel.base + constants.ATA.REG_SEC_COUNT, chunk_info.count);
+        cpu.outb(drive.channel.base + constants.ATA.REG_LBA_LOW, @truncate(lba32));
+        cpu.outb(drive.channel.base + constants.ATA.REG_LBA_MID, @truncate(lba32 >> 8));
+        cpu.outb(drive.channel.base + constants.ATA.REG_LBA_HIGH, @truncate(lba32 >> 16));
 
         const cmd = if (op.is_write) constants.ATA.CMD_WRITE_SECTORS else constants.ATA.CMD_READ_SECTORS;
-        cpu.outb(channel.base + constants.ATA.REG_COMMAND, cmd);
+        cpu.outb(drive.channel.base + constants.ATA.REG_COMMAND, cmd);
 
         for (0..chunk_info.count) |i| {
-            _ = try common.waitForData(channel.base, 5000);
+            _ = try common.waitForData(drive.channel.base, 5000);
 
             const offset = chunk_info.offset + i * 512;
             if (op.is_write) {
-                common.writeSectorPIO(channel.base, op.buffer.write[offset .. offset + 512]);
+                common.writeSectorPIO(drive.channel.base, op.buffer.write[offset .. offset + 512]);
             } else {
-                common.readSectorPIO(channel.base, op.buffer.read[offset .. offset + 512]);
+                common.readSectorPIO(drive.channel.base, op.buffer.read[offset .. offset + 512]);
             }
         }
 
         if (op.is_write) {
-            _ = try common.waitForReady(channel.base, 1000);
+            _ = try common.waitForReady(drive.channel.base, 1000);
         }
     }
 }

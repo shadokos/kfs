@@ -2,20 +2,22 @@
 // Exemple d'implémentation d'un RAM disk utilisant le nouveau système de translation
 
 const std = @import("std");
-const BlockDevice = @import("block_device.zig").BlockDevice;
-const BlockError = @import("block_device.zig").BlockError;
-const DeviceType = @import("block_device.zig").DeviceType;
-const Features = @import("block_device.zig").Features;
-const CachePolicy = @import("block_device.zig").CachePolicy;
-const DeviceInfo = @import("block_device.zig").DeviceInfo;
-const Operations = @import("block_device.zig").Operations;
-const STANDARD_BLOCK_SIZE = @import("block_device.zig").STANDARD_BLOCK_SIZE;
-const createTranslator = @import("translator.zig").createTranslator;
+const block_device = @import("../../storage/block/block_device.zig");
+const BlockDevice = block_device.BlockDevice;
+const BlockError = block_device.BlockError;
+const DeviceType = block_device.DeviceType;
+const Features = block_device.Features;
+const CachePolicy = block_device.CachePolicy;
+const DeviceInfo = block_device.DeviceInfo;
+const Operations = block_device.Operations;
+
+const STANDARD_BLOCK_SIZE = block_device.STANDARD_BLOCK_SIZE;
+const createTranslator = @import("../../storage/block/translator.zig").createTranslator;
 const logger = std.log.scoped(.ram_disk);
 
-const allocator = @import("../memory.zig").bigAlloc.allocator();
+const allocator = @import("../../memory.zig").bigAlloc.allocator();
 
-pub const RamDisk = struct {
+pub const BlockRamDisk = struct {
     base: BlockDevice,
     storage: []u8,
     physical_block_size: u32,
@@ -120,8 +122,8 @@ pub const RamDisk = struct {
         buffer: []u8,
         is_write: bool,
     ) BlockError!void {
-        const block_device: *BlockDevice = @ptrCast(@alignCast(context));
-        const self: *Self = @fieldParentPtr("base", block_device);
+        const device: *BlockDevice = @ptrCast(@alignCast(context));
+        const self: *Self = @fieldParentPtr("base", device);
 
         // Calculer les offsets
         const offset = physical_block * self.physical_block_size;
@@ -196,88 +198,16 @@ pub const RamDisk = struct {
 // Fonctions utilitaires pour créer différents types de RAM disks
 
 /// Créer un RAM disk standard (512-byte blocks)
-pub fn createStandardRamDisk(name: []const u8, size_mb: u32) !*RamDisk {
-    return RamDisk.create(name, size_mb, 512);
+pub fn createStandardRamDisk(name: []const u8, size_mb: u32) !*BlockRamDisk {
+    return BlockRamDisk.create(name, size_mb, 512);
 }
 
 /// Créer un RAM disk simulant un CD-ROM (2048-byte blocks)
-pub fn createCDROMRamDisk(name: []const u8, size_mb: u32) !*RamDisk {
-    return RamDisk.create(name, size_mb, 2048);
+pub fn createCDROMRamDisk(name: []const u8, size_mb: u32) !*BlockRamDisk {
+    return BlockRamDisk.create(name, size_mb, 2048);
 }
 
 /// Créer un RAM disk avec des blocs de 4K (futur standard)
-pub fn createModernRamDisk(name: []const u8, size_mb: u32) !*RamDisk {
-    return RamDisk.create(name, size_mb, 4096);
-}
-
-// Tests pour démontrer l'utilisation
-pub fn runRamDiskTests() !void {
-    logger.info("=== RAM Disk Translation Tests ===", .{});
-
-    // Test avec différentes tailles de blocs
-    const test_cases = [_]struct { name: []const u8, block_size: u32 }{
-        .{ .name = "ram512", .block_size = 512 },
-        .{ .name = "ram2k", .block_size = 2048 },
-        .{ .name = "ram4k", .block_size = 4096 },
-    };
-
-    for (test_cases) |test_case| {
-        logger.info("Testing {} byte blocks:", .{test_case.block_size});
-
-        const ramdisk = try RamDisk.create(test_case.name, 1, test_case.block_size);
-        defer ramdisk.destroy();
-
-        // Test basique
-        try testRamDiskIO(&ramdisk.base);
-
-        // Test des opérations non-alignées (seulement pour les blocs > 512)
-        if (test_case.block_size > 512) {
-            try testUnalignedIO(&ramdisk.base);
-        }
-
-        logger.info("  ✓ Tests passed for {} byte blocks", .{test_case.block_size});
-    }
-
-    logger.info("=== All RAM disk tests passed ===", .{});
-}
-
-fn testRamDiskIO(device: *BlockDevice) !void {
-    const buffer = try allocator.alloc(u8, STANDARD_BLOCK_SIZE * 8);
-    defer allocator.free(buffer);
-
-    // Écrire un motif
-    for (buffer, 0..) |*byte, i| {
-        byte.* = @truncate(i);
-    }
-
-    try device.write(10, 8, buffer);
-
-    // Lire et vérifier
-    const read_buffer = try allocator.alloc(u8, STANDARD_BLOCK_SIZE * 8);
-    defer allocator.free(read_buffer);
-
-    try device.read(10, 8, read_buffer);
-
-    if (!std.mem.eql(u8, buffer, read_buffer)) {
-        return error.VerificationFailed;
-    }
-}
-
-fn testUnalignedIO(device: *BlockDevice) !void {
-    const buffer = try allocator.alloc(u8, STANDARD_BLOCK_SIZE * 3);
-    defer allocator.free(buffer);
-
-    // Test d'écriture non-alignée (commence au milieu d'un bloc physique)
-    for (buffer) |*byte| byte.* = 0xCC;
-
-    try device.write(13, 3, buffer); // Probablement non-aligné
-
-    const read_buffer = try allocator.alloc(u8, STANDARD_BLOCK_SIZE * 3);
-    defer allocator.free(read_buffer);
-
-    try device.read(13, 3, read_buffer);
-
-    if (!std.mem.eql(u8, buffer, read_buffer)) {
-        return error.UnalignedVerificationFailed;
-    }
+pub fn createModernRamDisk(name: []const u8, size_mb: u32) !*BlockRamDisk {
+    return BlockRamDisk.create(name, size_mb, 4096);
 }

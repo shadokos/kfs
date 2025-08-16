@@ -1,5 +1,6 @@
 const std = @import("std");
 const cpu = @import("../../cpu.zig");
+const ide = @import("ide.zig");
 const timer = @import("../../timer.zig");
 const constants = @import("constants.zig");
 const types = @import("types.zig");
@@ -95,7 +96,7 @@ pub fn waitNs(ns: u32) void {
 }
 
 /// Select LBA device with proper flags
-pub fn selectLBADevice(drive: *types.DriveInfo, base: u16, lba: u32) void {
+pub fn selectLBADevice(drive: *ide.IDEDrive, base: u16, lba: u32) void {
     switch (drive.drive_type) {
         .ATA => {
             const baseFlag: u8 = 0xE0; // LBA mode + always set bits

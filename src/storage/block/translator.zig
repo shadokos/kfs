@@ -4,7 +4,7 @@ const BlockError = @import("block_device.zig").BlockError;
 const STANDARD_BLOCK_SIZE = @import("block_device.zig").STANDARD_BLOCK_SIZE;
 const logger = std.log.scoped(.translator.zig);
 
-const allocator = @import("../memory.zig").bigAlloc.allocator();
+const allocator = @import("../../memory.zig").bigAlloc.allocator();
 
 pub const PhysicalRange = struct {
     physical_start: u32,

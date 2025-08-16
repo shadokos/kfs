@@ -148,7 +148,10 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
         var offsetPreview: usize = 0;
         var line: [69]u8 = [_]u8{' '} ** 69;
 
-        _ = std.fmt.bufPrint(&line, "0x{x:0>8}: ", .{i}) catch {};
+        _ = std.fmt.bufPrint(&line, "{x:0>8}: ", .{i}) catch {};
+
+        if (ptr < end)
+            _ = std.fmt.bufPrint(line[50..], "\xba{c: >16}\xba", .{' '}) catch {};
 
         while (ptr +| 1 < start +| i +| 16 and ptr < end) : ({
             ptr +|= 2;
@@ -158,7 +161,7 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
             const byte1: u8 = @as(*allowzero u8, @ptrFromInt(ptr)).*;
             const byte2: u8 = @as(*allowzero u8, @ptrFromInt(ptr +| 1)).*;
 
-            _ = std.fmt.bufPrint(line[12 + offset ..], "{x:0>2}{x:0>2} ", .{ byte1, byte2 }) catch {};
+            _ = std.fmt.bufPrint(line[10 + offset ..], "{x:0>2}{x:0>2} ", .{ byte1, byte2 }) catch {};
             _ = std.fmt.bufPrint(line[51 + offsetPreview ..], "{s}{s}", .{
                 [_]u8{if (std.ascii.isPrint(byte1)) byte1 else '.'},
                 [_]u8{if (std.ascii.isPrint(byte2)) byte2 else '.'},
@@ -169,7 +172,7 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
         if (i > 0 and std.mem.eql(u8, line[10..line.len], last_line[10..last_line.len])) {
             duplicate_count += 1;
             if (!has_shown_asterisk) {
-                tty.printk("0x00000000: \t\t*\n", .{});
+                tty.printk("*\n", .{});
                 has_shown_asterisk = true;
             }
         } else {
