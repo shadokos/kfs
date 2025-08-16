@@ -65,9 +65,14 @@ pub const DeviceInfo = struct {
     physical_block_size: u32, // Added to track actual hardware block size
 };
 
+const BlockTranslator = @import("translator.zig").BlockTranslator;
+const PhysicalIOFn = @import("translator.zig").PhysicalIOFn;
+
 pub const Operations = struct {
-    read: *const fn (dev: *BlockDevice, start_block: u32, count: u32, buffer: []u8) BlockError!void,
-    write: *const fn (dev: *BlockDevice, start_block: u32, count: u32, buffer: []const u8) BlockError!void,
+    /// Physical I/O operation - operates on device's native block size
+    physical_io: PhysicalIOFn,
+
+    /// Optional operations
     flush: ?*const fn (dev: *BlockDevice) BlockError!void = null,
     trim: ?*const fn (dev: *BlockDevice, start_block: u32, count: u32) BlockError!void = null,
     get_info: ?*const fn (dev: *BlockDevice) DeviceInfo = null,
@@ -78,34 +83,57 @@ pub const Operations = struct {
 pub const BlockDevice = struct {
     name: [16]u8,
     device_type: DeviceType,
-    block_size: u32 = STANDARD_BLOCK_SIZE,
-    total_blocks: u64,
-    max_transfer: u32,
+    block_size: u32 = STANDARD_BLOCK_SIZE, // Always standard size for logical interface
+    total_blocks: u64, // Total logical blocks
+    max_transfer: u32, // Maximum logical blocks per transfer
     features: Features,
     ops: *const Operations,
+    translator: *BlockTranslator, // Handles physical/logical translation
     private_data: ?*anyopaque = null,
     stats: Statistics = .{},
     cache_policy: CachePolicy = .WriteBack,
 
     const Self = @This();
 
+    /// Read logical blocks (always 512-byte blocks)
     pub fn read(self: *Self, start_block: u32, count: u32, buffer: []u8) BlockError!void {
-        if (buffer.len < count * self.block_size) return BlockError.BufferTooSmall;
+        if (buffer.len < count * STANDARD_BLOCK_SIZE) return BlockError.BufferTooSmall;
         if (start_block + count > self.total_blocks) return BlockError.OutOfBounds;
         if (!self.features.readable) return BlockError.NotSupported;
 
-        try self.ops.read(self, start_block, count, buffer);
+        // Use translator to handle the I/O
+        self.translator.read(
+            start_block,
+            count,
+            buffer,
+            self.ops.physical_io,
+            self,
+        ) catch |err| {
+            self.stats.errors += 1;
+            return err;
+        };
 
         self.stats.reads_completed += 1;
         self.stats.blocks_read += count;
     }
 
+    /// Write logical blocks (always 512-byte blocks)
     pub fn write(self: *Self, start_block: u32, count: u32, buffer: []const u8) BlockError!void {
-        if (buffer.len < count * self.block_size) return BlockError.BufferTooSmall;
+        if (buffer.len < count * STANDARD_BLOCK_SIZE) return BlockError.BufferTooSmall;
         if (start_block + count > self.total_blocks) return BlockError.OutOfBounds;
         if (!self.features.writable) return BlockError.WriteProtected;
 
-        try self.ops.write(self, start_block, count, buffer);
+        // Use translator to handle the I/O
+        self.translator.write(
+            start_block,
+            count,
+            buffer,
+            self.ops.physical_io,
+            self,
+        ) catch |err| {
+            self.stats.errors += 1;
+            return err;
+        };
 
         self.stats.writes_completed += 1;
         self.stats.blocks_written += count;
@@ -149,5 +177,21 @@ pub const BlockDevice = struct {
         if (self.ops.revalidate) |revalidate_fn| {
             try revalidate_fn(self);
         }
+    }
+
+    /// Get the physical block size of the underlying device
+    pub fn getPhysicalBlockSize(self: *const Self) u32 {
+        return self.translator.physical_block_size;
+    }
+
+    /// Get the total number of physical blocks
+    pub fn getPhysicalBlockCount(self: *const Self) u64 {
+        const logical_per_physical = self.translator.physical_block_size / STANDARD_BLOCK_SIZE;
+        return self.total_blocks / logical_per_physical;
+    }
+
+    /// Cleanup resources when device is destroyed
+    pub fn deinit(self: *Self) void {
+        self.translator.deinit();
     }
 };
