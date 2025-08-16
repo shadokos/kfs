@@ -138,13 +138,17 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
     const end: usize = @max(start_address, end_address);
 
     var i: usize = 0;
-    while (start +| i < end) : (i +|= 16) {
+    var last_line: [69]u8 = [_]u8{0} ** 69;
+    var duplicate_count: usize = 0;
+    var has_shown_asterisk = false;
+
+    while (start +| i <= end) : (i +|= 16) {
         var ptr: usize = start +| i;
         var offset: usize = 0;
         var offsetPreview: usize = 0;
-        var line: [67]u8 = [_]u8{' '} ** 67;
+        var line: [69]u8 = [_]u8{' '} ** 69;
 
-        _ = std.fmt.bufPrint(&line, "{x:0>8}: ", .{start +| i}) catch {};
+        _ = std.fmt.bufPrint(&line, "0x{x:0>8}: ", .{i}) catch {};
 
         while (ptr +| 1 < start +| i +| 16 and ptr < end) : ({
             ptr +|= 2;
@@ -154,13 +158,26 @@ pub fn memory_dump(start_address: usize, end_address: usize) void {
             const byte1: u8 = @as(*allowzero u8, @ptrFromInt(ptr)).*;
             const byte2: u8 = @as(*allowzero u8, @ptrFromInt(ptr +| 1)).*;
 
-            _ = std.fmt.bufPrint(line[10 + offset ..], "{x:0>2}{x:0>2} ", .{ byte1, byte2 }) catch {};
+            _ = std.fmt.bufPrint(line[12 + offset ..], "{x:0>2}{x:0>2} ", .{ byte1, byte2 }) catch {};
             _ = std.fmt.bufPrint(line[51 + offsetPreview ..], "{s}{s}", .{
                 [_]u8{if (std.ascii.isPrint(byte1)) byte1 else '.'},
                 [_]u8{if (std.ascii.isPrint(byte2)) byte2 else '.'},
             }) catch {};
         }
 
-        tty.printk("{s}\n", .{line});
+        // Check if this line is identical to the last one
+        if (i > 0 and std.mem.eql(u8, line[10..line.len], last_line[10..last_line.len])) {
+            duplicate_count += 1;
+            if (!has_shown_asterisk) {
+                tty.printk("0x00000000: \t\t*\n", .{});
+                has_shown_asterisk = true;
+            }
+        } else {
+            duplicate_count = 0;
+            has_shown_asterisk = false;
+            tty.printk("{s}\n", .{line});
+        }
+
+        last_line = line;
     }
 }
