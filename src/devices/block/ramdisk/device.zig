@@ -1,7 +1,6 @@
 const std = @import("std");
 const logger = std.log.scoped(.blockdev_ram);
 
-// const block_device = @import("../../../storage/block/block_device.zig");
 const core = @import("../core.zig");
 const types = core.types;
 const translator = core.translator;
@@ -89,16 +88,6 @@ pub fn create(
         .storage = storage,
         .physical_block_size = physical_block_size,
     };
-
-    logger.info("Created RAM disk {s}: {} MB ({} logical blocks, {} physical blocks)", .{
-        ramdisk.base.getName(),
-        size_mb,
-        total_logical_blocks,
-        physical_blocks,
-    });
-
-    logger.info("  Physical block size: {} bytes", .{physical_block_size});
-    logger.info("  Translation ratio: {}:1", .{physical_block_size / STANDARD_BLOCK_SIZE});
 
     return ramdisk;
 }

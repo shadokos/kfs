@@ -83,18 +83,11 @@ pub fn create(drive: DriveInfo, channel: *Channel) !*Self {
             .translator = _translator,
             .cache_policy = .NoCache,
         },
+        .channel = channel,
         .capacity = drive.capacity,
         .position = drive.position,
-        .channel = channel,
         .model = drive.model,
     };
-
-    logger.info("Created IDE block device {s}: {} logical blocks ({} physical of {} bytes)", .{
-        device.base.getName(),
-        total_logical_blocks,
-        drive.capacity.sectors,
-        physical_block_size,
-    });
 
     return device;
 }

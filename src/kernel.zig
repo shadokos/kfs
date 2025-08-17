@@ -27,18 +27,18 @@ fn test_device(name: []const u8) void {
 }
 
 pub fn main(_: usize) u8 {
-    const benchmark = @import("devices/block/core.zig").benchmark;
+    // const benchmark = @import("devices/block/core.zig").benchmark;
 
-    benchmark.runQuickBenchmark("ram0") catch |err| {
-        logger.err("Benchmark failed: {s}", .{@errorName(err)});
-    };
-    benchmark.runQuickBenchmark("hda") catch |err| {
-        logger.err("Benchmark failed: {s}", .{@errorName(err)});
-    };
+    // benchmark.runQuickBenchmark("ram0") catch |err| {
+    //     logger.err("Benchmark failed: {s}", .{@errorName(err)});
+    // };
+    // benchmark.runQuickBenchmark("hda") catch |err| {
+    //     logger.err("Benchmark failed: {s}", .{@errorName(err)});
+    // };
 
-    test_device("hda");
-    test_device("cd0");
-    test_device("ram4k");
+    // test_device("hda");
+    // test_device("cd0");
+    // test_device("ram4k");
 
     // Start shell
     var shell = DefaultShell.Shell.init(tty.get_reader(), tty.get_writer(), .{}, .{

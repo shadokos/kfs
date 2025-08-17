@@ -5,11 +5,11 @@ const core = @import("../devices/block/core.zig");
 const types = core.types;
 const STANDARD_BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
 
-const DeviceManager = core.DeviceManager;
+const BlockManager = core.BlockManager;
 const BufferCache = core.BufferCache;
 const BlockDevice = core.BlockDevice;
 const BlockError = types.BlockError;
-const DeviceInfo = types.DeviceInfo;
+// const DeviceInfo = types.DeviceInfo;
 
 // // Exports publics
 // pub const BlockDevice = @import("block/block_device.zig").BlockDevice;
@@ -22,7 +22,7 @@ const DeviceInfo = types.DeviceInfo;
 //
 // pub const BufferCache = @import("block/buffer_cache.zig").BufferCache;
 //
-// pub const DeviceManager = @import("block/device_manager.zig").DeviceManager;
+// pub const BlockManager = @import("block/device_manager.zig").BlockManager;
 // pub const DeviceSource = @import("block/device_manager.zig").DeviceSource;
 //
 // pub const BlockTranslator = @import("block/translator.zig").BlockTranslator;
@@ -32,7 +32,7 @@ const ide = @import("../drivers/ide/ide.zig");
 const allocator = @import("../memory.zig").smallAlloc.allocator();
 
 // Variables globales
-var device_manager: DeviceManager = undefined;
+var device_manager: BlockManager = undefined;
 var buffer_cache: BufferCache = undefined;
 var initialized = false;
 
@@ -44,7 +44,7 @@ pub fn init() !void {
     logger.info("Standard block size: {} bytes", .{STANDARD_BLOCK_SIZE});
 
     // Initialiser les composants
-    device_manager = DeviceManager.init();
+    device_manager = BlockManager.init();
     buffer_cache = try BufferCache.init();
 
     try ide.init();
@@ -143,7 +143,7 @@ fn createDefaultRamDisks() !void {
 // === API publique simplifiée ===
 
 /// Obtenir le gestionnaire de dispositifs
-pub fn getManager() *DeviceManager {
+pub fn getManager() *BlockManager {
     return &device_manager;
 }
 

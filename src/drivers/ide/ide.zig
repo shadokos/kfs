@@ -2,7 +2,7 @@
 // Interface simplifiée pour le driver IDE
 
 const std = @import("std");
-const logger = std.log.scoped(.ide_driver);
+const logger = std.log.scoped(.driver_ide);
 const allocator = @import("../../memory.zig").smallAlloc.allocator();
 
 const common = @import("common.zig");
@@ -62,7 +62,6 @@ pub fn init() !void {
     }
 
     {
-        // const list = std.ArrayList(Channel).init(allocator);
         const list = Channel.get_all_channels(allocator);
         if (list == null or list.?.len == 0) {
             logger.warn("No IDE channels found", .{});

@@ -393,10 +393,10 @@ pub fn pci_device(shell: anytype, args: [][]u8) CmdError!void {
 }
 
 pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
-    const device_manager = @import("../../storage/storage.zig").getManager();
+    const blockdev_manager = @import("../../devices/block/core.zig").getManager();
 
-    shell.writer.print("{} registered devices:\n", .{device_manager.devices.items.len}) catch {};
-    for (device_manager.devices.items) |registered| {
+    shell.writer.print("{} block device registered:\n", .{blockdev_manager.devices.items.len}) catch {};
+    for (blockdev_manager.devices.items) |registered| {
         const device = registered.device;
         const size_mb = device.total_blocks * device.block_size / 1024 / 1024;
 
@@ -404,8 +404,8 @@ pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
             \\{s}{s}{s}:
             \\    {s}
             \\    {} MB: {} ({} bytes)
-            \\    feats: {}:{}:{}:{}:{} (r,w,removable,f,t)
-            \\    stats: {}:{}:{}:{}:{} (r,w,e,hits,misses)
+            \\    feats: {}:{}:{}:{}:{} (r,w,removable,flush,trim)
+            \\    stats: {}:{}:{}:{}:{} (r,w,errors,hits,misses)
             \\    cache policy: {s}
             \\
         , .{
@@ -428,7 +428,52 @@ pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
             device.stats.cache_misses,
             @tagName(device.cache_policy),
         }) catch {};
-
-        // shell.writer.print("")
     }
+}
+
+// Create a new ramdisk
+pub fn mkbrd(shell: anytype, args: [][]u8) CmdError!void {
+    // arg 1: name
+    // arg 2: size in MB
+    // arg 3: physical block size in bytes
+    if (args.len != 4) return CmdError.InvalidNumberOfArguments;
+
+    const name = args[1];
+    const size_mb = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
+    const block_size = std.fmt.parseInt(u32, args[3], 0) catch return CmdError.InvalidParameter;
+
+    const core = @import("../../devices/block/core.zig");
+    const manager = core.getManager();
+    const CreateParams = core.RamProvider.CreateParams;
+
+    const registered = manager.createDevice(
+        .RAM,
+        @ptrCast(&CreateParams{
+            .name = name,
+            .size_mb = size_mb,
+            .block_size = block_size,
+        }),
+    ) catch |e| {
+        utils.print_error(shell, "Failed to create ramdisk: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+
+    shell.writer.print("Ramdisk created: {s}\n", .{registered.device.getName()}) catch {};
+}
+
+// Delete a ramdisk
+pub fn rmdisk(shell: anytype, args: [][]u8) CmdError!void {
+    // arg 1: name
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const name = args[1];
+    const core = @import("../../devices/block/core.zig");
+    const manager = core.getManager();
+
+    manager.removeDevice(name) catch |e| {
+        utils.print_error(shell, "Failed to destroy ramdisk {s}: {s}", .{ name, @errorName(e) });
+        return CmdError.OtherError;
+    };
+
+    shell.writer.print("Ramdisk {s} destroyed\n", .{name}) catch {};
 }

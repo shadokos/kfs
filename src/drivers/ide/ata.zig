@@ -111,7 +111,7 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
     const sec_hi: u32 = raw[61];
     const total: u64 = (@as(u64, sec_hi) << 16) | sec_lo;
 
-    logger.debug("{s} {s}: {s} ({} sectors)", .{
+    logger.debug("identified {s} {s}: {s} ({} sectors)", .{
         @tagName(channel.channel_type),
         @tagName(position),
         model_arr[0..model_len],

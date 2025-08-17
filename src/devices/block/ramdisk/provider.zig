@@ -6,13 +6,16 @@ const core = @import("../core.zig");
 const types = core.types;
 
 const BlockDevice = core.BlockDevice;
-const DeviceProvider = core.DeviceProvider;
+const BlockProvider = core.BlockProvider;
 
 const BlockRam = @import("device.zig");
 
 const Self = @This();
 
-base: DeviceProvider,
+// Providers are singleton
+var instance: ?Self = null;
+
+base: BlockProvider,
 
 pub const CreateParams = struct {
     name: []const u8,
@@ -20,21 +23,21 @@ pub const CreateParams = struct {
     block_size: u32,
 };
 
-const vtable = DeviceProvider.VTable{
+const vtable = BlockProvider.VTable{
     .discover = discover,
     .create = @ptrCast(&create),
     .deinit = deinit,
 };
 
-pub fn init() !*Self {
-    const provider = try allocator.create(Self);
-    provider.* = .{
+pub fn init() *Self {
+    if (instance) |*existing| return existing;
+    instance = .{
         .base = .{
             .vtable = &vtable,
-            .context = provider,
+            .context = @ptrCast(&instance),
         },
     };
-    return provider;
+    return &instance.?;
 }
 
 fn discover(ctx: *anyopaque) u32 {
@@ -50,6 +53,7 @@ fn create(ctx: *anyopaque, params: *CreateParams) !*BlockDevice {
 }
 
 fn deinit(ctx: *anyopaque) void {
-    const self: *Self = @ptrCast(@alignCast(ctx));
-    allocator.destroy(self);
+    _ = ctx;
+    // const self: *Self = @ptrCast(@alignCast(ctx));
+    // allocator.destroy(self);
 }

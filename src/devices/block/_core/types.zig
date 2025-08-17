@@ -8,7 +8,7 @@ const BlockDevice = core.BlockDevice;
 
 pub const BlockError = error{
     DeviceNotFound,
-    DeviceExists,
+    AlreadyExists,
     BufferTooSmall,
     OutOfBounds,
     WriteProtected,

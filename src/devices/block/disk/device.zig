@@ -1,8 +1,6 @@
 const std = @import("std");
 const logger = std.log.scoped(.blockdev_disk);
 
-const ide = @import("../../../drivers/ide/ide.zig");
-
 const core = @import("../core.zig");
 const types = core.types;
 const translator = core.translator;
@@ -15,6 +13,7 @@ const DriveStats = types.DriveStats;
 
 const STANDARD_BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
 
+const ide = @import("../../../drivers/ide/ide.zig");
 const Channel = @import("../../../drivers/ide/channel.zig");
 const DriveInfo = @import("../../../drivers/ide/types.zig").DriveInfo;
 
@@ -89,13 +88,6 @@ pub fn create(drive: DriveInfo, channel: *Channel) !*Self {
         .position = drive.position,
         .model = drive.model,
     };
-
-    logger.info("Created IDE block device {s}: {} logical blocks ({} physical of {} bytes)", .{
-        device.base.getName(),
-        total_logical_blocks,
-        drive.capacity.sectors,
-        physical_block_size,
-    });
 
     return device;
 }

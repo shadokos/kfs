@@ -162,7 +162,7 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
 
     const removable = (raw[0] & 0x80) != 0;
 
-    logger.debug("ATAPI {s} {s}: {s} (removable: {s})", .{
+    logger.debug("identified {s} {s}: {s} (removable: {s})", .{
         @tagName(channel.channel_type),
         @tagName(position),
         model_arr[0..model_len],
@@ -209,7 +209,7 @@ pub fn detectDrive(channel: *const Channel, position: Channel.DrivePosition) !?D
 
     if (lba_mid == 0x14 and lba_high == 0xEB) {
         // ATAPI signature found
-        logger.debug("ATAPI signature found on {s} {s}", .{ @tagName(channel.channel_type), @tagName(position) });
+        // logger.debug("ATAPI signature found on {s} {s}", .{ @tagName(channel.channel_type), @tagName(position) });
 
         // Send IDENTIFY PACKET DEVICE command
         cpu.outb(channel.base + constants.ATA.REG_COMMAND, constants.ATA.CMD_IDENTIFY_PACKET);

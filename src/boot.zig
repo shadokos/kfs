@@ -102,7 +102,8 @@ export fn init(eax: u32, ebx: u32) callconv(.C) void {
 
     @import("drivers/pci/pci.zig").init() catch @panic("Failed to initialize PCI subsystem");
 
-    @import("storage/storage.zig").init() catch @panic("Failed to initialize IDE controller");
+    // @import("storage/storage.zig").init() catch @panic("Failed to initialize IDE controller");
+    @import("devices/block/core.zig").init() catch @panic("Failed to initialize block devices");
 
     const idle_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create idle task");
 

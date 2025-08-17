@@ -6,10 +6,10 @@ const core = @import("../core.zig");
 const types = core.types;
 
 const BlockDevice = core.BlockDevice;
-const DeviceProvider = core.DeviceProvider;
+const BlockProvider = core.BlockProvider;
 
 // TODO: Refactor the storage module
-const storage = &@import("../../../storage/storage.zig");
+// const storage = &@import("../../../storage/storage.zig");
 
 const BlockCD = @import("device.zig");
 
@@ -17,28 +17,31 @@ const ide = @import("../../../drivers/ide/ide.zig");
 
 const Self = @This();
 
-base: DeviceProvider,
+// Providers are singleton
+var instance: ?Self = null;
+
+base: BlockProvider,
 
 pub const CreateParams = struct {
     info: ide.types.DriveInfo,
     channel: *ide.Channel,
 };
 
-const vtable = DeviceProvider.VTable{
+const vtable = BlockProvider.VTable{
     .discover = discover,
     .create = @ptrCast(&create),
     .deinit = deinit,
 };
 
-pub fn init() !*Self {
-    const provider = try allocator.create(Self);
-    provider.* = .{
+pub fn init() *Self {
+    if (instance) |*existing| return existing;
+    instance = .{
         .base = .{
             .vtable = &vtable,
-            .context = provider,
+            .context = @ptrCast(&instance),
         },
     };
-    return provider;
+    return &instance.?;
 }
 
 fn discover(ctx: *anyopaque) u32 {
@@ -48,16 +51,17 @@ fn discover(ctx: *anyopaque) u32 {
         for ([_]ide.Channel.DrivePosition{ .Master, .Slave }) |position| {
             if (try ide.atapi.detectDrive(channel, position)) |info| {
                 // TODO: Maybe add some logging if an error occurs
-                const device_manager = storage.getManager();
-                const dev = device_manager.createDevice(
+                const manager = core.getManager();
+                const registered = manager.createDevice(
                     .CDROM,
                     @constCast(@ptrCast(&CreateParams{
                         .info = info,
                         .channel = channel,
                     })),
                 ) catch continue; // If registration fails, continue to next drive
+                registered.auto_discovered = true;
                 logger.debug("{s} registered ({s}, {s})", .{
-                    dev.getName(),
+                    registered.device.getName(),
                     @tagName(channel.channel_type),
                     @tagName(position),
                 });

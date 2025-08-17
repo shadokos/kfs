@@ -243,14 +243,8 @@ pub fn findDevicesByClass(_allocator: Allocator, class: PCIClass, subclass: ?u8)
     defer result.deinit();
 
     for (devices.items) |device| {
-        if (device.class_code == class) {
-            if (subclass == null or device.subclass == subclass.?) {
-                logger.debug("Found device {}:{}.{} - Vendor: 0x{X:0>4}, Device: 0x{X:0>4}", .{
-                    device.bus, device.device, device.function, device.vendor_id, device.device_id,
-                });
-                result.append(device) catch continue;
-            }
-        }
+        if (device.class_code == class and (subclass == null or device.subclass == subclass.?))
+            result.append(device) catch continue;
     }
 
     return result.toOwnedSlice() catch null;
