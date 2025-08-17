@@ -27,7 +27,7 @@ fn test_device(name: []const u8) void {
 }
 
 pub fn main(_: usize) u8 {
-    const benchmark = @import("storage/block/benchmark.zig");
+    const benchmark = @import("devices/block/core.zig").benchmark;
 
     benchmark.runQuickBenchmark("ram0") catch |err| {
         logger.err("Benchmark failed: {s}", .{@errorName(err)});

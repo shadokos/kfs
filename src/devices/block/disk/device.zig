@@ -1,17 +1,19 @@
 const std = @import("std");
-const ide = @import("../../../drivers/ide/ide.zig");
-const BlockDevice = @import("../../../storage/block/block_device.zig").BlockDevice;
-const BlockError = @import("../../../storage/block/block_device.zig").BlockError;
-const DeviceType = @import("../../../storage/block/block_device.zig").DeviceType;
-const Features = @import("../../../storage/block/block_device.zig").Features;
-const CachePolicy = @import("../../../storage/block/block_device.zig").CachePolicy;
-const DeviceInfo = @import("../../../storage/block/block_device.zig").DeviceInfo;
-const Operations = @import("../../../storage/block/block_device.zig").Operations;
-
-const STANDARD_BLOCK_SIZE = @import("../../../storage/block/block_device.zig").STANDARD_BLOCK_SIZE;
-const createTranslator = @import("../../../storage/block/translator.zig").createTranslator;
-
 const logger = std.log.scoped(.blockdev_disk);
+
+const ide = @import("../../../drivers/ide/ide.zig");
+
+const core = @import("../core.zig");
+const types = core.types;
+const translator = core.translator;
+
+const BlockDevice = core.BlockDevice;
+const BlockError = types.BlockError;
+const Features = types.Features;
+const Operations = types.Operations;
+const DriveStats = types.DriveStats;
+
+const STANDARD_BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
 
 const Channel = @import("../../../drivers/ide/channel.zig");
 const DriveInfo = @import("../../../drivers/ide/types.zig").DriveInfo;
@@ -37,12 +39,6 @@ capacity: ide.Capacity,
 /// Statistiques d'utilisation
 stats: DriveStats = .{},
 
-pub const DriveStats = struct {
-    operations: u64 = 0,
-    errors: u64 = 0,
-    bytes_transferred: u64 = 0,
-};
-
 const disk_ops = Operations{
     .physical_io = physical_io,
     .flush = flush,
@@ -63,8 +59,8 @@ pub fn create(drive: DriveInfo, channel: *Channel) !*Self {
 
     // Créer le translator approprié
     const physical_block_size = drive.capacity.sector_size;
-    const translator = try createTranslator(physical_block_size);
-    errdefer translator.deinit();
+    const _translator = try translator.createTranslator(allocator, physical_block_size);
+    errdefer _translator.deinit();
 
     // Calculer les blocs logiques
     const logical_blocks_per_physical = physical_block_size / STANDARD_BLOCK_SIZE;
@@ -85,7 +81,7 @@ pub fn create(drive: DriveInfo, channel: *Channel) !*Self {
                 .trimable = false,
             },
             .ops = &disk_ops,
-            .translator = translator,
+            .translator = _translator,
             .cache_policy = .WriteBack,
         },
         .channel = channel,

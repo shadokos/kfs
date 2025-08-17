@@ -1,10 +1,10 @@
 const std = @import("std");
-const storage = @import("../storage.zig");
-const ide = @import("../../drivers/ide/ide.zig");
+const storage = @import("../../../storage/storage.zig");
+const ide = @import("../../../drivers/ide/ide.zig");
 const logger = std.log.scoped(.storage_benchmark);
-const tsc = @import("../../drivers/tsc/tsc.zig");
+const tsc = @import("../../../drivers/tsc/tsc.zig");
 
-const allocator = @import("../../memory.zig").bigAlloc.allocator();
+const allocator = @import("../../../memory.zig").bigAlloc.allocator();
 
 pub const BenchmarkResult = struct {
     operation: Operation,

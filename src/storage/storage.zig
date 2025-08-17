@@ -1,26 +1,32 @@
-// src/storage/storage.zig
-// Module principal du système de stockage unifié
-
 const std = @import("std");
 const logger = std.log.scoped(.storage);
 
-// Exports publics
-pub const BlockDevice = @import("block/block_device.zig").BlockDevice;
-pub const BlockError = @import("block/block_device.zig").BlockError;
-pub const DeviceType = @import("block/block_device.zig").DeviceType;
-pub const Features = @import("block/block_device.zig").Features;
-pub const CachePolicy = @import("block/block_device.zig").CachePolicy;
-pub const DeviceInfo = @import("block/block_device.zig").DeviceInfo;
-pub const STANDARD_BLOCK_SIZE = @import("block/block_device.zig").STANDARD_BLOCK_SIZE;
+const core = @import("../devices/block/core.zig");
+const types = core.types;
+const STANDARD_BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
 
-pub const BufferCache = @import("block/buffer_cache.zig").BufferCache;
-pub const Buffer = @import("block/buffer_cache.zig").Buffer;
+const DeviceManager = core.DeviceManager;
+const BufferCache = core.BufferCache;
+const BlockDevice = core.BlockDevice;
+const BlockError = types.BlockError;
+const DeviceInfo = types.DeviceInfo;
 
-pub const DeviceManager = @import("block/device_manager.zig").DeviceManager;
-pub const DeviceSource = @import("block/device_manager.zig").DeviceSource;
-
-pub const BlockTranslator = @import("block/translator.zig").BlockTranslator;
-pub const createTranslator = @import("block/translator.zig").createTranslator;
+// // Exports publics
+// pub const BlockDevice = @import("block/block_device.zig").BlockDevice;
+// pub const BlockError = @import("block/block_device.zig").BlockError;
+// pub const DeviceType = @import("block/block_device.zig").DeviceType;
+// pub const Features = @import("block/block_device.zig").Features;
+// pub const CachePolicy = @import("block/block_device.zig").CachePolicy;
+// pub const DeviceInfo = @import("block/block_device.zig").DeviceInfo;
+// pub const STANDARD_BLOCK_SIZE = @import("block/block_device.zig").STANDARD_BLOCK_SIZE;
+//
+// pub const BufferCache = @import("block/buffer_cache.zig").BufferCache;
+//
+// pub const DeviceManager = @import("block/device_manager.zig").DeviceManager;
+// pub const DeviceSource = @import("block/device_manager.zig").DeviceSource;
+//
+// pub const BlockTranslator = @import("block/translator.zig").BlockTranslator;
+// pub const createTranslator = @import("block/translator.zig").createTranslator;
 
 const ide = @import("../drivers/ide/ide.zig");
 const allocator = @import("../memory.zig").smallAlloc.allocator();
@@ -151,14 +157,6 @@ pub fn findDevice(name: []const u8) ?*BlockDevice {
     return device_manager.find(name);
 }
 
-/// Créer un RAM disk
-pub fn createRamDisk(name: []const u8, size_mb: u32, block_size: u32) !*BlockDevice {
-    const params = try std.fmt.allocPrint(allocator, "{s}:{d}:{d}", .{ name, size_mb, block_size });
-    defer allocator.free(params);
-
-    return device_manager.createDevice(.RAM, params);
-}
-
 /// Supprimer un dispositif (seulement les virtuels)
 pub fn removeDevice(device_name: []const u8) !void {
     return device_manager.removeDevice(device_name);
@@ -225,11 +223,11 @@ pub fn flushAll() BlockError!void {
     try buffer_cache.flushAll();
 }
 
-/// Obtenir les informations d'un dispositif
-pub fn getDeviceInfo(device_name: []const u8) ?DeviceInfo {
-    const dev = findDevice(device_name) orelse return null;
-    return dev.getInfo();
-}
+// /// Obtenir les informations d'un dispositif
+// pub fn getDeviceInfo(device_name: []const u8) ?DeviceInfo {
+//     const dev = findDevice(device_name) orelse return null;
+//     return dev.getInfo();
+// }
 
 /// Formater une taille en octets pour l'affichage
 pub fn formatSize(size_bytes: u64) struct { value: f64, unit: []const u8 } {
@@ -282,13 +280,13 @@ pub fn printDeviceStats(device_name: []const u8) void {
     });
     logger.info("  Errors: {}", .{dev.stats.errors});
 
-    if (getDeviceInfo(device_name)) |info| {
-        logger.info("Device Info:", .{});
-        logger.info("  Vendor: {s}", .{info.vendor});
-        logger.info("  Model: {s}", .{info.model});
-        logger.info("  Firmware: {s}", .{info.firmware_version});
-        logger.info("  Physical block size: {} bytes", .{info.physical_block_size});
-    }
+    // if (getDeviceInfo(device_name)) |info| {
+    //     logger.info("Device Info:", .{});
+    //     logger.info("  Vendor: {s}", .{info.vendor});
+    //     logger.info("  Model: {s}", .{info.model});
+    //     logger.info("  Firmware: {s}", .{info.firmware_version});
+    //     logger.info("  Physical block size: {} bytes", .{info.physical_block_size});
+    // }
 }
 
 /// Obtenir les statistiques globales

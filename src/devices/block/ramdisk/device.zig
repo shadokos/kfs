@@ -1,17 +1,18 @@
 const std = @import("std");
-const block_device = @import("../../../storage/block/block_device.zig");
-const BlockDevice = block_device.BlockDevice;
-const BlockError = block_device.BlockError;
-const DeviceType = block_device.DeviceType;
-const Features = block_device.Features;
-const CachePolicy = block_device.CachePolicy;
-const DeviceInfo = block_device.DeviceInfo;
-const Operations = block_device.Operations;
-
-const STANDARD_BLOCK_SIZE = block_device.STANDARD_BLOCK_SIZE;
-const createTranslator = @import("../../../storage/block/translator.zig").createTranslator;
-
 const logger = std.log.scoped(.blockdev_ram);
+
+// const block_device = @import("../../../storage/block/block_device.zig");
+const core = @import("../core.zig");
+const types = core.types;
+const translator = core.translator;
+
+const BlockDevice = core.BlockDevice;
+const BlockError = types.BlockError;
+const DeviceType = types.DeviceType;
+const Features = types.Features;
+const Operations = types.Operations;
+
+const STANDARD_BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
 
 const allocator = @import("../../../memory.zig").bigAlloc.allocator();
 
@@ -55,8 +56,8 @@ pub fn create(
     @memset(storage, 0);
 
     // Créer le translator approprié
-    const translator = try createTranslator(physical_block_size);
-    errdefer translator.deinit();
+    const _translator = try translator.createTranslator(allocator, physical_block_size);
+    errdefer _translator.deinit();
 
     // Créer l'instance
     const ramdisk = try allocator.create(Self);
@@ -82,7 +83,7 @@ pub fn create(
                 .trimable = true,
             },
             .ops = &ram_ops,
-            .translator = translator,
+            .translator = _translator,
             .cache_policy = .NoCache, // Pas besoin de cache pour la RAM
         },
         .storage = storage,
@@ -104,7 +105,7 @@ pub fn create(
 
 pub fn destroy(self: *Self) void {
     allocator.free(self.storage);
-    self.base.deinit(); // Nettoie le translator
+    self.base.deinit(); // Clean up the base
     allocator.destroy(self);
 }
 

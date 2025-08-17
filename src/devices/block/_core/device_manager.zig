@@ -1,36 +1,20 @@
-// src/storage/device_manager.zig
-// Système unifié de gestion des dispositifs de stockage
-
 const std = @import("std");
-const ArrayList = std.ArrayList;
-const BlockDevice = @import("block_device.zig").BlockDevice;
-const BlockError = @import("block_device.zig").BlockError;
-const Mutex = @import("../../task/semaphore.zig").Mutex;
 const logger = std.log.scoped(.device_manager);
-const allocator = @import("../../memory.zig").smallAlloc.allocator();
+const ArrayList = std.ArrayList;
 
-/// Type de source d'un dispositif
-pub const DeviceSource = enum {
-    DISK,
-    CDROM,
-    RAM, // RAM disk créé manuellement
-    Loop, // Loop device (futur)
-    Network, // iSCSI, NBD, etc. (futur)
-};
+const core = @import("../core.zig");
+const BlockDevDisk = core.BlockDevDisk;
+const BlockDevCD = core.BlockDevCD;
+const BlockDevRam = core.BlockDevRam;
 
-/// Informations sur un dispositif enregistré
-pub const RegisteredDevice = struct {
-    device: *BlockDevice,
-    source: DeviceSource,
-    auto_discovered: bool,
-    creation_params: ?[]const u8 = null,
+const types = core.types;
+const BlockDevice = core.BlockDevice;
+const BlockError = types.BlockError;
+const DeviceSource = types.DeviceSource;
+const RegisteredDevice = types.RegisteredDevice;
 
-    pub fn deinit(self: *RegisteredDevice) void {
-        if (self.creation_params) |params| {
-            allocator.free(params);
-        }
-    }
-};
+const Mutex = @import("../../../task/semaphore.zig").Mutex;
+const allocator = @import("../../../memory.zig").smallAlloc.allocator();
 
 /// Interface pour les fournisseurs de dispositifs
 pub const DeviceProvider = struct {
@@ -129,6 +113,7 @@ pub const DeviceManager = struct {
         const saved_params = if (params) |p| try allocator.dupe(u8, p) else null;
 
         try self.devices.append(.{
+            .allocator = allocator,
             .device = device,
             .source = source,
             .auto_discovered = auto_discovered,
@@ -281,18 +266,15 @@ pub const DeviceManager = struct {
         // Appeler la méthode de nettoyage appropriée selon le type
         switch (reg_device.source) {
             .DISK => {
-                const BlockDisk = @import("../../devices/block/disk/device.zig");
-                const disk_device: *BlockDisk = @fieldParentPtr("base", reg_device.device);
+                const disk_device: *BlockDevDisk = @fieldParentPtr("base", reg_device.device);
                 disk_device.destroy();
             },
             .CDROM => {
-                const BlockCdrom = @import("../../devices/block/cdrom/device.zig");
-                const cdrom_device: *BlockCdrom = @fieldParentPtr("base", reg_device.device);
+                const cdrom_device: *BlockDevCD = @fieldParentPtr("base", reg_device.device);
                 cdrom_device.destroy();
             },
             .RAM => {
-                const BlockRam = @import("../../devices/block/ramdisk/device.zig");
-                const ram_device: *BlockRam = @fieldParentPtr("base", reg_device.device);
+                const ram_device: *BlockDevRam = @fieldParentPtr("base", reg_device.device);
                 ram_device.destroy();
             },
             else => {

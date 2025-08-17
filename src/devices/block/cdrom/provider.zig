@@ -1,13 +1,19 @@
 const std = @import("std");
-const ide = @import("../../../drivers/ide/ide.zig");
-const BlockDevice = @import("../../../storage/block/block_device.zig").BlockDevice;
 const allocator = @import("../../../memory.zig").bigAlloc.allocator();
 const logger = std.log.scoped(.cd_provider);
 
-const DeviceProvider = @import("../../../storage/block/device_manager.zig").DeviceProvider;
+const core = @import("../core.zig");
+const types = core.types;
+
+const BlockDevice = core.BlockDevice;
+const DeviceProvider = core.DeviceProvider;
+
+// TODO: Refactor the storage module
 const storage = &@import("../../../storage/storage.zig");
 
 const BlockCD = @import("device.zig");
+
+const ide = @import("../../../drivers/ide/ide.zig");
 
 const Self = @This();
 
