@@ -19,9 +19,6 @@ pub const Buffer = @import("block/buffer_cache.zig").Buffer;
 pub const DeviceManager = @import("block/device_manager.zig").DeviceManager;
 pub const DeviceSource = @import("block/device_manager.zig").DeviceSource;
 
-pub const BlockIDE = @import("../devices/block_ide/device.zig").BlockIDE;
-// pub const BlockRamDisk = @import("../devices/block_ram_disk/device.zig").BlockRamDisk;
-
 pub const BlockTranslator = @import("block/translator.zig").BlockTranslator;
 pub const createTranslator = @import("block/translator.zig").createTranslator;
 
@@ -44,32 +41,7 @@ pub fn init() !void {
     device_manager = DeviceManager.init();
     buffer_cache = try BufferCache.init();
 
-    // IMPORTANT: Initialiser le driver IDE AVANT d'enregistrer les providers
-    logger.info("Initializing IDE driver...", .{});
     try ide.init();
-    const ide_count = ide.getDriveCount();
-    logger.info("IDE driver initialized with {} drives", .{ide_count});
-
-    // Si on a des drives IDE, les enregistrer directement
-    // (contournement temporaire du problème de provider)
-    if (ide_count > 0) {
-        logger.info("Registering IDE devices manually...", .{});
-
-        for (0..ide_count) |i| {
-            const ide_device = BlockIDE.create(i) catch |err| {
-                logger.err("Failed to create IDE device {}: {}", .{ i, err });
-                continue;
-            };
-
-            device_manager.registerDevice(&ide_device.base, .IDE, true, null) catch |err| {
-                logger.err("Failed to register IDE device: {}", .{err});
-                ide_device.destroy();
-                continue;
-            };
-
-            logger.info("Registered IDE device: {s}", .{ide_device.base.getName()});
-        }
-    }
 
     // Enregistrer les providers pour les futurs devices
     try registerProviders();
@@ -111,14 +83,21 @@ pub fn deinit() void {
 fn registerProviders() !void {
     logger.info("Registering device providers", .{});
 
-    // Provider IDE
-    const IDEProvider = @import("../devices/block_ide/provider.zig").IDEProvider;
-    const ide_provider = try IDEProvider.create();
-    try device_manager.registerProvider(.IDE, &ide_provider.base);
+    const DiskProvider = @import("../devices/block/disk/provider.zig");
+    const disk_provider = try DiskProvider.init();
+    try device_manager.registerProvider(.DISK, &disk_provider.base);
+
+    _ = disk_provider.base.discover();
+
+    const CDProvider = @import("../devices/block/cdrom/provider.zig");
+    const cd_provider = try CDProvider.init();
+    try device_manager.registerProvider(.CDROM, &cd_provider.base);
+
+    _ = cd_provider.base.discover();
 
     // Provider RAM
-    const RAMProvider = @import("../devices/block_ram_disk/provider.zig").RAMProvider;
-    const ram_provider = try RAMProvider.create();
+    const RAMProvider = @import("../devices/block/ramdisk/provider.zig");
+    const ram_provider = try RAMProvider.init();
     try device_manager.registerProvider(.RAM, &ram_provider.base);
 
     logger.info("Device providers registered", .{});
@@ -128,18 +107,29 @@ fn registerProviders() !void {
 fn createDefaultRamDisks() !void {
     logger.info("Creating default RAM disks", .{});
 
+    const CreateParams = @import("../devices/block/ramdisk/provider.zig").CreateParams;
+
     // RAM disk standard (512-byte blocks)
-    _ = device_manager.createDevice(.RAM, "ram0:16:512") catch |err| {
+    _ = device_manager.createDevice(
+        .RAM,
+        @ptrCast(&CreateParams{ .name = "ram0", .size_mb = 16, .block_size = 512 }),
+    ) catch |err| {
         logger.warn("Failed to create ram0: {}", .{err});
     };
 
     // RAM disk simulant un CD-ROM (2048-byte blocks)
-    _ = device_manager.createDevice(.RAM, "cdram:8:2048") catch |err| {
+    _ = device_manager.createDevice(
+        .RAM,
+        @ptrCast(&CreateParams{ .name = "cdram", .size_mb = 8, .block_size = 2048 }),
+    ) catch |err| {
         logger.warn("Failed to create cdram: {}", .{err});
     };
 
     // RAM disk moderne (4096-byte blocks)
-    _ = device_manager.createDevice(.RAM, "ram4k:4:4096") catch |err| {
+    _ = device_manager.createDevice(
+        .RAM,
+        @ptrCast(&CreateParams{ .name = "ram4k", .size_mb = 4, .block_size = 4096 }),
+    ) catch |err| {
         logger.warn("Failed to create ram4k: {}", .{err});
     };
 }
@@ -188,7 +178,7 @@ pub fn readCached(
 ) BlockError!void {
     const dev = findDevice(device_name) orelse return BlockError.DeviceNotFound;
 
-    if (dev.cache_policy != .NoCache and count == 1) {
+    if (count == 1) {
         const cached_buffer = try buffer_cache.get(dev, start_block);
         defer buffer_cache.put(cached_buffer);
 

@@ -96,24 +96,25 @@ pub fn waitNs(ns: u32) void {
 }
 
 /// Select LBA device with proper flags
-pub fn selectLBADevice(drive: *ide.IDEDrive, base: u16, lba: u32) void {
-    switch (drive.drive_type) {
+pub fn selectLBADevice(drive_type: ide.DriveType, op: *@import("ide.zig").IDEOperation) void {
+    switch (drive_type) {
         .ATA => {
             const baseFlag: u8 = 0xE0; // LBA mode + always set bits
-            const selFlag: u8 = if (drive.position == DrivePosition.Master) 0 else 0x10;
-            const regDev = baseFlag | selFlag | @as(u8, @intCast((lba >> 24) & 0x0F));
+            const selFlag: u8 = if (op.position == DrivePosition.Master) 0 else 0x10;
+            const regDev = baseFlag | selFlag | @as(u8, @intCast((op.lba >> 24) & 0x0F));
 
-            cpu.outb(base + constants.ATA.REG_DEVICE, regDev);
+            cpu.outb(op.channel.base + constants.ATA.REG_DEVICE, regDev);
         },
         .ATAPI => {
-            const baseFlag: u8 = 0xA0; // ATAPI device flag
-            const selFlag: u8 = if (drive.position == DrivePosition.Master) 0 else 0x10;
+            const baseFlag: u8 = 0xA0; // ATAPI LBA mode + always set bits
+            const selFlag: u8 = if (op.position == DrivePosition.Master) 0 else 0x10;
             const regDev = baseFlag | selFlag;
 
-            cpu.outb(base + constants.ATA.REG_DEVICE, regDev);
+            cpu.outb(op.channel.base + constants.ATA.REG_DEVICE, regDev);
         },
         .Unknown => unreachable,
     }
 
-    common.waitNs(400);
+    // common.waitNs(400);
+    cpu.io_wait();
 }

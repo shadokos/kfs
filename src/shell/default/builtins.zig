@@ -391,3 +391,44 @@ pub fn pci_device(shell: anytype, args: [][]u8) CmdError!void {
     };
     device.printDeviceInfo(printk);
 }
+
+pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
+    const device_manager = @import("../../storage/storage.zig").getManager();
+
+    shell.writer.print("{} registered devices:\n", .{device_manager.devices.items.len}) catch {};
+    for (device_manager.devices.items) |registered| {
+        const device = registered.device;
+        const size_mb = device.total_blocks * device.block_size / 1024 / 1024;
+
+        shell.writer.print(
+            \\{s}{s}{s}:
+            \\    {s}
+            \\    {} MB: {} ({} bytes)
+            \\    feats: {}:{}:{}:{}:{} (r,w,removable,f,t)
+            \\    stats: {}:{}:{}:{}:{} (r,w,e,hits,misses)
+            \\    cache policy: {s}
+            \\
+        , .{
+            colors.bold,
+            device.getName(),
+            colors.reset,
+            @tagName(device.device_type),
+            size_mb,
+            device.total_blocks,
+            device.block_size,
+            @intFromBool(device.features.readable),
+            @intFromBool(device.features.writable),
+            @intFromBool(device.features.removable),
+            @intFromBool(device.features.flushable),
+            @intFromBool(device.features.trimable),
+            device.stats.reads_completed,
+            device.stats.writes_completed,
+            device.stats.errors,
+            device.stats.cache_hits,
+            device.stats.cache_misses,
+            @tagName(device.cache_policy),
+        }) catch {};
+
+        // shell.writer.print("")
+    }
+}

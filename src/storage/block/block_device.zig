@@ -33,10 +33,8 @@ pub const Features = packed struct {
     readable: bool = true,
     writable: bool = true,
     removable: bool = false,
-    supports_flush: bool = false,
-    supports_trim: bool = false,
-    supports_barriers: bool = false,
-    _padding: u2 = 0,
+    flushable: bool = true,
+    trimable: bool = false,
 };
 
 pub const CachePolicy = enum {
@@ -75,7 +73,6 @@ pub const Operations = struct {
     /// Optional operations
     flush: ?*const fn (dev: *BlockDevice) BlockError!void = null,
     trim: ?*const fn (dev: *BlockDevice, start_block: u32, count: u32) BlockError!void = null,
-    get_info: ?*const fn (dev: *BlockDevice) DeviceInfo = null,
     media_changed: ?*const fn (dev: *BlockDevice) bool = null,
     revalidate: ?*const fn (dev: *BlockDevice) BlockError!void = null,
 };
@@ -89,7 +86,6 @@ pub const BlockDevice = struct {
     features: Features,
     ops: *const Operations,
     translator: *BlockTranslator, // Handles physical/logical translation
-    private_data: ?*anyopaque = null,
     stats: Statistics = .{},
     cache_policy: CachePolicy = .WriteBack,
 
@@ -146,7 +142,7 @@ pub const BlockDevice = struct {
     }
 
     pub fn trim(self: *Self, start_block: u32, count: u32) BlockError!void {
-        if (!self.features.supports_trim) return BlockError.NotSupported;
+        if (!self.features.trimable) return BlockError.NotSupported;
         if (self.ops.trim) |trim_fn| {
             try trim_fn(self, start_block, count);
         }
@@ -157,13 +153,6 @@ pub const BlockDevice = struct {
             if (c == 0) return self.name[0..i];
         }
         return &self.name;
-    }
-
-    pub fn getInfo(self: *Self) ?DeviceInfo {
-        if (self.ops.get_info) |get_info_fn| {
-            return get_info_fn(self);
-        }
-        return null;
     }
 
     pub fn mediaChanged(self: *Self) bool {

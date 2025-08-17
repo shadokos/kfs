@@ -46,7 +46,6 @@ pub const PCIClass = enum(u8) {
 };
 
 /// IDE controller programming interface (subclass 0x01)
-/// TODO: implement more classes and subclasses
 pub const IDEInterface = enum(u8) {
     ISACompatibility = 0x00,
     PCINativeMode = 0x05,
@@ -168,7 +167,7 @@ fn scanFunction(bus: u8, device: u8, function: u8) !void {
 
     try devices.append(pci_device);
 
-    //TODO: Maybe display device infos in a better way
+    // TODO: Maybe display device infos in a better way
     logger.debug("PCI device (0x{X:0>4}): {s}(0x{X:0>2})", .{ device_id, @tagName(class_code), subclass });
 }
 
@@ -239,9 +238,8 @@ pub fn writeConfig32(bus: u8, device: u8, function: u8, offset: u8, value: u32) 
     cpu.outl(PCI_CONFIG_DATA, value);
 }
 
-/// Find all devices matching a specific class and optionally subclass
-pub fn findDevicesByClass(class: PCIClass, subclass: ?u8) ?[]PCIDevice {
-    var result = PCIDeviceList.init(allocator);
+pub fn findDevicesByClass(_allocator: Allocator, class: PCIClass, subclass: ?u8) ?[]PCIDevice {
+    var result = PCIDeviceList.init(_allocator);
     defer result.deinit();
 
     for (devices.items) |device| {
@@ -259,13 +257,13 @@ pub fn findDevicesByClass(class: PCIClass, subclass: ?u8) ?[]PCIDevice {
 }
 
 /// Find all IDE controllers
-pub fn findIDEControllers() ?[]PCIDevice {
-    return findDevicesByClass(.MassStorage, 0x01);
+pub fn findIDEControllers(_allocator: Allocator) ?[]PCIDevice {
+    return findDevicesByClass(_allocator, .MassStorage, 0x01);
 }
 
 /// Find all SATA controllers
-pub fn findSATAControllers() ?[]PCIDevice {
-    return findDevicesByClass(.MassStorage, 0x06);
+pub fn findSATAControllers(_allocator: Allocator) ?[]PCIDevice {
+    return findDevicesByClass(_allocator, .MassStorage, 0x06);
 }
 
 /// Get the size of a Base Address Register

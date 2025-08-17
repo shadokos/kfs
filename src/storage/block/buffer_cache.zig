@@ -25,7 +25,6 @@ pub const Buffer = struct {
         locked: bool = false,
         err: bool = false,
         uptodate: bool = false,
-        _padding: u3 = 0,
     };
 
     pub fn markDirty(self: *Buffer) void {

@@ -1,0 +1,74 @@
+const std = @import("std");
+const ide = @import("../../../drivers/ide/ide.zig");
+const BlockDevice = @import("../../../storage/block/block_device.zig").BlockDevice;
+const allocator = @import("../../../memory.zig").bigAlloc.allocator();
+const logger = std.log.scoped(.bl);
+
+const DeviceProvider = @import("../../../storage/block/device_manager.zig").DeviceProvider;
+const storage = &@import("../../../storage/storage.zig");
+
+const BlockDisk = @import("device.zig");
+
+const Self = @This();
+
+base: DeviceProvider,
+
+pub const CreateParams = struct {
+    info: ide.types.DriveInfo,
+    channel: *ide.Channel,
+};
+
+const vtable = DeviceProvider.VTable{
+    .discover = discover,
+    .create = @ptrCast(&create),
+    .deinit = deinit,
+};
+
+pub fn init() !*Self {
+    const provider = try allocator.create(Self);
+    provider.* = .{
+        .base = .{
+            .vtable = &vtable,
+            .context = provider,
+        },
+    };
+    return provider;
+}
+
+fn discover(ctx: *anyopaque) u32 {
+    _ = ctx;
+    var count: u32 = 0;
+    for (ide.channels) |*channel| {
+        for ([_]ide.Channel.DrivePosition{ .Master, .Slave }) |position| {
+            if (try ide.ata.detectDrive(channel, position)) |info| {
+                // TODO: Maybe add some logging if an error occurs
+                const device_manager = storage.getManager();
+                const dev = device_manager.createDevice(
+                    .DISK,
+                    @constCast(@ptrCast(&CreateParams{
+                        .info = info,
+                        .channel = channel,
+                    })),
+                ) catch continue; // If registration fails, continue to next drive
+                logger.debug("{s} registered ({s}, {s})", .{
+                    dev.getName(),
+                    @tagName(channel.channel_type),
+                    @tagName(position),
+                });
+                count += 1;
+            }
+        }
+    }
+    return count;
+}
+
+fn create(ctx: *anyopaque, params: *const CreateParams) !*BlockDevice {
+    _ = ctx;
+    const disk = try BlockDisk.create(params.info, params.channel);
+    return &disk.base;
+}
+
+fn deinit(ctx: *anyopaque) void {
+    const self: *Self = @ptrCast(@alignCast(ctx));
+    allocator.destroy(self);
+}

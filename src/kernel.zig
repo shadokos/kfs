@@ -32,8 +32,13 @@ pub fn main(_: usize) u8 {
     benchmark.runQuickBenchmark("ram0") catch |err| {
         logger.err("Benchmark failed: {s}", .{@errorName(err)});
     };
+    benchmark.runQuickBenchmark("hda") catch |err| {
+        logger.err("Benchmark failed: {s}", .{@errorName(err)});
+    };
 
     test_device("hda");
+    test_device("cd0");
+    test_device("ram4k");
 
     // Start shell
     var shell = DefaultShell.Shell.init(tty.get_reader(), tty.get_writer(), .{}, .{

@@ -11,7 +11,8 @@ const allocator = @import("../../memory.zig").smallAlloc.allocator();
 
 /// Type de source d'un dispositif
 pub const DeviceSource = enum {
-    IDE, // Découvert via contrôleur IDE
+    DISK,
+    CDROM,
     RAM, // RAM disk créé manuellement
     Loop, // Loop device (futur)
     Network, // iSCSI, NBD, etc. (futur)
@@ -40,11 +41,8 @@ pub const DeviceProvider = struct {
         /// Découverte automatique (retourne le nombre de devices trouvés)
         discover: *const fn (ctx: *anyopaque) u32,
 
-        /// Créer un dispositif découvert
-        createDiscovered: *const fn (ctx: *anyopaque, index: u32) anyerror!*BlockDevice,
-
         /// Créer un dispositif avec paramètres
-        createCustom: ?*const fn (ctx: *anyopaque, params: []const u8) anyerror!*BlockDevice,
+        create: *const fn (ctx: *anyopaque, params: *const void) anyerror!*BlockDevice,
 
         /// Nettoyer les ressources du provider
         deinit: *const fn (ctx: *anyopaque) void,
@@ -54,15 +52,8 @@ pub const DeviceProvider = struct {
         return self.vtable.discover(self.context);
     }
 
-    pub fn createDiscovered(self: *DeviceProvider, index: u32) !*BlockDevice {
-        return self.vtable.createDiscovered(self.context, index);
-    }
-
-    pub fn createCustom(self: *DeviceProvider, params: []const u8) !*BlockDevice {
-        if (self.vtable.createCustom) |create_fn| {
-            return create_fn(self.context, params);
-        }
-        return BlockError.NotSupported;
+    pub fn create(self: *DeviceProvider, params: *const void) !*BlockDevice {
+        return self.vtable.create(self.context, params);
     }
 
     pub fn deinit(self: *DeviceProvider) void {
@@ -116,30 +107,6 @@ pub const DeviceManager = struct {
         logger.info("Registered provider for {s}", .{@tagName(source)});
     }
 
-    /// Découverte automatique de tous les dispositifs
-    pub fn discoverAll(self: *Self) !void {
-        logger.info("=== Auto-discovering devices ===", .{});
-
-        var iter = self.providers.iterator();
-        while (iter.next()) |entry| {
-            const source = entry.key;
-            const provider = entry.value.* orelse continue;
-
-            // get the number of devices discovered
-            const n = provider.discover();
-            logger.info("{s}: found {} devices", .{ @tagName(source), n });
-
-            for (0..self.count()) |i| {
-                const device = provider.createDiscovered(@truncate(i)) catch |err| {
-                    logger.err("Failed to create {s} device {}: {}", .{ @tagName(source), i, err });
-                    continue;
-                };
-
-                try self.registerDevice(device, source, true, null);
-            }
-        }
-    }
-
     /// Enregistrer un dispositif
     pub fn registerDevice(
         self: *Self,
@@ -177,16 +144,15 @@ pub const DeviceManager = struct {
     }
 
     /// Créer un dispositif personnalisé
-    pub fn createDevice(self: *Self, source: DeviceSource, params: []const u8) !*BlockDevice {
+    pub fn createDevice(self: *Self, source: DeviceSource, params: *const void) !*BlockDevice {
         const provider = self.providers.get(source) orelse {
             logger.err("No provider for {s}", .{@tagName(source)});
             return BlockError.NotSupported;
         };
 
-        const device = try provider.createCustom(params);
-        try self.registerDevice(device, source, false, params);
-
-        logger.info("Created custom {s} device: {s}", .{ @tagName(source), device.getName() });
+        const device = try provider.vtable.create(provider.context, params);
+        try self.registerDevice(device, source, false, null);
+        logger.info("Created new {s} device: {s}", .{ @tagName(source), device.getName() });
         return device;
     }
 
@@ -197,7 +163,6 @@ pub const DeviceManager = struct {
 
         for (self.devices.items, 0..) |*reg_device, i| {
             if (std.mem.eql(u8, reg_device.device.getName(), name)) {
-                // Vérifier si le dispositif peut être supprimé
                 if (reg_device.auto_discovered and reg_device.source == .IDE) {
                     return BlockError.NotSupported; // Pas de suppression des disques physiques
                 }
@@ -315,14 +280,19 @@ pub const DeviceManager = struct {
 
         // Appeler la méthode de nettoyage appropriée selon le type
         switch (reg_device.source) {
-            .IDE => {
-                const BlockIDE = @import("../../devices/block_ide/device.zig").BlockIDE;
-                const ide_device: *BlockIDE = @fieldParentPtr("base", reg_device.device);
-                ide_device.destroy();
+            .DISK => {
+                const BlockDisk = @import("../../devices/block/disk/device.zig");
+                const disk_device: *BlockDisk = @fieldParentPtr("base", reg_device.device);
+                disk_device.destroy();
+            },
+            .CDROM => {
+                const BlockCdrom = @import("../../devices/block/cdrom/device.zig");
+                const cdrom_device: *BlockCdrom = @fieldParentPtr("base", reg_device.device);
+                cdrom_device.destroy();
             },
             .RAM => {
-                const BlockRamDisk = @import("../../devices/block_ram_disk/device.zig").BlockRamDisk;
-                const ram_device: *BlockRamDisk = @fieldParentPtr("base", reg_device.device);
+                const BlockRam = @import("../../devices/block/ramdisk/device.zig");
+                const ram_device: *BlockRam = @fieldParentPtr("base", reg_device.device);
                 ram_device.destroy();
             },
             else => {

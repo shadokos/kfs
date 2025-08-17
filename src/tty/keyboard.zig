@@ -90,9 +90,8 @@ fn make_break(scancode: u16) ?u16 {
             keyState.alt = make;
         },
         keymap.CALOCK => {
-            if (!keyState.caps_down and make)
-                locks.caps_lock = !locks.caps_lock;
-            keyState.caps_down = make;
+            keyState.ctrl_left = make;
+            keyState.ctrl = make;
         },
         keymap.NLOCK => {
             if (!keyState.num_down and make)
@@ -107,6 +106,12 @@ fn make_break(scancode: u16) ?u16 {
                     tty.get_tty().scroll(if (c == keymap.PGUP) 1 else -1);
                 }
             } else return c;
+        },
+        10 => if (keyState.ctrl and make) {
+            tty.get_tty().scroll(-1);
+        },
+        11 => if (keyState.ctrl and make) {
+            tty.get_tty().scroll(1);
         },
         keymap.AF1...keymap.AF10 => if (keyState.ctrl and !make) {
             tty.set_tty(@intCast(c - keymap.AF1)) catch unreachable;
