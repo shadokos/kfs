@@ -1,7 +1,8 @@
 const task = @import("task/task.zig");
 const interrupts = @import("interrupts.zig");
-const pit = @import("drivers/pit/pit.zig");
 const pic = @import("drivers/pic/pic.zig");
+const pit = @import("drivers/pit/pit.zig");
+const tsc = @import("drivers/tsc/tsc.zig");
 
 const std = @import("std");
 const PriorityQueue = @import("std").PriorityQueue;
@@ -208,6 +209,7 @@ pub fn init() void {
     // Initially program a quantum to start preemption.
     programmed_us = 0;
     current_deadline_us = 0;
+    now_us = tsc.get_time_us();
     program_next_interrupt();
 
     @import("task/task.zig").on_terminate_callback.append(remove) catch |err| switch (err) {
