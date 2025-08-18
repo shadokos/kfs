@@ -17,76 +17,46 @@ const RegisteredDevice = types.RegisteredDevice;
 const Mutex = @import("../../../task/semaphore.zig").Mutex;
 const allocator = @import("../../../memory.zig").smallAlloc.allocator();
 
-devices: ArrayList(RegisteredDevice),
-providers: std.EnumArray(DeviceSource, ?*BlockProvider),
-mutex: Mutex = .{},
-next_device_id: u32 = 0,
+const List = ArrayList(RegisteredDevice);
+
+var devices = std.StringHashMap(RegisteredDevice).init(allocator);
+var providers = std.EnumArray(DeviceSource, ?*BlockProvider).initFill(null);
+
+var mutex = Mutex{};
 
 const Self = @This();
 
-pub fn init() Self {
-    return .{
-        .devices = ArrayList(RegisteredDevice).init(allocator),
-        .providers = std.EnumArray(DeviceSource, ?*BlockProvider).initFill(null),
-    };
-}
+/// Register a provider for a device type
+pub fn registerProvider(source: DeviceSource, provider: *BlockProvider) !void {
+    mutex.acquire();
+    defer mutex.release();
 
-pub fn deinit(self: *Self) void {
-    // Nettoyer tous les dispositifs
-    for (self.devices.items) |*device| {
-        self.cleanupDevice(device);
-        device.deinit();
-    }
-    self.devices.deinit();
+    if (providers.get(source) != null) return BlockError.AlreadyExists;
 
-    // Nettoyer les providers
-    var iter = self.providers.iterator();
-    while (iter.next()) |entry| {
-        if (entry.value.*) |provider| {
-            provider.deinit();
-        }
-    }
-}
-
-/// Enregistrer un provider pour un type de dispositif
-pub fn registerProvider(self: *Self, source: DeviceSource, provider: *BlockProvider) !void {
-    self.mutex.acquire();
-    defer self.mutex.release();
-
-    if (self.providers.get(source) != null) return BlockError.AlreadyExists;
-
-    self.providers.set(source, provider);
+    providers.set(source, provider);
     logger.info("{s} provider registered", .{@tagName(source)});
 }
 
-/// Enregistrer un dispositif
+/// Register a device
 pub fn registerDevice(
-    self: *Self,
     device: *BlockDevice,
     source: DeviceSource,
     auto_discovered: bool,
-    params: ?[]const u8,
 ) !*RegisteredDevice {
-    self.mutex.acquire();
-    defer self.mutex.release();
+    mutex.acquire();
+    defer mutex.release();
 
-    // Vérifier l'unicité du nom
-    for (self.devices.items) |existing| {
-        if (std.mem.eql(u8, existing.device.getName(), device.getName())) {
-            return BlockError.AlreadyExists;
-        }
+    if (devices.contains(device.getName())) {
+        return BlockError.AlreadyExists;
     }
 
-    // Sauvegarder les paramètres si fournis
-    const saved_params = if (params) |p| try allocator.dupe(u8, p) else null;
-
-    const registered = try self.devices.addOne();
-    registered.* = .{
+    // Save parameters if provided
+    const registered = try devices.getOrPut(device.getName());
+    registered.value_ptr.* = .{
         .allocator = allocator,
         .device = device,
         .source = source,
         .auto_discovered = auto_discovered,
-        .creation_params = saved_params,
     };
 
     logger.info("registered {s} ({s}: {} blocks of {} bytes)", .{
@@ -96,50 +66,56 @@ pub fn registerDevice(
         device.block_size,
     });
 
-    return registered;
+    return registered.value_ptr;
 }
 
-/// Créer un dispositif personnalisé
-pub fn createDevice(self: *Self, source: DeviceSource, params: *const void) !*RegisteredDevice {
-    const provider = self.providers.get(source) orelse {
+/// Create a custom device
+pub fn createDevice(source: DeviceSource, params: *const void) !*RegisteredDevice {
+    const provider = providers.get(source) orelse {
         logger.err("no provider for {s}", .{@tagName(source)});
         return BlockError.NotSupported;
     };
 
-    const device = try provider.vtable.create(provider.context, params);
-    errdefer provider.vtable.deinit(provider.context);
-    return try self.registerDevice(device, source, false, null);
+    // const device = try provider.vtable.create(provider.context, params);
+    // errdefer provider.vtable.deinit(provider.context);
+    const device = try provider.create(params);
+    errdefer provider.destroy(device.minor);
+
+    return try registerDevice(device, source, false);
 }
 
-/// Supprimer un dispositif
-pub fn removeDevice(self: *Self, name: []const u8) !void {
-    self.mutex.acquire();
-    defer self.mutex.release();
+pub fn removeDevice(name: []const u8) !void {
+    mutex.acquire();
+    defer mutex.release();
 
-    for (self.devices.items, 0..) |*reg_device, i| {
-        if (std.mem.eql(u8, reg_device.device.getName(), name)) {
-            if (reg_device.auto_discovered and reg_device.source == .DISK) {
-                return BlockError.NotSupported; // Pas de suppression des disques physiques
-            }
+    const entry = devices.getEntry(name) orelse {
+        return BlockError.DeviceNotFound;
+    };
+    const key = entry.key_ptr;
+    const registered = entry.value_ptr;
 
-            self.cleanupDevice(reg_device);
-            reg_device.deinit();
-            _ = self.devices.swapRemove(i);
-
-            logger.info("{s} device removed", .{name});
-            return;
-        }
+    if (registered.auto_discovered and registered.source == .DISK) {
+        return BlockError.NotSupported; // No removal of physical disks
     }
 
-    return BlockError.DeviceNotFound;
+    const provider = providers.get(registered.source) orelse {
+        logger.err("no provider for {s}", .{@tagName(registered.source)});
+        return BlockError.NotSupported;
+    };
+
+    provider.destroy(registered.device.minor);
+
+    // Remove from the map
+    devices.removeByPtr(key);
+    logger.info("{s} device removed", .{name});
 }
 
-/// Trouver un dispositif par nom
-pub fn find(self: *Self, name: []const u8) ?*BlockDevice {
-    self.mutex.acquire();
-    defer self.mutex.release();
+/// Find a device by name
+pub fn find(name: []const u8) ?*BlockDevice {
+    mutex.acquire();
+    defer mutex.release();
 
-    for (self.devices.items) |device| {
+    for (devices.items) |device| {
         if (std.mem.eql(u8, device.device.getName(), name)) {
             return device.device;
         }
@@ -147,32 +123,28 @@ pub fn find(self: *Self, name: []const u8) ?*BlockDevice {
     return null;
 }
 
-/// Obtenir un dispositif par index
-pub fn getByIndex(self: *Self, index: usize) ?*BlockDevice {
-    self.mutex.acquire();
-    defer self.mutex.release();
+/// Get the number of devices
+pub fn count() usize {
+    mutex.acquire();
+    defer mutex.release();
 
-    if (index >= self.devices.items.len) return null;
-    return self.devices.items[index].device;
+    // return devices.items.len;
+    return devices.count();
 }
 
-/// Obtenir le nombre de dispositifs
-pub fn count(self: *Self) usize {
-    self.mutex.acquire();
-    defer self.mutex.release();
-
-    return self.devices.items.len;
+pub fn iterator() std.StringHashMap(RegisteredDevice).Iterator {
+    return devices.iterator();
 }
 
-/// Obtenir des statistiques globales
-pub fn getGlobalStats(self: *Self) struct {
+/// Get global statistics
+pub fn getGlobalStats() struct {
     total_reads: u64,
     total_writes: u64,
     total_errors: u64,
     total_capacity_mb: u64,
 } {
-    self.mutex.acquire();
-    defer self.mutex.release();
+    mutex.acquire();
+    defer mutex.release();
 
     var stats = .{
         .total_reads = @as(u64, 0),
@@ -181,8 +153,9 @@ pub fn getGlobalStats(self: *Self) struct {
         .total_capacity_mb = @as(u64, 0),
     };
 
-    for (self.devices.items) |reg_device| {
-        const device = reg_device.device;
+    var it = devices.iterator();
+    while (it.next()) |entry| {
+        const device = entry.value_ptr.device;
         stats.total_reads += device.stats.reads_completed;
         stats.total_writes += device.stats.writes_completed;
         stats.total_errors += device.stats.errors;
@@ -192,11 +165,10 @@ pub fn getGlobalStats(self: *Self) struct {
     return stats;
 }
 
-/// Nettoyer un dispositif selon son type
-fn cleanupDevice(self: *Self, reg_device: *RegisteredDevice) void {
-    _ = self;
+/// Clean up a device according to its type
+fn cleanupDevice(reg_device: *RegisteredDevice) void {
 
-    // Appeler la méthode de nettoyage appropriée selon le type
+    // Call the appropriate cleanup method according to the type
     switch (reg_device.source) {
         .DISK => {
             const disk_device: *Disk = @fieldParentPtr("base", reg_device.device);
@@ -213,5 +185,20 @@ fn cleanupDevice(self: *Self, reg_device: *RegisteredDevice) void {
         else => {
             logger.warn("No cleanup for device type: {s}", .{@tagName(reg_device.source)});
         },
+    }
+}
+
+pub fn deinit() void {
+    for (devices.items) |*device| {
+        cleanupDevice(device);
+        device.deinit();
+    }
+    devices.deinit();
+
+    var iter = providers.iterator();
+    while (iter.next()) |entry| {
+        if (entry.value.*) |provider| {
+            provider.deinit();
+        }
     }
 }

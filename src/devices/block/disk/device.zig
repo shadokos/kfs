@@ -19,26 +19,25 @@ const DriveInfo = @import("../../../drivers/ide/types.zig").DriveInfo;
 
 const allocator = @import("../../../memory.zig").bigAlloc.allocator();
 
-var created_count: u8 = 0;
-
 base: BlockDevice,
 
-/// Position sur le canal (Master ou Slave)
+/// Position on the channel (Master or Slave)
 position: Channel.DrivePosition,
 
-/// Référence vers le canal IDE
+/// Reference to the IDE channel
 channel: *Channel,
 
-/// Modèle du drive
+/// Drive model
 model: [41]u8,
 
-/// Capacité du drive
+/// Drive capacity
 capacity: ide.Capacity,
 
-/// Statistiques d'utilisation
+/// Usage statistics
 stats: DriveStats = .{},
 
-const disk_ops = Operations{
+const disk_table = Operations{
+    .name = "hd",
     .physical_io = physical_io,
     .flush = flush,
     .trim = null,
@@ -48,26 +47,22 @@ const disk_ops = Operations{
 
 const Self = @This();
 
-/// Créer un adaptateur BlockDevice pour un drive IDE
-pub fn create(drive: DriveInfo, channel: *Channel) !*Self {
-    const device = try allocator.create(Self);
-    errdefer allocator.destroy(device);
-
-    // Générer le nom du dispositif
-    const device_name = try generateDeviceName();
-
-    // Créer le translator approprié
+/// Create a BlockDevice adapter for an IDE drive
+pub fn create(drive: DriveInfo, channel: *Channel) !Self {
+    // Create the appropriate translator
     const physical_block_size = drive.capacity.sector_size;
     const _translator = try translator.createTranslator(allocator, physical_block_size);
     errdefer _translator.deinit();
 
-    // Calculer les blocs logiques
+    // Calculate logical blocks
     const logical_blocks_per_physical = physical_block_size / STANDARD_BLOCK_SIZE;
     const total_logical_blocks = drive.capacity.sectors * logical_blocks_per_physical;
 
-    device.* = .{
+    const device: Self = .{
         .base = .{
-            .name = device_name,
+            .name = [_]u8{0} ** 16,
+            .major = 0,
+            .minor = 0,
             .device_type = .HardDisk,
             .block_size = STANDARD_BLOCK_SIZE,
             .total_blocks = total_logical_blocks,
@@ -79,7 +74,7 @@ pub fn create(drive: DriveInfo, channel: *Channel) !*Self {
                 .flushable = true,
                 .trimable = false,
             },
-            .ops = &disk_ops,
+            .vtable = &disk_table,
             .translator = _translator,
             .cache_policy = .WriteBack,
         },
@@ -94,20 +89,10 @@ pub fn create(drive: DriveInfo, channel: *Channel) !*Self {
 
 pub fn destroy(self: *Self) void {
     self.base.deinit();
-    allocator.destroy(self);
+    // allocator.destroy(self);
 }
 
-fn generateDeviceName() ![16]u8 {
-    var name: [16]u8 = [_]u8{0} ** 16;
-
-    _ = try std.fmt.bufPrint(&name, "hd{c}", .{@as(u8, @truncate('a' + created_count))});
-
-    created_count += 1;
-
-    return name;
-}
-
-/// Fonction d'I/O physique
+/// Physical I/O function
 fn physical_io(
     context: *anyopaque,
     physical_block: u32,
@@ -118,7 +103,7 @@ fn physical_io(
     const block_device: *BlockDevice = @ptrCast(@alignCast(context));
     const self: *Self = @fieldParentPtr("base", block_device);
 
-    // Calculer la taille attendue
+    // Calculate expected size
     const expected_size = count * self.base.translator.physical_block_size;
     if (buffer.len < expected_size) {
         return BlockError.BufferTooSmall;
@@ -130,7 +115,7 @@ fn physical_io(
     }
 }
 
-/// Effectuer une opération de lecture
+/// Perform a read operation
 pub fn read(self: *Self, lba: u32, count: u16, buffer: []u8) BlockError!void {
     const op = ide.IDEOperation{
         .channel = self.channel,
@@ -150,7 +135,7 @@ pub fn read(self: *Self, lba: u32, count: u16, buffer: []u8) BlockError!void {
     self.stats.bytes_transferred += @as(u64, count) * self.capacity.sector_size;
 }
 
-/// Effectuer une opération d'écriture
+/// Perform a write operation
 pub fn write(self: *Self, lba: u32, count: u16, buffer: []const u8) BlockError!void {
     const op = ide.IDEOperation{
         .channel = self.channel,

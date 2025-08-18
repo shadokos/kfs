@@ -23,10 +23,10 @@ pub const CDProvider = @import("cdrom/provider.zig");
 pub const Ram = @import("ramdisk/device.zig");
 pub const RamProvider = @import("ramdisk/provider.zig");
 
-const provider_definitions = .{
-    .{ .DISK, DiskProvider },
-    .{ .CDROM, CDProvider },
-    .{ .RAM, RamProvider },
+const providers = .{
+    DiskProvider,
+    CDProvider,
+    RamProvider,
 };
 
 // Standard logical block size for all block devices
@@ -36,8 +36,6 @@ const std = @import("std");
 const ide = @import("../../drivers/ide/ide.zig");
 const allocator = @import("../../memory.zig").smallAlloc.allocator();
 const logger = std.log.scoped(.blockdev);
-
-var manager: BlockManager = BlockManager.init();
 var buffer_cache: ?BufferCache = null; // needs runtime initialization
 
 fn is_initialized() bool {
@@ -52,19 +50,15 @@ pub fn init() !void {
     buffer_cache = try BufferCache.init();
 
     // Initialize provd
-    inline for (provider_definitions) |definition| {
+    inline for (providers) |provider| {
         skip: {
-            const source, const provider = definition;
             const instance = provider.init();
-            manager.registerProvider(source, &instance.base) catch |err| {
+            const source = provider.Source;
+            BlockManager.registerProvider(source, &instance.base) catch |err| {
                 logger.warn("failed to register {s} provider: {s}", .{ @tagName(source), @errorName(err) });
                 break :skip;
             };
             _ = instance.base.discover();
         }
     }
-}
-
-pub fn getManager() *BlockManager {
-    return &manager;
 }

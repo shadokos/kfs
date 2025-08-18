@@ -204,7 +204,7 @@ pub fn cache_create(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 4) return CmdError.InvalidNumberOfArguments;
     const globalCache = &@import("../../memory.zig").globalCache;
     const name = args[1];
-    const size = std.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+    const size = std.fmt.parseInt(u24, args[2], 0) catch return CmdError.InvalidParameter;
     const order = std.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
     const new_cache = globalCache.create(
         name,
@@ -393,29 +393,37 @@ pub fn pci_device(shell: anytype, args: [][]u8) CmdError!void {
 }
 
 pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
-    const blockdev_manager = @import("../../devices/block/core.zig").getManager();
+    const core = @import("../../devices/block/core.zig");
 
-    shell.writer.print("{} block device registered:\n", .{blockdev_manager.devices.items.len}) catch {};
-    for (blockdev_manager.devices.items) |registered| {
-        const device = registered.device;
-        const size_mb = device.total_blocks * device.block_size / 1024 / 1024;
+    shell.writer.print("{} block device registered:\n", .{core.BlockManager.count()}) catch {};
+    var iterator = core.BlockManager.iterator();
+    while (iterator.next()) |entry| {
+        const name = entry.key_ptr.*;
+        const device = entry.value_ptr.device;
+        const size_mb = @as(f32, @floatFromInt(device.total_blocks * device.block_size)) / 1024.0 / 1024.0;
 
         shell.writer.print(
             \\{s}{s}{s}:
-            \\    {s}
-            \\    {} MB: {} ({} bytes)
+            \\    {s} {d}:{d}
+            \\    capacity: {d} MB
+            \\    logical:  {} blocks ({} bytes)
+            \\    physical: {} blocks ({} bytes)
             \\    feats: {}:{}:{}:{}:{} (r,w,removable,flush,trim)
             \\    stats: {}:{}:{}:{}:{} (r,w,errors,hits,misses)
             \\    cache policy: {s}
             \\
         , .{
             colors.bold,
-            device.getName(),
+            name,
             colors.reset,
             @tagName(device.device_type),
+            device.major,
+            device.minor,
             size_mb,
             device.total_blocks,
             device.block_size,
+            device.getPhysicalBlockCount(),
+            device.getPhysicalBlockSize(),
             @intFromBool(device.features.readable),
             @intFromBool(device.features.writable),
             @intFromBool(device.features.removable),
@@ -433,23 +441,19 @@ pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
 
 // Create a new ramdisk
 pub fn mkbrd(shell: anytype, args: [][]u8) CmdError!void {
-    // arg 1: name
-    // arg 2: size in MB
-    // arg 3: physical block size in bytes
-    if (args.len != 4) return CmdError.InvalidNumberOfArguments;
+    // arg 1: size in MB
+    // arg 2: physical block size in bytes
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
 
-    const name = args[1];
-    const size_mb = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
-    const block_size = std.fmt.parseInt(u32, args[3], 0) catch return CmdError.InvalidParameter;
+    const size_mb = std.fmt.parseInt(u32, args[1], 0) catch return CmdError.InvalidParameter;
+    const block_size = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
 
     const core = @import("../../devices/block/core.zig");
-    const manager = core.getManager();
     const CreateParams = core.RamProvider.CreateParams;
 
-    const registered = manager.createDevice(
+    const registered = core.BlockManager.createDevice(
         .RAM,
         @ptrCast(&CreateParams{
-            .name = name,
             .size_mb = size_mb,
             .block_size = block_size,
         }),
@@ -468,9 +472,8 @@ pub fn rmdisk(shell: anytype, args: [][]u8) CmdError!void {
 
     const name = args[1];
     const core = @import("../../devices/block/core.zig");
-    const manager = core.getManager();
 
-    manager.removeDevice(name) catch |e| {
+    core.BlockManager.removeDevice(name) catch |e| {
         utils.print_error(shell, "Failed to destroy ramdisk {s}: {s}", .{ name, @errorName(e) });
         return CmdError.OtherError;
     };

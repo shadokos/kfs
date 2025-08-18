@@ -5,26 +5,26 @@ const tty = @import("./tty/tty.zig");
 const timer = @import("timer.zig");
 const logger = std.log.scoped(.main);
 
-fn test_device(name: []const u8) void {
-    const storage = @import("storage/storage.zig");
-
-    if (storage.findDevice(name)) |device| {
-        logger.info("Found device: {s}", .{device.getName()});
-        const allocator = @import("memory.zig").bigAlloc.allocator();
-        const buffer = allocator.alloc(u8, 2048) catch |err| {
-            logger.err("Failed to allocate buffer: {s}", .{@errorName(err)});
-            return;
-        };
-        defer allocator.free(buffer);
-        device.read(0, 4, buffer) catch |err| {
-            logger.err("Failed to read from device: {s}", .{@errorName(err)});
-            return;
-        };
-        @import("debug.zig").memory_dump(@intFromPtr(buffer.ptr), @intFromPtr(buffer.ptr) + 2048, .Offset);
-    } else {
-        logger.err("Failed to find device \"{s}\"", .{name});
-    }
-}
+// fn test_device(name: []const u8) void {
+//     const storage = @import("storage/storage.zig");
+//
+//     if (storage.findDevice(name)) |device| {
+//         logger.info("Found device: {s}", .{device.getName()});
+//         const allocator = @import("memory.zig").bigAlloc.allocator();
+//         const buffer = allocator.alloc(u8, 2048) catch |err| {
+//             logger.err("Failed to allocate buffer: {s}", .{@errorName(err)});
+//             return;
+//         };
+//         defer allocator.free(buffer);
+//         device.read(0, 4, buffer) catch |err| {
+//             logger.err("Failed to read from device: {s}", .{@errorName(err)});
+//             return;
+//         };
+//         @import("debug.zig").memory_dump(@intFromPtr(buffer.ptr), @intFromPtr(buffer.ptr) + 2048);
+//     } else {
+//         logger.err("Failed to find device \"{s}\"", .{name});
+//     }
+// }
 
 pub fn main(_: usize) u8 {
     // const benchmark = @import("devices/block/core.zig").benchmark;

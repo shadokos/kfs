@@ -65,6 +65,7 @@ pub const PhysicalIOFn = *const fn (
 ) BlockError!void;
 
 pub const Operations = struct {
+    name: ?[]const u8 = null,
     /// Physical I/O operation - operates on device's native block size
     physical_io: PhysicalIOFn,
 
@@ -73,6 +74,7 @@ pub const Operations = struct {
     trim: ?*const fn (dev: *BlockDevice, start_block: u32, count: u32) BlockError!void = null,
     media_changed: ?*const fn (dev: *BlockDevice) bool = null,
     revalidate: ?*const fn (dev: *BlockDevice) BlockError!void = null,
+    generate_name: ?*const fn (dev: *BlockDevice) []const u8 = null,
 };
 
 /// Type de source d'un dispositif
@@ -90,13 +92,6 @@ pub const RegisteredDevice = struct {
     device: *BlockDevice,
     source: DeviceSource,
     auto_discovered: bool,
-    creation_params: ?[]const u8 = null,
-
-    pub fn deinit(self: *RegisteredDevice) void {
-        if (self.creation_params) |params| {
-            allocator.free(params);
-        }
-    }
 };
 
 pub const DriveStats = struct {

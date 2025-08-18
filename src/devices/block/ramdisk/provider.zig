@@ -10,6 +10,8 @@ const BlockProvider = core.BlockProvider;
 
 const BlockRam = @import("device.zig");
 
+pub const Source = types.DeviceSource.RAM;
+
 const Self = @This();
 
 // Providers are singleton
@@ -18,7 +20,6 @@ var instance: ?Self = null;
 base: BlockProvider,
 
 pub const CreateParams = struct {
-    name: []const u8,
     size_mb: u32,
     block_size: u32,
 };
@@ -35,8 +36,10 @@ pub fn init() *Self {
         .base = .{
             .vtable = &vtable,
             .context = @ptrCast(&instance),
+            .major = @intFromEnum(Source),
         },
     };
+    instance.?.base.init_slots();
     return &instance.?;
 }
 
@@ -46,10 +49,10 @@ fn discover(ctx: *anyopaque) u32 {
     return 0;
 }
 
-fn create(ctx: *anyopaque, params: *CreateParams) !*BlockDevice {
+fn create(ctx: *anyopaque, params: *CreateParams) !BlockDevice {
     _ = ctx;
-    const ramdisk = try BlockRam.create(params.name, params.size_mb, params.block_size);
-    return &ramdisk.base;
+    const ramdisk = try BlockRam.create(params.size_mb, params.block_size);
+    return ramdisk.base;
 }
 
 fn deinit(ctx: *anyopaque) void {

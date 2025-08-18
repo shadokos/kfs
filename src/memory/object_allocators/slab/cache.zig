@@ -6,7 +6,7 @@ const paging = @import("../../paging.zig");
 const page_frame_descriptor = paging.page_frame_descriptor;
 const Slab = @import("slab.zig").Slab;
 const SlabState = @import("slab.zig").SlabState;
-const BitMap = @import("../../../misc/bitmap.zig").BitMap;
+const BitMap = @import("../../../misc/bitmap.zig").UnsafeBitMap;
 const mapping = @import("../../mapping.zig");
 const Mutex = @import("../../../task/semaphore.zig").Mutex;
 
@@ -31,21 +31,21 @@ pub const Cache = struct {
     nb_slab: usize = 0,
     nb_active_slab: usize = 0,
     obj_per_slab: u16 = 0,
-    size_obj: usize = 0,
-    align_obj: usize = 0,
+    size_obj: u24 = 0,
+    align_obj: u16 = 0,
     lock: Mutex = .{},
 
     pub fn init(
         name: []const u8,
         page_allocator: PageAllocator,
-        obj_size: usize,
-        obj_align: usize,
+        obj_size: u24,
+        obj_align: u16,
         order: u5,
     ) Error!Cache {
         var new = Cache{
             .page_allocator = page_allocator,
             .pages_per_slab = @as(usize, 1) << order,
-            .size_obj = std.mem.alignForward(usize, obj_size, obj_align),
+            .size_obj = @truncate(std.mem.alignForward(usize, obj_size, obj_align)),
             .align_obj = obj_align,
         };
 
@@ -82,8 +82,8 @@ pub const Cache = struct {
         }
     }
 
-    fn unlink(self: *Self, slab: *Slab) void {
-        if (slab.header.prev) |prev| prev.header.next = slab.header.next else switch (slab.get_state()) {
+    fn unlink(self: *Self, slab: *Slab, state: SlabState) void {
+        if (slab.header.prev) |prev| prev.header.next = slab.header.next else switch (state) {
             .Empty => self.slab_empty = slab.header.next,
             .Partial => self.slab_partial = slab.header.next,
             .Full => self.slab_full = slab.header.next,
@@ -114,9 +114,9 @@ pub const Cache = struct {
     // Each unsafe_xxx method has xxx method which simply calls unsafe_xxx wrapped by mutex lock/unlock.
     // This is a workaround to prevent deadlocks
     //
-    pub fn unsafe_move_slab(self: *Self, slab: *Slab, state: SlabState) void {
-        self.unlink(slab);
-        self.link(slab, state);
+    pub fn unsafe_move_slab(self: *Self, slab: *Slab, from: SlabState, to: SlabState) void {
+        self.unlink(slab, from);
+        self.link(slab, to);
     }
 
     pub fn unsafe_grow(self: *Self, nb_slab: usize) PageAllocator.Error!void {
@@ -133,14 +133,14 @@ pub const Cache = struct {
                 pfd.next = @ptrCast(@alignCast(slab));
                 pfd.flags.slab = true;
             }
-            self.unsafe_move_slab(slab, SlabState.Empty);
+            self.link(slab, .Empty);
             self.nb_slab += 1;
         }
     }
 
     fn unsafe_shrink(self: *Self) void {
         while (self.slab_empty) |slab| {
-            self.unlink(slab);
+            self.unlink(slab, .Empty);
             self.reset_page_frame_descriptor(slab);
             self.page_allocator.free_pages(@ptrCast(@alignCast(slab)), self.pages_per_slab);
             self.nb_slab -= 1;
@@ -151,7 +151,7 @@ pub const Cache = struct {
         var ret: usize = 0;
         var partials = self.slab_partial;
         while (partials) |p| : (partials = p.header.next) {
-            ret += self.obj_per_slab - p.header.in_use;
+            ret += self.obj_per_slab - p.slots.bitmap.nb_obj;
         }
         var empty = self.slab_empty;
         while (empty) |e| : (empty = e.header.next) {
@@ -196,7 +196,7 @@ pub const Cache = struct {
         self.lock.acquire();
         defer self.lock.release();
 
-        return self.unsafe_move_slab(slab, state);
+        return self.unsafe_move_slab(slab, slab.get_state(), state);
     }
 
     pub fn grow(self: *Self, nb_slab: usize) PageAllocator.Error!void {
@@ -358,8 +358,8 @@ pub const GlobalCache = struct {
         self: *Self,
         name: []const u8,
         allocator: PageAllocator,
-        obj_size: usize,
-        obj_align: usize,
+        obj_size: u24,
+        obj_align: u16,
         order: u5,
     ) !*Cache {
         self.lock.acquire();

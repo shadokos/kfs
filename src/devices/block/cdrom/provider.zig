@@ -17,6 +17,8 @@ const ide = @import("../../../drivers/ide/ide.zig");
 
 const Self = @This();
 
+pub const Source = types.DeviceSource.CDROM;
+
 // Providers are singleton
 var instance: ?Self = null;
 
@@ -39,8 +41,10 @@ pub fn init() *Self {
         .base = .{
             .vtable = &vtable,
             .context = @ptrCast(&instance),
+            .major = @intFromEnum(Source),
         },
     };
+    instance.?.base.init_slots();
     return &instance.?;
 }
 
@@ -51,8 +55,7 @@ fn discover(ctx: *anyopaque) u32 {
         for ([_]ide.Channel.DrivePosition{ .Master, .Slave }) |position| {
             if (try ide.atapi.detectDrive(channel, position)) |info| {
                 // TODO: Maybe add some logging if an error occurs
-                const manager = core.getManager();
-                const registered = manager.createDevice(
+                const registered = core.BlockManager.createDevice(
                     .CDROM,
                     @constCast(@ptrCast(&CreateParams{
                         .info = info,
@@ -72,10 +75,9 @@ fn discover(ctx: *anyopaque) u32 {
     return count;
 }
 
-fn create(ctx: *anyopaque, params: *const CreateParams) !*BlockDevice {
-    _ = ctx;
+fn create(_: *anyopaque, params: *const CreateParams) !BlockDevice {
     const disk = try BlockCD.create(params.info, params.channel);
-    return &disk.base;
+    return disk.base;
 }
 
 fn deinit(ctx: *anyopaque) void {

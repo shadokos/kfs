@@ -13,16 +13,18 @@ const Operations = types.Operations;
 const BlockTranslator = core.BlockTranslator;
 const STANDARD_BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
 
+vtable: *const Operations,
 name: [16]u8,
 device_type: DeviceType,
 block_size: u32 = STANDARD_BLOCK_SIZE, // Always standard size for logical interface
 total_blocks: u64, // Total logical blocks
 max_transfer: u32, // Maximum logical blocks per transfer
 features: Features,
-ops: *const Operations,
 translator: *BlockTranslator, // Handles physical/logical translation
 stats: Statistics = .{},
 cache_policy: CachePolicy = .WriteBack,
+major: u8,
+minor: u8,
 
 const Self = @This();
 
@@ -37,7 +39,7 @@ pub fn read(self: *Self, start_block: u32, count: u32, buffer: []u8) BlockError!
         start_block,
         count,
         buffer,
-        self.ops.physical_io,
+        self.vtable.physical_io,
         self,
     ) catch |err| {
         self.stats.errors += 1;
@@ -59,7 +61,7 @@ pub fn write(self: *Self, start_block: u32, count: u32, buffer: []const u8) Bloc
         start_block,
         count,
         buffer,
-        self.ops.physical_io,
+        self.vtable.physical_io,
         self,
     ) catch |err| {
         self.stats.errors += 1;
@@ -71,14 +73,14 @@ pub fn write(self: *Self, start_block: u32, count: u32, buffer: []const u8) Bloc
 }
 
 pub fn flush(self: *Self) BlockError!void {
-    if (self.ops.flush) |flush_fn| {
+    if (self.vtable.flush) |flush_fn| {
         try flush_fn(self);
     }
 }
 
 pub fn trim(self: *Self, start_block: u32, count: u32) BlockError!void {
     if (!self.features.trimable) return BlockError.NotSupported;
-    if (self.ops.trim) |trim_fn| {
+    if (self.vtable.trim) |trim_fn| {
         try trim_fn(self, start_block, count);
     }
 }
@@ -91,16 +93,22 @@ pub fn getName(self: *const Self) []const u8 {
 }
 
 pub fn mediaChanged(self: *Self) bool {
-    if (self.ops.media_changed) |media_changed_fn| {
+    if (self.vtable.media_changed) |media_changed_fn| {
         return media_changed_fn(self);
     }
     return false;
 }
 
 pub fn revalidate(self: *Self) BlockError!void {
-    if (self.ops.revalidate) |revalidate_fn| {
+    if (self.vtable.revalidate) |revalidate_fn| {
         try revalidate_fn(self);
     }
+}
+
+pub fn generateName(self: *Self) !void {
+    if (self.vtable.name) |name| {
+        _ = try std.fmt.bufPrint(&self.name, "{s}{}", .{ name, self.minor });
+    } else _ = try std.fmt.bufPrint(&self.name, "dev{}_{}", .{ self.major, self.minor });
 }
 
 /// Get the physical block size of the underlying device

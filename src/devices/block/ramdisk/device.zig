@@ -19,7 +19,8 @@ base: BlockDevice,
 storage: []u8,
 physical_block_size: u32,
 
-const ram_ops = Operations{
+const ram_table = Operations{
+    .name = "ram",
     .physical_io = ramPhysicalIO,
     .flush = ramFlush,
     .trim = ramTrim,
@@ -29,13 +30,12 @@ const ram_ops = Operations{
 
 const Self = @This();
 
-/// Créer un RAM disk avec la taille de bloc physique spécifiée
+/// Create a RAM disk with the specified physical block size
 pub fn create(
-    name: []const u8,
     size_mb: u32,
     physical_block_size: u32,
-) !*Self {
-    // Valider la taille de bloc physique
+) !Self {
+    // Validate the physical block size
     if (physical_block_size < STANDARD_BLOCK_SIZE or
         physical_block_size % STANDARD_BLOCK_SIZE != 0)
     {
@@ -47,33 +47,26 @@ pub fn create(
     const logical_blocks_per_physical = physical_block_size / STANDARD_BLOCK_SIZE;
     const total_logical_blocks = physical_blocks * logical_blocks_per_physical;
 
-    // Allouer le stockage
+    // Allocate the storage
     const storage = try allocator.alignedAlloc(u8, 16, total_size);
     errdefer allocator.free(storage);
 
-    // Initialiser à zéro
+    // Initialize to zero
     @memset(storage, 0);
 
-    // Créer le translator approprié
+    // Create the appropriate translator
     const _translator = try translator.createTranslator(allocator, physical_block_size);
     errdefer _translator.deinit();
 
-    // Créer l'instance
-    const ramdisk = try allocator.create(Self);
-    errdefer allocator.destroy(ramdisk);
-
-    // Générer le nom du dispositif
-    var device_name: [16]u8 = [_]u8{0} ** 16;
-    const name_len = @min(name.len, 15);
-    @memcpy(device_name[0..name_len], name[0..name_len]);
-
-    ramdisk.* = .{
+    const ramdisk: Self = .{
         .base = .{
-            .name = device_name,
+            .name = [_]u8{0} ** 16,
+            .major = 0,
+            .minor = 0,
             .device_type = .RamDisk,
             .block_size = STANDARD_BLOCK_SIZE,
             .total_blocks = total_logical_blocks,
-            .max_transfer = 65535, // Pas de limite pratique pour la RAM
+            .max_transfer = 65535, // No practical limit for RAM
             .features = .{
                 .readable = true,
                 .writable = true,
@@ -81,9 +74,9 @@ pub fn create(
                 .flushable = true,
                 .trimable = true,
             },
-            .ops = &ram_ops,
+            .vtable = &ram_table,
             .translator = _translator,
-            .cache_policy = .NoCache, // Pas besoin de cache pour la RAM
+            .cache_policy = .NoCache, // No need for cache for RAM
         },
         .storage = storage,
         .physical_block_size = physical_block_size,
@@ -95,10 +88,10 @@ pub fn create(
 pub fn destroy(self: *Self) void {
     allocator.free(self.storage);
     self.base.deinit(); // Clean up the base
-    allocator.destroy(self);
+    // allocator.destroy(self);
 }
 
-/// Fonction d'I/O physique - c'est ici que la magie opère
+/// Physical I/O function - this is where the magic happens
 fn ramPhysicalIO(
     context: *anyopaque,
     physical_block: u32,
@@ -109,11 +102,11 @@ fn ramPhysicalIO(
     const device: *BlockDevice = @ptrCast(@alignCast(context));
     const self: *Self = @fieldParentPtr("base", device);
 
-    // Calculer les offsets
+    // Calculate the offsets
     const offset = physical_block * self.physical_block_size;
     const size = count * self.physical_block_size;
 
-    // Vérifier les limites
+    // Check the limits
     if (offset + size > self.storage.len) {
         return BlockError.OutOfBounds;
     }
@@ -122,7 +115,7 @@ fn ramPhysicalIO(
         return BlockError.BufferTooSmall;
     }
 
-    // Effectuer l'opération
+    // Perform the operation
     if (is_write) {
         @memcpy(self.storage[offset .. offset + size], buffer[0..size]);
     } else {
@@ -132,14 +125,14 @@ fn ramPhysicalIO(
 
 fn ramFlush(dev: *BlockDevice) BlockError!void {
     _ = dev;
-    // Rien à faire pour un RAM disk
+    // Nothing to do for a RAM disk
     logger.debug("RAM flush (no-op)", .{});
 }
 
 fn ramTrim(dev: *BlockDevice, start_block: u32, count: u32) BlockError!void {
     const self: *Self = @fieldParentPtr("base", dev);
 
-    // Convertir en adresses physiques
+    // Convert to physical addresses
     const physical_start = self.base.translator.vtable.logicalToPhysical(
         self.base.translator.context,
         start_block,
@@ -150,7 +143,7 @@ fn ramTrim(dev: *BlockDevice, start_block: u32, count: u32) BlockError!void {
         count,
     );
 
-    // Remettre à zéro les zones TRIM
+    // Zero out the TRIM areas
     const offset = physical_start * self.physical_block_size;
     const size = range.physical_count * self.physical_block_size;
 

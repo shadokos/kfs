@@ -7,6 +7,7 @@ const types = core.types;
 
 const BlockDevice = core.BlockDevice;
 const BlockProvider = core.BlockProvider;
+const BlockManager = core.BlockManager;
 
 // TODO: Refactor the storage module
 // const storage = &@import("../../../storage/storage.zig");
@@ -14,6 +15,8 @@ const BlockProvider = core.BlockProvider;
 const BlockDisk = @import("device.zig");
 
 const ide = @import("../../../drivers/ide/ide.zig");
+
+pub const Source = types.DeviceSource.DISK;
 
 const Self = @This();
 
@@ -39,8 +42,10 @@ pub fn init() *Self {
         .base = .{
             .vtable = &vtable,
             .context = @ptrCast(&instance),
+            .major = @intFromEnum(Source),
         },
     };
+    instance.?.base.init_slots();
     return &instance.?;
 }
 
@@ -51,8 +56,7 @@ fn discover(ctx: *anyopaque) u32 {
         for ([_]ide.Channel.DrivePosition{ .Master, .Slave }) |position| {
             if (try ide.ata.detectDrive(channel, position)) |info| {
                 // TODO: Maybe add some logging if an error occurs
-                const manager = core.getManager();
-                const registered = manager.createDevice(
+                const registered = BlockManager.createDevice(
                     .DISK,
                     @constCast(@ptrCast(&CreateParams{
                         .info = info,
@@ -72,10 +76,10 @@ fn discover(ctx: *anyopaque) u32 {
     return count;
 }
 
-fn create(ctx: *anyopaque, params: *const CreateParams) !*BlockDevice {
+fn create(ctx: *anyopaque, params: *const CreateParams) !BlockDevice {
     _ = ctx;
     const disk = try BlockDisk.create(params.info, params.channel);
-    return &disk.base;
+    return disk.base;
 }
 
 fn deinit(ctx: *anyopaque) void {
