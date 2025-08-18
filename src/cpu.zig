@@ -212,14 +212,6 @@ pub inline fn io_wait() void {
     outb(0x80, 0);
 }
 
-pub inline fn enable_interrupts() void {
-    asm volatile ("sti");
-}
-
-pub inline fn disable_interrupts() void {
-    asm volatile ("cli");
-}
-
 pub inline fn load_idt(idtr: *const @import("interrupts.zig").IDTR) void {
     asm volatile ("lidt (%%eax)"
         :
@@ -265,4 +257,78 @@ pub inline fn load_segments(comptime code: Selector, data: Selector, stack: Sele
 
 pub inline fn halt() void {
     asm volatile ("hlt");
+}
+
+pub inline fn read_tsc() u64 {
+    var low: u32 = undefined;
+    var high: u32 = undefined;
+
+    asm volatile ("rdtsc"
+        : [low] "={eax}" (low),
+          [high] "={edx}" (high),
+    );
+
+    return (@as(u64, high) << 32) | @as(u64, low);
+}
+
+/// Reads the current CPU flags register (EFLAGS/RFLAGS)
+pub inline fn read_flags() usize {
+    if (@sizeOf(usize) == 8) {
+        // 64-bit mode
+        return asm volatile ("pushfq; popq %[flags]"
+            : [flags] "=r" (-> u64),
+        );
+    } else {
+        // 32-bit mode
+        return asm volatile ("pushfl; popl %[flags]"
+            : [flags] "=r" (-> u32),
+        );
+    }
+}
+
+/// Writes to the CPU flags register (EFLAGS/RFLAGS)
+pub inline fn write_flags(flags: usize) void {
+    if (@sizeOf(usize) == 8) {
+        // 64-bit mode
+        asm volatile ("pushq %[flags]; popfq"
+            :
+            : [flags] "r" (flags),
+            : .{ .memory = true });
+    } else {
+        // 32-bit mode
+        asm volatile ("pushl %[flags]; popfl"
+            :
+            : [flags] "r" (flags),
+            : .{ .memory = true });
+    }
+}
+
+/// Disables interrupts (CLI instruction)
+pub inline fn disable_interrupts() void {
+    asm volatile ("cli" ::: .{ .memory = true });
+}
+
+/// Enables interrupts (STI instruction)
+pub inline fn enable_interrupts() void {
+    asm volatile ("sti" ::: .{ .memory = true });
+}
+
+/// Checks if interrupts are currently enabled
+pub inline fn interrupts_enabled() bool {
+    const flags = read_flags();
+    return (flags & 0x200) != 0; // IF flag is bit 9 in both 32-bit and 64-bit
+}
+
+/// Saves current interrupt state and disables interrupts atomically
+/// Returns the saved flags that should be passed to restore_all_flags()
+pub inline fn save_all_flags() usize {
+    const flags = read_flags();
+    disable_interrupts();
+    return flags;
+}
+
+/// Restores interrupt state from saved flags
+/// Use with the return value from save_all_flags()
+pub inline fn restore_all_flags(saved_flags: usize) void {
+    write_flags(saved_flags);
 }
