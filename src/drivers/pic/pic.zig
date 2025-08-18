@@ -71,6 +71,12 @@ pub fn enable_irq(irq: IRQ) void {
     cpu.outb(port_id.port, mask & ~(@as(u8, 1) << @truncate(port_id.id)));
     if (@intFromEnum(irq) >= 8)
         enable_slave();
+
+    logger.debug("Enabled {s} irq (IRQ {d}, vector {})", .{
+        @tagName(irq),
+        @intFromEnum(irq),
+        get_interrupt_id_from_irq(irq) catch null,
+    });
 }
 
 pub fn enable_all_irqs() void {
