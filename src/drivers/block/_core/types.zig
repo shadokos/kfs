@@ -75,7 +75,7 @@ pub const Operations = struct {
     media_changed: ?*const fn (dev: *BlockDevice) bool = null,
     revalidate: ?*const fn (dev: *BlockDevice) BlockError!void = null,
     generate_name: ?*const fn (dev: *BlockDevice) []const u8 = null,
-    deinit: ?*const fn (dev: *BlockDevice) void = null,
+    destroy: *const fn (dev: *BlockDevice) void,
 };
 
 /// Type de source d'un dispositif

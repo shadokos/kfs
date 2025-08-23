@@ -6,6 +6,8 @@ pub const ScaledTranslator = translator.ScaledTranslator;
 pub const IdentityTranslator = translator.IdentityTranslator;
 
 pub const BlockDevice = @import("_core/block_device.zig");
+pub const PartitionDevice = @import("devices/partition.zig");
+pub const DiskProvider = @import("_core/disk/provider.zig");
 
 // Standard logical block size for all block devices
 pub const STANDARD_BLOCK_SIZE: u32 = 512;
@@ -14,64 +16,78 @@ const std = @import("std");
 const logger = std.log.scoped(.blockdev);
 
 pub fn init() void {
-    @import("../../memory.zig").pageFrameAllocator.print();
-
     const allocator = @import("../../memory.zig").bigAlloc.allocator();
+    const BlockRam = @import("devices/ramdisk.zig");
 
-    // Simple block device creation for testing purposes
-    // The block device management will mainly be handled by a Disk manager later
-    const BdevRAM = @import("devices/ram.zig");
-    // const PartitionDevice = @import("disks/partition.zig");
-    // const PartitionManager = @import("partition_manager.zig").PartitionManager;
+    @import("../../memory.zig").pageFrameAllocator.print();
+    var ram_provider: DiskProvider = DiskProvider.init(
+        5,
+        @ptrCast(&BlockRam.create),
+    );
 
-    const device = BdevRAM.create(
-        allocator,
-        0, // Major number
-        0, // Minor number
-        5, //  5 MB RAM disk
-        512, // 512-byte physical block size
-    ) catch |err| {
-        logger.err("Failed to create RAM disk: {s}", .{@errorName(err)});
-        return;
-    };
+    for (1..5) |i| {
+        const P = BlockRam.CreateParams;
+        const Disk = @import("_core/disk/disk.zig");
+        const disk: *Disk = ram_provider.create_disk(allocator, @ptrCast(
+            &P{
+                .size_mb = 5,
+                .physical_block_size = 1024,
+            },
+        )) catch |err| {
+            logger.err("Failed to create RAM disk: {s}", .{@errorName(err)});
+            return;
+        };
 
-    // Note: defers are called in reverse order
-    defer allocator.destroy(@as(*BdevRAM, @fieldParentPtr("base", device)));
-    defer device.deinit();
+        logger.debug("Disk created: {d}:{d}", .{ disk.main.major, disk.main.minor });
 
-    logger.debug("RAM disk created:\nlogical blocks: {d} ({d} bytes)\nphysical blocks: {d} ({d} bytes)", .{
-        device.total_blocks,
-        device.block_size,
-        device.getPhysicalBlockCount(),
-        device.getPhysicalBlockSize(),
-    });
+        for (0..i) |j| {
+            const info: PartitionDevice.PartitionInfo = .{
+                .start_lba = j * 1000,
+                .total_blocks = 1000,
+                .active = false,
+            };
+            disk.partitions[j] = PartitionDevice.create(
+                allocator,
+                disk.main,
+                info,
+                @truncate(j),
+            ) catch |err| {
+                logger.err("Failed to create partition: {s}", .{@errorName(err)});
+                return;
+            };
+            var buffer: [512]u8 = .{0} ** 512;
+            for (&buffer, 0..) |*b, idx| {
+                b.* = @truncate((idx % 26) + 'A');
+            }
+            disk.partitions[j].?.write(0, 1, &buffer) catch |err| {
+                logger.err("Failed to write to partition: {s}", .{@errorName(err)});
+                return;
+            };
+        }
+    }
 
-    // Attempt to write and read some data at  a specific block
-    //
-    const block = 9;
-    const buffer: []u8 = allocator.alloc(u8, 512 * 10) catch |err| {
-        logger.err("Failed to allocate buffer for RAM disk: {s}", .{@errorName(err)});
+    defer @import("../../memory.zig").pageFrameAllocator.print();
+    defer ram_provider.deinit();
+
+    const buffer = allocator.alloc(u8, 5 * 1024 * 1024) catch {
+        logger.err("Failed to allocate buffer for reading", .{});
         return;
     };
     defer allocator.free(buffer);
+    @memset(buffer, 0);
 
-    for (buffer, 0..) |*byte, i| {
-        byte.* = @truncate((i % 26) + 'A');
-    }
-    device.write(block, 1, buffer) catch |err| {
-        logger.err("Failed to write to RAM disk: {s}", .{@errorName(err)});
+    const first_disk = ram_provider.get(15) catch {
+        logger.err("No disks found in RAM provider", .{});
         return;
     };
-    logger.debug("Write successfully", .{});
-    @memset(buffer, 0); // Clear buffer for read
-    device.read(block, 1, buffer) catch |err| {
+    first_disk.read(0, first_disk.total_blocks, buffer) catch |err| {
         logger.err("Failed to read from RAM disk: {s}", .{@errorName(err)});
         return;
     };
-    logger.debug("Read successfully", .{});
-    @import("../../debug.zig").memory_dump(
-        @intFromPtr(buffer.ptr),
-        @intFromPtr(buffer.ptr) + buffer.len,
-        .Offset,
-    );
+
+    logger.warn("Disk 0: blocks {d}, buffer len: {d}", .{ first_disk.total_blocks, buffer.len });
+    const start: usize = @intFromPtr(buffer.ptr);
+    const end: usize = start + buffer.len;
+    const debug = @import("../../debug.zig");
+    debug.memory_dump(start, end, start);
 }

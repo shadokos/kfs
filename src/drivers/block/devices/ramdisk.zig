@@ -5,6 +5,7 @@ const core = @import("../core.zig");
 const types = core.types;
 const translator = core.translator;
 
+const DiskProvider = core.DiskProvider;
 const BlockDevice = core.BlockDevice;
 const BlockError = types.BlockError;
 const DeviceType = types.DeviceType;
@@ -13,19 +14,25 @@ const Operations = types.Operations;
 
 const STANDARD_BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
 
-base: BlockDevice,
-allocator: std.mem.Allocator,
-storage: []u8,
+pub const CreateParams = struct {
+    size_mb: u32,
+    physical_block_size: u32,
+};
 
-const ram_table = Operations{
-    .physical_io = ramPhysicalIO,
-    .flush = ramFlush,
-    .trim = ramTrim,
+const vtable = Operations{
+    .physical_io = physical_io,
+    .flush = flush,
+    .trim = trim,
     .media_changed = null,
     .revalidate = null,
+    .destroy = @ptrCast(&destroy),
 };
 
 const Self = @This();
+
+base: BlockDevice,
+allocator: std.mem.Allocator,
+storage: []u8,
 
 /// Create a RAM disk with the specified physical block size
 pub fn init(
@@ -74,7 +81,7 @@ pub fn init(
                 .flushable = true,
                 .trimable = true,
             },
-            .vtable = &ram_table,
+            .vtable = &vtable,
             .translator = _translator,
         },
         .storage = storage,
@@ -92,13 +99,12 @@ pub fn create(
     allocator: std.mem.Allocator,
     major: u8,
     minor: u8,
-    size_mb: u32,
-    physical_block_size: u32,
+    params: CreateParams,
 ) !*BlockDevice {
     const ramdisk = try allocator.create(Self);
     errdefer allocator.destroy(ramdisk);
 
-    ramdisk.* = try init(allocator, major, minor, size_mb, physical_block_size);
+    ramdisk.* = try init(allocator, major, minor, params.size_mb, params.physical_block_size);
 
     // Return the BlockDevice pointer
     return &ramdisk.base;
@@ -111,7 +117,7 @@ pub fn destroy(dev: *BlockDevice) void {
 }
 
 /// Physical I/O function - this is where the magic happens
-fn ramPhysicalIO(
+fn physical_io(
     context: *anyopaque,
     physical_block: u32,
     count: u32,
@@ -148,13 +154,13 @@ fn ramPhysicalIO(
     }
 }
 
-fn ramFlush(dev: *BlockDevice) BlockError!void {
+fn flush(dev: *BlockDevice) BlockError!void {
     _ = dev;
     // Nothing to do for a RAM disk
     logger.debug("RAM flush (no-op)", .{});
 }
 
-fn ramTrim(dev: *BlockDevice, start_block: u32, count: u32) BlockError!void {
+fn trim(dev: *BlockDevice, start_block: u32, count: u32) BlockError!void {
     const self: *Self = @fieldParentPtr("base", dev);
 
     // Convert to physical addresses

@@ -5,6 +5,7 @@ const core = @import("../core.zig");
 const types = core.types;
 const translator = core.translator;
 
+const DiskProvider = core.DiskProvider;
 const BlockDevice = core.BlockDevice;
 const BlockError = types.BlockError;
 const DeviceType = types.DeviceType;
@@ -16,25 +17,25 @@ const STANDARD_BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
 
 pub const PartitionInfo = struct {
     start_lba: u32, // Starting logical block address
-    size_blocks: u32, // Size in logical blocks (512-byte blocks)
+    total_blocks: u32, // Size in logical blocks (512-byte blocks)
     active: bool = false, // Bootable flag
 };
 
-base: BlockDevice,
-allocator: std.mem.Allocator,
-parent_device: *BlockDevice,
-partition_info: PartitionInfo,
-
-const partition_table = Operations{
+const vtable = Operations{
     .physical_io = partitionPhysicalIO,
     .flush = partitionFlush,
     .trim = partitionTrim,
     .media_changed = partitionMediaChanged,
     .revalidate = partitionRevalidate,
-    .deinit = partitionDeinit,
+    .destroy = @ptrCast(&destroy),
 };
 
 const Self = @This();
+
+base: BlockDevice,
+allocator: std.mem.Allocator,
+parent_device: *BlockDevice,
+partition_info: PartitionInfo,
 
 /// Create a partition device from a parent block device
 pub fn init(
@@ -45,11 +46,11 @@ pub fn init(
     minor: u8,
 ) !Self {
     // Validate partition bounds
-    if (partition_info.start_lba + partition_info.size_blocks > parent_device.total_blocks) {
+    if (partition_info.start_lba + partition_info.total_blocks > parent_device.total_blocks) {
         return BlockError.OutOfBounds;
     }
 
-    if (partition_info.size_blocks == 0) {
+    if (partition_info.total_blocks == 0) {
         return BlockError.InvalidOperation;
     }
 
@@ -61,7 +62,7 @@ pub fn init(
 
     // Configure the translator with partition-specific offset and limit
     _translator.logical_offset = partition_info.start_lba;
-    _translator.logical_limit = partition_info.size_blocks;
+    _translator.logical_limit = partition_info.total_blocks;
 
     // Inherit features from parent but may restrict some
     const features = parent_device.features;
@@ -73,21 +74,16 @@ pub fn init(
             .major = major,
             .minor = minor,
             .block_size = STANDARD_BLOCK_SIZE,
-            .total_blocks = partition_info.size_blocks,
+            .total_blocks = partition_info.total_blocks,
             .max_transfer = parent_device.max_transfer, // Inherit from parent
             .features = features,
-            .vtable = &partition_table,
+            .vtable = &vtable,
             .translator = _translator,
         },
         .allocator = allocator,
         .parent_device = parent_device,
         .partition_info = partition_info,
     };
-
-    logger.info("Created partition: start={}, size={} blocks, type=0x{X:0>2}", .{
-        partition_info.start_lba,
-        partition_info.size_blocks,
-    });
 
     return partition;
 }
@@ -96,13 +92,12 @@ pub fn create(
     allocator: std.mem.Allocator,
     parent_device: *BlockDevice,
     partition_info: PartitionInfo,
-    major: u8,
     minor: u8,
 ) !*BlockDevice {
     const partition = try allocator.create(Self);
     errdefer allocator.destroy(partition);
 
-    partition.* = try init(allocator, parent_device, partition_info, major, minor);
+    partition.* = try init(allocator, parent_device, partition_info, parent_device.major, minor);
 
     return &partition.base;
 }
@@ -165,20 +160,8 @@ fn partitionRevalidate(dev: *BlockDevice) BlockError!void {
     return self.parent_device.revalidate();
 }
 
-fn partitionDeinit(dev: *BlockDevice) void {
-    // const self: *Self = @fieldParentPtr("base", dev);
-
-    logger.debug("Destroying partition device (major={}, minor={})", .{
-        dev.major,
-        dev.minor,
-    });
-
-    // Note: We don't destroy the parent device, just clean up our own resources
-    // The parent device is managed separately
-}
-
-pub fn destroy(self: *Self) void {
-    // Clean up our resources, but don't touch the parent device
+pub fn destroy(device: *BlockDevice) void {
+    const self: *Self = @fieldParentPtr("base", device);
     self.allocator.destroy(self);
 }
 
@@ -189,7 +172,7 @@ pub fn getPartitionInfo(self: *const Self) PartitionInfo {
 
 /// Check if a logical block address is valid for this partition
 pub fn isValidAddress(self: *const Self, lba: u32, count: u32) bool {
-    return lba + count <= self.partition_info.size_blocks;
+    return lba + count <= self.partition_info.size_block;
 }
 
 /// Convert partition-relative LBA to parent device LBA
@@ -201,6 +184,6 @@ pub fn toParentLBA(self: *const Self, partition_lba: u32) u32 {
 pub fn fromParentLBA(self: *const Self, parent_lba: u32) ?u32 {
     if (parent_lba < self.partition_info.start_lba) return null;
     const partition_lba = parent_lba - self.partition_info.start_lba;
-    if (partition_lba >= self.partition_info.size_blocks) return null;
+    if (partition_lba >= self.partition_info.size_block) return null;
     return partition_lba;
 }

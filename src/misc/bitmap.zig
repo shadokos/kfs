@@ -5,7 +5,7 @@ pub const Bit = enum(u1) {
     Free,
 };
 
-pub const BitMap = struct {
+pub const UnsafeBitMap = struct {
     const Self = @This();
     const nbits: usize = 8 * @sizeOf(usize);
 
@@ -14,11 +14,11 @@ pub const BitMap = struct {
 
     pub const Error = error{OutOfBounds};
 
-    pub fn init(addr: [*]usize, nb_obj: usize) BitMap {
+    pub fn init(addr: [*]usize, nb_obj: usize) Self {
         const len = Self.compute_len(nb_obj);
 
         @memset(addr[0..len], 0);
-        return BitMap{ .nb_obj = nb_obj, .bits = addr[0..len] };
+        return Self{ .nb_obj = nb_obj, .bits = addr[0..len] };
     }
 
     /// return the number of usize needed to store nb_obj bits
@@ -57,3 +57,40 @@ pub const BitMap = struct {
         return if ((self.bits[index] >> @truncate(bit)) & 1 == 1) .Taken else .Free;
     }
 };
+
+pub fn BitMap(comptime len: usize) type {
+    return struct {
+        const Self = @This();
+
+        // The number of bits in a usize
+        const nbits: usize = 8 * @sizeOf(usize);
+
+        // the number of bytes needed to store the bitmap
+        const nb_chunks: usize = std.math.divCeil(usize, len * @sizeOf(usize), nbits) catch unreachable;
+
+        chunks: [nb_chunks]usize = .{0} ** nb_chunks,
+
+        pub const Error = error{OutOfBounds};
+
+        /// set the n-th bit state to value
+        pub fn set(self: *Self, n: usize, value: Bit) !void {
+            if (n >= len) return Error.OutOfBounds;
+
+            const index = n / nbits;
+            const mask = @as(usize, 1) << @truncate(n % nbits);
+            switch (value) {
+                .Taken => self.chunks[index] |= mask,
+                .Free => self.chunks[index] &= ~mask,
+            }
+        }
+
+        /// get the n-th bit state
+        pub fn get(self: *Self, n: usize) !Bit {
+            if (n >= len) return Error.OutOfBounds;
+
+            const index = n / nbits;
+            const bit = n % nbits;
+            return if ((self.chunks[index] >> @truncate(bit)) & 1 == 1) .Taken else .Free;
+        }
+    };
+}

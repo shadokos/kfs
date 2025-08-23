@@ -4,6 +4,7 @@ const logger = std.log.scoped(.block_device);
 const core = @import("../core.zig");
 const types = core.types;
 
+const DiskProvider = core.DiskProvider;
 const DeviceType = types.DeviceType;
 const Features = types.Features;
 const CachePolicy = types.CachePolicy;
@@ -104,9 +105,7 @@ pub fn getPhysicalBlockCount(self: *const Self) u64 {
 }
 
 /// Cleanup resources when device is destroyed
-pub fn deinit(self: *Self) void {
+pub fn destroy(self: *Self) void {
     self.translator.deinit();
-    if (self.vtable.deinit) |deinit_fn| {
-        deinit_fn(self);
-    }
+    self.vtable.destroy(self);
 }

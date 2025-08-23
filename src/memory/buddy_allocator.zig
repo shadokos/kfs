@@ -2,6 +2,7 @@ const std = @import("std");
 const tty = @import("../tty/tty.zig");
 const paging = @import("paging.zig");
 const bitmap = @import("../misc/bitmap.zig");
+const BitMap = bitmap.UnsafeBitMap;
 const printk = @import("../tty/tty.zig").printk;
 const multiboot_h = @cImport({
     @cInclude("multiboot.h");
@@ -25,7 +26,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
         mem_map: []page_frame_descriptor = ([0]page_frame_descriptor{})[0..],
 
         /// see https://wiki.osdev.org/Page_Frame_Allocation
-        bit_maps: [max_order + 1]bitmap.BitMap = undefined,
+        bit_maps: [max_order + 1]BitMap = undefined,
 
         /// see https://wiki.osdev.org/Page_Frame_Allocation
         free_lists: [max_order + 1]?*page_frame_descriptor = .{null} ** (max_order + 1),
@@ -59,7 +60,7 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
                     self.total_pages,
                     @as(usize, 1) << @truncate(o),
                 ) catch unreachable;
-                self.bit_maps[o] = bitmap.BitMap.init(@ptrCast(_allocator.alloc(
+                self.bit_maps[o] = BitMap.init(@ptrCast(_allocator.alloc(
                     usize,
                     (std.math.divCeil(usize, bit_map_size, 8) catch unreachable),
                 ) catch @panic("not enough space to allocate bitmap")), bit_map_size);
