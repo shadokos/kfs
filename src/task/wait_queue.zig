@@ -5,7 +5,7 @@ const Errno = @import("../errno.zig").Errno;
 
 const Payload = struct {
     data: ?*void,
-    queue: *Queue,
+    queue: ?*Queue,
 };
 
 const Queue = @import("std").DoublyLinkedList(Payload);
@@ -31,8 +31,8 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
         const Self = @This();
 
         fn internal_block(self: *Self, task: *TaskDescriptor, interruptible: bool, data: ?*void) void {
-            scheduler.lock();
-            defer scheduler.unlock();
+            scheduler.enter_critical();
+            defer scheduler.exit_critical();
             if (arg.predicate(@alignCast(@ptrCast(task)), data))
                 return;
 
@@ -57,8 +57,8 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
         }
 
         pub fn try_unblock(self: *Self) void {
-            scheduler.lock();
-            defer scheduler.unlock();
+            scheduler.enter_critical();
+            defer scheduler.exit_critical();
 
             var node = self.queue.first;
             while (node) |n| {
@@ -68,14 +68,15 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
                     ready_queue.push(task);
                     self.queue.remove(n);
                     if (arg.unblock_callback) |callback| callback(@alignCast(@ptrCast(task)), n.data.data);
+                    task.wq_node.data.queue = null;
                 }
                 node = next;
             }
         }
 
         pub fn unblock_all(self: *Self) void {
-            scheduler.lock();
-            defer scheduler.unlock();
+            scheduler.enter_critical();
+            defer scheduler.exit_critical();
 
             var node = self.queue.first;
             while (node) |n| {
@@ -91,20 +92,37 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
 }
 
 pub fn interrupt(task: *TaskDescriptor) void {
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
     if (task.state != .Blocked)
         return;
 
-    task.state = .Ready;
-    task.wq_node.data.queue.remove(&task.wq_node);
+    // As task/sleep.zig doesn't rely on wait_queue anymore,
+    // a blocking task is not guaranteed to be in a wait queue.
+    if (task.wq_node.data.queue) |q| {
+        q.remove(&task.wq_node);
+        task.wq_node.data.queue = null;
+    }
+
     ready_queue.push(task);
 }
 
 pub fn force_remove(task: *TaskDescriptor) void {
-    scheduler.lock();
-    defer scheduler.unlock();
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
     if (task.state != .Blocked and task.state != .BlockedUninterruptible)
         return;
-    task.wq_node.data.queue.remove(&task.wq_node);
+
+    // As task/sleep.zig doesn't rely on wait_queue anymore,
+    // a blocking task is not guaranteed to be in a wait queue.
+    if (task.wq_node.data.queue) |q| {
+        q.remove(&task.wq_node);
+        task.wq_node.data.queue = null;
+    }
+}
+
+pub fn init() void {
+    @import("task.zig").on_terminate_callback.append(force_remove) catch |err| switch (err) {
+        inline else => |e| @panic("wait_queue: Failed to register remove task callback: " ++ @errorName(e)),
+    };
 }
