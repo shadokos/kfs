@@ -101,9 +101,12 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     @import("task/wait_queue.zig").init();
 
     @import("block/registry.zig").init();
-    @import("drivers/block/ramdisk.zig").init();
 
     @import("drivers/pci/pci.zig").init() catch @panic("Failed to initialize PCI subsystem");
+    @import("drivers/ide/ide.zig").init() catch @panic("Failed to initialize IDE subsystem");
+
+    @import("drivers/block/ramdisk.zig").init();
+    @import("drivers/block/ide_hd.zig").init();
 
     const idle_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create idle task");
 
