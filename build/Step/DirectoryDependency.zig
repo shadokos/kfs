@@ -16,9 +16,6 @@ const AddDirectoryStep = struct {
         var iter = try dir.walk(b.allocator);
         defer iter.deinit();
 
-        var filepaths = std.ArrayList([]const u8).init(b.allocator);
-        defer filepaths.deinit();
-
         while (try iter.next()) |entry| {
             if (entry.kind != .file) continue;
             const f = try std.fs.path.join(b.allocator, &.{ dir_path, entry.path });

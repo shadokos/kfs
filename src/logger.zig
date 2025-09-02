@@ -24,6 +24,7 @@ pub fn kernel_log(
             (" " ** padding) ++ scope_str ++ format ++ "\n",
         args,
     );
+    tty.flush();
     if (message_level == .err and scope == .default) {
         @import("task/scheduler.zig").lock();
         if (@import("build_options").ci) {

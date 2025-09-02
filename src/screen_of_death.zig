@@ -45,4 +45,5 @@ pub fn screen_of_death(comptime format: []const u8, args: anytype) void {
     tty.printk("\x1b[9;3H" ++ c.black ++ c.bg_red ++ "{s}", .{"######## KERNEL PANIC! #########"});
     tty.printk("\x1b[11;3H" ++ c.reset ++ c.white ++ c.bg_red, .{});
     tty.printk(format, args);
+    tty.flush();
 }

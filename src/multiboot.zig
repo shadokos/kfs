@@ -254,7 +254,7 @@ pub fn get_tag(comptime t: usize) ?*get_tag_type(t) {
     var tag: *align(1) tag_header = @ptrFromInt(@intFromPtr(boot.multiboot_info) + @sizeOf(info_header));
     while (tag.type != multiboot2_h.MULTIBOOT_TAG_TYPE_END) {
         if (tag.type == t) {
-            return @alignCast(@ptrCast(tag));
+            return @ptrCast(@alignCast(tag));
         }
         tag = @ptrFromInt(@intFromPtr(tag) + tag.size);
         tag = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));

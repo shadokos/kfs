@@ -17,7 +17,7 @@ fn build_syscall_table(step: *std.Build.Step, _: std.Build.Step.MakeOptions) any
 
     while (try iter.next()) |entry| {
         if (entry.kind != .file) continue;
-        try output_file.writer().print("pub const {s} = @import(\"{s}/{s}\");\n", .{
+        try output_file.deprecatedWriter().print("pub const {s} = @import(\"{s}/{s}\");\n", .{
             std.fs.path.stem(entry.basename), std.fs.path.basename(syscall_dir), entry.path,
         });
     }

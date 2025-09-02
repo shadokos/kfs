@@ -294,7 +294,7 @@ pub const Cache = struct {
         const self: *Self = @ptrCast(@alignCast(ctx));
         const alignment_bytes = alignment.toByteUnits();
         if (alignment_bytes > self.align_obj)
-            return null; // Invalid alignment for this cache
+            @panic("Invalid alignment for slab allocator cache");
         _ = ret_addr;
         if (len != self.size_obj) {
             return null;
@@ -306,7 +306,7 @@ pub const Cache = struct {
         const self: *Self = @ptrCast(@alignCast(ctx));
         const alignment_bytes = alignment.toByteUnits();
         if (alignment_bytes > self.align_obj)
-            return false;
+            @panic("Invalid alignment for slab allocator cache");
         _ = ret_addr;
         _ = memory;
         return new_len == self.size_obj;
@@ -329,7 +329,7 @@ pub const Cache = struct {
             @panic("Invalid alignment for slab allocator cache");
         _ = ret_addr;
 
-        self.free(@alignCast(@ptrCast(memory.ptr))) catch @panic("invalid free");
+        self.free(@ptrCast(@alignCast(memory.ptr))) catch @panic("invalid free");
     }
 
     const vTable = std.mem.Allocator.VTable{

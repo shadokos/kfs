@@ -90,8 +90,9 @@ pub const VirtualSpace = struct {
 
         var current = ret.regions.list.first;
         while (current) |r| : (current = r.next) {
-            if (&r.data == directory_region) continue;
-            self.clone_region(&r.data);
+            const node: *RegionSet.ListNode = @fieldParentPtr("node", r);
+            if (&node.data == directory_region) continue;
+            self.clone_region(&node.data);
         }
         return ret;
     }
@@ -109,9 +110,10 @@ pub const VirtualSpace = struct {
         const directory_region = self.directory_region orelse @panic("todo");
         var current = self.regions.list.first;
         while (current) |r| {
+            const node: *RegionSet.ListNode = @fieldParentPtr("node", r);
             const next = r.next;
-            if (&r.data != directory_region) {
-                self.close_region(&r.data);
+            if (&node.data != directory_region) {
+                self.close_region(&node.data);
             }
             current = next;
         }
