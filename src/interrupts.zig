@@ -231,7 +231,7 @@ pub fn unset_gate(id: u8) void {
     idt[get_id(id)] = default_handlers[get_id(id)];
 }
 
-pub const Stub = *const fn () callconv(.Naked) void;
+pub const Stub = *const fn () callconv(.naked) void;
 
 comptime {
     asm (std.fmt.comptimePrint(
@@ -242,7 +242,7 @@ comptime {
         , .{@import("syscall/sigreturn.zig").Id}));
 }
 
-pub fn setup_iret_frame(frame: *InterruptFrame) callconv(.C) void {
+pub fn setup_iret_frame(frame: *InterruptFrame) callconv(.c) void {
     if (!scheduler.is_initialized())
         return;
     scheduler.get_current_task().handle_signal();
@@ -252,7 +252,7 @@ pub fn setup_iret_frame(frame: *InterruptFrame) callconv(.C) void {
 export fn wrapper(
     f_ptr: *void,
     frame: *InterruptFrame,
-) callconv(.C) noreturn {
+) callconv(.c) noreturn {
     const f: *const fn (frame: InterruptFrame) void = @ptrCast(f_ptr);
     const interrupt_enable = cpu.get_eflags().interrupt_enable;
     const privilege_transition = frame.iret.cs.privilege == .User;
@@ -301,7 +301,7 @@ pub const Handler = extern union {
 
     pub fn create(comptime f: *const fn (frame: InterruptFrame) void, comptime has_error: bool) Self {
         const factory = comptime struct {
-            pub fn raw_stub() callconv(.Naked) void {
+            pub fn raw_stub() callconv(.naked) void {
                 if (!has_error) asm volatile ("push $0");
                 asm volatile (
                     \\push %%eax

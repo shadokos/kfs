@@ -19,6 +19,7 @@ pub fn on_error(shell: *Shell) void {
 }
 
 pub fn pre_process(shell: *Shell) void {
+    tty.flush();
     utils.print_prompt(shell);
 }
 

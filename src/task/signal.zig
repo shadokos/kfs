@@ -18,8 +18,8 @@ pub const DefaultAction = enum {
     Continue,
 };
 
-pub const Handler = *allowzero const fn (u32) callconv(.C) void;
-pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callconv(.C) void;
+pub const Handler = *allowzero const fn (u32) callconv(.c) void;
+pub const SigactionHandler = *allowzero const fn (u32, *siginfo_t, *void) callconv(.c) void;
 pub const SIG_DFL: Handler = @ptrFromInt(0);
 pub const SIG_IGN: Handler = @ptrFromInt(1);
 
@@ -117,7 +117,11 @@ pub const SignalQueue = struct {
     queue: QueueType = .{},
     ignorable: bool = true,
 
-    const QueueType = std.DoublyLinkedList(siginfo_t);
+    const SignalNode = struct {
+        node: std.DoublyLinkedList.Node,
+        data: siginfo_t,
+    };
+    const QueueType = std.DoublyLinkedList;
     pub var cache: *Cache = undefined;
     const Self = @This();
 
@@ -133,8 +137,8 @@ pub const SignalQueue = struct {
         cache = try globalCache.create(
             "signal node",
             @import("../memory.zig").virtually_contiguous_page_allocator.page_allocator(),
-            @sizeOf(QueueType.Node),
-            @alignOf(QueueType.Node),
+            @sizeOf(SignalNode),
+            @alignOf(SignalNode),
             3,
         );
     }
@@ -149,15 +153,16 @@ pub const SignalQueue = struct {
         if (self.is_ignored()) {
             return;
         }
-        const node = cache.allocator().create(QueueType.Node) catch @panic("out of space");
-        self.queue.append(node);
-        node.data = signal;
+        const signal_node = cache.allocator().create(SignalNode) catch @panic("out of space");
+        signal_node.data = signal;
+        self.queue.append(&signal_node.node);
     }
 
     pub fn pop(self: *Self) ?siginfo_t {
-        if (self.queue.pop()) |node| {
-            const ret = node.data;
-            cache.allocator().destroy(node);
+        if (self.queue.popFirst()) |node| {
+            const signal_node: *SignalNode = @fieldParentPtr("node", node);
+            const ret = signal_node.data;
+            cache.allocator().destroy(signal_node);
             return ret;
         } else return null;
     }
@@ -167,8 +172,8 @@ pub const SignalQueue = struct {
             return Errno.EINVAL;
         self.action = action;
         if (self.is_ignored()) {
-            while (self.queue.len != 0) {
-                _ = self.queue.pop();
+            while (self.queue.len() != 0) {
+                _ = self.queue.popFirst();
             }
         }
     }
@@ -244,7 +249,7 @@ pub const SignalManager = struct {
             @panic("todo");
         }
         self.queues[index].queue_signal(signal);
-        if (self.queues[index].queue.len != 0) { // todo: there may be a better way to do this
+        if (self.queues[index].queue.len() != 0) { // todo: there may be a better way to do this
             self.pending |= @as(SigSet, 1) << @as(u5, @intCast(index));
         }
     }
@@ -258,7 +263,7 @@ pub const SignalManager = struct {
             const signo = @ctz(self.pending & ~real_mask);
             const q = &self.queues[signo];
             if (q.pop()) |s| {
-                if (q.queue.len == 0) {
+                if (q.queue.len() == 0) {
                     self.pending ^= @as(SigSet, 1) << @intCast(signo);
                 }
                 return s;

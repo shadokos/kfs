@@ -13,11 +13,13 @@ pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
         0,
     ) catch return CmdError.InvalidParameter else 10000;
 
+    var buffer: [4096]u8 = undefined;
+
     var packet = Packet(void).init(shell.writer);
     packet.type = .Success;
     packet.err = if (utils.fuzz(
         @import("../../memory.zig").smallAlloc.allocator(),
-        shell.writer,
+        @constCast(&shell.writer.adaptToNewApi(&buffer).new_interface),
         nb,
         max_size,
         true,
@@ -35,11 +37,13 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
         0,
     ) catch return CmdError.InvalidParameter else 10000;
 
+    var buffer: [4096]u8 = undefined;
+
     var packet = Packet(void).init(shell.writer);
     packet.type = .Success;
     packet.err = if (utils.fuzz(
         @import("../../memory.zig").bigAlloc.allocator(),
-        shell.writer,
+        @constCast(&shell.writer.adaptToNewApi(&buffer).new_interface),
         nb,
         max_size,
         true,

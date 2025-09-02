@@ -8,7 +8,7 @@ const prompt: *const [2:0]u8 = "»";
 extern var stack_bottom: [*]u8;
 
 pub fn ensure_newline(writer: std.io.AnyWriter) void {
-    std.fmt.format(writer, "{s}\x1b[{d}C\r", .{
+    writer.print("{s}\x1b[{d}C\r", .{
         c.invert ++ "%" ++ c.reset, // No newline char: '%' character in reverse
         tty.width - 2, // Move cursor to the end of the line or on the next line if the line is not empty
     }) catch {};
@@ -16,7 +16,7 @@ pub fn ensure_newline(writer: std.io.AnyWriter) void {
 
 pub fn print_error(shell: anytype, comptime msg: []const u8, args: anytype) void {
     ensure_newline(shell.writer);
-    std.fmt.format(shell.writer, c.red ++ "Error" ++ c.reset ++ ": " ++ msg ++ "\n", args) catch {};
+    shell.writer.print(c.red ++ "Error" ++ c.reset ++ ": " ++ msg ++ "\n", args) catch {};
 }
 
 pub fn print_prompt(shell: anytype) void {
@@ -24,7 +24,7 @@ pub fn print_prompt(shell: anytype) void {
 
     // print the prompt:
     // prompt collor depending on the last command status
-    std.fmt.format(shell.writer, "{s}{s}" ++ c.reset ++ " ", .{
+    shell.writer.print("{s}{s}" ++ c.reset ++ " ", .{
         if (shell.execution_context.err != null) c.red else c.cyan,
         prompt,
     }) catch {};
@@ -199,7 +199,7 @@ pub fn print_mmap() void {
     }
 
     if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_MMAP)) |t| {
-        tty.printk("╔{s:═<18}╤{s:═^18}╤{s:═<18}╗\n", .{
+        tty.printk("╔{s:\xcd<18}╤{s:\xcd^18}╤{s:\xcd<18}╗\n", .{
             "",
             " MMAP ",
             "",
@@ -212,7 +212,7 @@ pub fn print_mmap() void {
 
         var iter = multiboot.mmap_it{ .base = t };
         while (iter.next()) |e| {
-            tty.printk("╠{s:═<18}╪{s:═^18}╪{s:═<18}╣\n", .{
+            tty.printk("╠{s:\xcd<18}╪{s:\xcd^18}╪{s:\xcd<18}╣\n", .{
                 "",
                 "",
                 "",
@@ -223,7 +223,7 @@ pub fn print_mmap() void {
                 e.type,
             }); // 14
         }
-        tty.printk("╚{s:═<18}╧{s:═^18}╧{s:═<18}╝\n", .{
+        tty.printk("╚{s:\xcd<18}╧{s:\xcd^18}╧{s:\xcd<18}╝\n", .{
             "",
             "",
             "",
@@ -264,7 +264,7 @@ pub fn show_palette() void {
     }
 }
 
-pub fn fuzz(allocator: std.mem.Allocator, writer: std.io.AnyWriter, nb: usize, max_size: usize, quiet: bool) !void {
+pub fn fuzz(allocator: std.mem.Allocator, writer: *std.io.Writer, nb: usize, max_size: usize, quiet: bool) !void {
     const Fuzzer = @import("../memory/fuzzer.zig").Fuzzer(1000);
 
     var fuzzer: Fuzzer = Fuzzer.init(allocator, writer, &Fuzzer.converging);
@@ -278,7 +278,7 @@ const taskSet = @import("../task/task_set.zig");
 pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth: usize) void {
     const descriptor = taskSet.get_task_descriptor(pid) orelse return;
     if (descriptor.childs) |first_child| {
-        shell.print("{d:─<5}", .{@as(u32, @intCast(descriptor.pid))});
+        shell.print("{d:\xc4<5}", .{@as(u32, @intCast(descriptor.pid))});
         if ((depth + 1) * 6 > prefix.len) return;
         var child: ?*task.TaskDescriptor = first_child;
         while (child) |current| : (child = current.next_sibling) {

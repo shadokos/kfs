@@ -40,7 +40,8 @@ pub fn schedule() void {
 
     var next_task: ?*task.TaskDescriptor = null;
     if (ready_queue.pop()) |node| {
-        next_task = @alignCast(@fieldParentPtr("rq_node", node));
+        const rq_node: *ready_queue.QueueNode = @alignCast(@fieldParentPtr("node", node));
+        next_task = @alignCast(@fieldParentPtr("rq_node", rq_node));
     } else if (current_task.state != .Running and current_task.state != .Ready and current_task != idle_task) {
         next_task = idle_task;
     }

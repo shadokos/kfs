@@ -26,7 +26,7 @@ pub const std_options: @import("std").Options = .{
     },
 };
 
-export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
+export fn _entry() linksection(".bootstrap_code") callconv(.naked) noreturn {
     _ = @import("trampoline.zig");
     asm volatile (
     // find physical address of stack bottom
@@ -54,7 +54,7 @@ export fn _entry() linksection(".bootstrap_code") callconv(.Naked) noreturn {
     while (true) {}
 }
 
-export fn init(eax: u32, ebx: u32) callconv(.C) void {
+export fn init(eax: u32, ebx: u32) callconv(.c) void {
     // Locks the scheduler (disables interrupts, and increments lock_count)
     @import("task/scheduler.zig").lock();
 

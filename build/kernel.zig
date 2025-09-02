@@ -16,14 +16,16 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
 
     const kernel = context.builder.addExecutable(.{
         .name = context.name,
-        .root_source_file = .{ .cwd_relative = "src/boot.zig" },
-        .target = context.builder.resolveTargetQuery(Target.Query{
-            .cpu_arch = Target.Cpu.Arch.x86,
-            .os_tag = Target.Os.Tag.freestanding,
-            .abi = Target.Abi.none,
-            .cpu_features_sub = cpu_features_sub,
+        .root_module = context.builder.createModule(.{
+            .root_source_file = context.builder.path("src/boot.zig"),
+            .target = context.builder.resolveTargetQuery(Target.Query{
+                .cpu_arch = Target.Cpu.Arch.x86,
+                .os_tag = Target.Os.Tag.freestanding,
+                .abi = Target.Abi.none,
+                .cpu_features_sub = cpu_features_sub,
+            }),
+            .optimize = context.optimize,
         }),
-        .optimize = context.optimize,
     });
 
     const build_options = context.builder.addOptions();

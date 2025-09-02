@@ -58,7 +58,7 @@ const WaitRequest = struct {
 };
 
 fn predicate(_: *void, wait_request_ptr: ?*void) bool {
-    const wait_request = @as(*WaitRequest, @alignCast(@ptrCast(wait_request_ptr.?))).*;
+    const wait_request = @as(*WaitRequest, @ptrCast(@alignCast(wait_request_ptr.?))).*;
     const waited_task = task_set.get_task_descriptor(wait_request.pid) orelse return true;
 
     return switch (wait_request.selector) {

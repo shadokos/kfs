@@ -45,7 +45,7 @@ pub fn Shell(comptime _builtins: anytype) type {
         reader: std.io.AnyReader = undefined,
         writer: std.io.AnyWriter = undefined,
         hooks: Hooks = Hooks{},
-        jobs: std.ArrayList(Job) = undefined,
+        jobs: std.ArrayList(Job) = .empty,
 
         pub fn init(
             reader: std.io.AnyReader,
@@ -60,16 +60,15 @@ pub fn Shell(comptime _builtins: anytype) type {
             },
         ) Self {
             var ret = Self{
-                .jobs = std.ArrayList(Job).init(allocator),
                 .reader = reader,
                 .writer = writer,
                 .config = config,
             };
-            if (hooks.on_init) |h| ret.hooks.on_init = @alignCast(@ptrCast(h));
-            if (hooks.on_error) |h| ret.hooks.on_error = @alignCast(@ptrCast(h));
-            if (hooks.pre_prompt) |h| ret.hooks.pre_prompt = @alignCast(@ptrCast(h));
-            if (hooks.pre_cmd) |h| ret.hooks.pre_cmd = @alignCast(@ptrCast(h));
-            if (hooks.post_cmd) |h| ret.hooks.post_cmd = @alignCast(@ptrCast(h));
+            if (hooks.on_init) |h| ret.hooks.on_init = @ptrCast(@alignCast(h));
+            if (hooks.on_error) |h| ret.hooks.on_error = @ptrCast(@alignCast(h));
+            if (hooks.pre_prompt) |h| ret.hooks.pre_prompt = @ptrCast(@alignCast(h));
+            if (hooks.pre_cmd) |h| ret.hooks.pre_cmd = @ptrCast(@alignCast(h));
+            if (hooks.post_cmd) |h| ret.hooks.post_cmd = @ptrCast(@alignCast(h));
             if (ret.hooks.on_init) |hook| hook(@constCast(&ret));
             return ret;
         }
@@ -173,7 +172,7 @@ pub fn Shell(comptime _builtins: anytype) type {
                 allocator.free(slice);
                 return;
             }) |pid| {
-                self.jobs.append(.{ .pid = pid, .command_line = slice }) catch @panic("todo");
+                self.jobs.append(allocator, .{ .pid = pid, .command_line = slice }) catch @panic("todo");
                 self.print("[{}]\n", .{pid});
             } else {
                 allocator.free(slice);

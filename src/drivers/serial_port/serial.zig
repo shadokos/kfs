@@ -3,8 +3,8 @@ pub const cpu = @import("../../cpu.zig");
 const logger = std.log.scoped(.serial);
 
 const Self = @This();
-pub const Reader = std.io.Reader(*Self, anyerror, read);
-pub const Writer = std.io.Writer(*Self, anyerror, write);
+pub const Reader = std.io.GenericReader(*Self, anyerror, read);
+pub const Writer = std.io.GenericWriter(*Self, anyerror, write);
 
 port: cpu.Ports = undefined,
 

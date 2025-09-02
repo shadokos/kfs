@@ -105,7 +105,7 @@ pub const MultipoolAllocator = struct {
     }
 
     fn vtable_alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize) ?[*]u8 {
-        const self: *Self = @alignCast(@ptrCast(ctx));
+        const self: *Self = @ptrCast(@alignCast(ctx));
         _ = alignment; // TODO: handle alignment properly
         _ = ret_addr;
         return @as([*]u8, @ptrFromInt(@intFromPtr(self._kmalloc(len) catch |e| {

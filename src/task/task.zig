@@ -46,8 +46,8 @@ pub const TaskDescriptor = struct {
     ucontext: ucontext.ucontext_t = .{},
 
     // scheduling
-    rq_node: ready_queue.Node = .{ .data = false },
-    wq_node: wait_queue.Node = .{ .data = undefined },
+    rq_node: ready_queue.QueueNode = .{ .data = false },
+    wq_node: wait_queue.WaitQueueNode = .{ .data = undefined },
 
     pub const State = enum(u8) {
         Running,
@@ -302,7 +302,7 @@ pub const TaskDescriptor = struct {
         scheduler.unlock();
     }
 
-    pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.C) noreturn {
+    pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.c) noreturn {
         const function: *const fn (usize) u8 = @ptrCast(function_ptr);
         self.state = .Running;
         scheduler.set_current_task(self);

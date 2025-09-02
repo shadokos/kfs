@@ -35,7 +35,7 @@ pub export const page_tables: ([table_count][1024]paging.page_table_entry) align
 
 pub var page_directory: [1024]paging.page_directory_entry align(4096) linksection(".bootstrap") = undefined;
 
-export fn trampoline_jump() linksection(".bootstrap_code") callconv(.C) void {
+export fn trampoline_jump() linksection(".bootstrap_code") callconv(.c) void {
 
     // fill the page directory
     for (0..table_count) |t| {

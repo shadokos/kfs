@@ -61,6 +61,7 @@ pub const Philosopher = struct {
         self.check_eos();
         tty.printk("{} {} is eating\n", .{ self.last_meal, self.id });
         @import("../task/sleep.zig").sleep(time_to_eat) catch {};
+        tty.flush();
     }
 
     fn check_eos(self: *Self) void {
@@ -93,6 +94,7 @@ fn philosopher_task(data: usize) u8 {
         philosopher.check_eos();
         tty.printk("{} {} is sleeping\n", .{ get_time_since_boot() - start_time, philosopher.id });
         @import("../task/sleep.zig").sleep(time_to_sleep) catch {};
+        tty.flush();
         philosopher.check_eos();
         tty.printk("{} {} is thinking\n", .{ get_time_since_boot() - start_time, philosopher.id });
     }

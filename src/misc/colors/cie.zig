@@ -59,6 +59,7 @@ pub const XYZ = packed struct {
         var g = @as(f32, @floatFromInt(color.g)) / 255.0;
         var b = @as(f32, @floatFromInt(color.b)) / 255.0;
 
+        @setEvalBranchQuota(10000);
         r = if (r > 0.04045) std.math.pow(f32, (r + 0.055) / 1.055, 2.4) else r / 12.92;
         g = if (g > 0.04045) std.math.pow(f32, (g + 0.055) / 1.055, 2.4) else g / 12.92;
         b = if (b > 0.04045) std.math.pow(f32, (b + 0.055) / 1.055, 2.4) else b / 12.92;
@@ -298,6 +299,9 @@ pub fn LAB(comptime ref: Profile.Items) type {
 
             // calculate ΔΘ
             const dTheta = 30.0 * @exp(-((Hp - 275.0) / 25.0) * ((Hp - 275.0) / 25.0));
+
+            // The following operations are actually quite expensive
+            @setEvalBranchQuota(40000);
 
             // calculate RC
             const pow7_Cp = std.math.pow(f32, Cp, 7.0);

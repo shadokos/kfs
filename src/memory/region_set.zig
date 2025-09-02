@@ -10,7 +10,11 @@ const Region = @import("regions.zig").Region;
 pub const RegionSet = struct {
     list: ListType = .{},
 
-    const ListType = std.DoublyLinkedList(Region);
+    const ListType = std.DoublyLinkedList;
+    pub const ListNode = struct {
+        node: std.DoublyLinkedList.Node,
+        data: Region,
+    };
 
     pub const RangeIterator = struct {
         lower_bound: usize,
@@ -24,11 +28,12 @@ pub const RegionSet = struct {
             var current = self.region_set.list.first;
             var min: ?*Region = null;
             while (current) |node| : (current = node.next) {
-                if (node.data.begin + node.data.len > self.lower_bound and
-                    node.data.begin < self.upper_bound and
-                    (min == null or node.data.begin < min.?.begin))
+                const list_node: *ListNode = @fieldParentPtr("node", node);
+                if (list_node.data.begin + list_node.data.len > self.lower_bound and
+                    list_node.data.begin < self.upper_bound and
+                    (min == null or list_node.data.begin < min.?.begin))
                 {
-                    min = &node.data;
+                    min = &list_node.data;
                 }
             }
             if (min) |min_region| {
@@ -45,16 +50,17 @@ pub const RegionSet = struct {
         nodeCache = try globalCache.create(
             "regions",
             memory.directPageAllocator.page_allocator(),
-            @sizeOf(ListType.Node),
-            @alignOf(ListType.Node),
+            @sizeOf(ListNode),
+            @alignOf(ListNode),
             4,
         );
     }
 
     pub fn clear(self: *Self) !void {
         while (self.list.first) |first| {
-            self.remove_region(&first.data);
-            try destroy_region(&first.data);
+            const list_node: *ListNode = @fieldParentPtr("node", first);
+            self.remove_region(&list_node.data);
+            try destroy_region(&list_node.data);
         }
     }
 
@@ -64,8 +70,9 @@ pub const RegionSet = struct {
 
         var head = self.list.first;
         while (head) |node| : (head = node.next) {
+            const list_node: *ListNode = @fieldParentPtr("node", node);
             const new_region = try create_region();
-            new_region.* = node.data;
+            new_region.* = list_node.data;
             ret.add_region(new_region);
         }
 
@@ -73,7 +80,7 @@ pub const RegionSet = struct {
     }
 
     pub fn create_region() !*Region {
-        const new_node: *ListType.Node = if (nodeCache) |c|
+        const new_node: *ListNode = if (nodeCache) |c|
             @ptrCast(try c.alloc_one())
         else
             @panic("region cache is not initialized");
@@ -82,7 +89,7 @@ pub const RegionSet = struct {
     }
 
     pub fn destroy_region(to_remove: *Region) !void {
-        const node: *ListType.Node = @fieldParentPtr("data", to_remove);
+        const node: *ListNode = @fieldParentPtr("data", to_remove);
         if (nodeCache) |c| {
             return c.free(@ptrCast(node)); // todo: maybe panic since this is never supposed to fail
         } else {
@@ -91,13 +98,13 @@ pub const RegionSet = struct {
     }
 
     pub fn add_region(self: *Self, region: *Region) void {
-        const node: *ListType.Node = @fieldParentPtr("data", region);
-        self.list.append(node);
+        const list_node: *ListNode = @fieldParentPtr("data", region);
+        self.list.append(&list_node.node);
     }
 
     pub fn remove_region(self: *Self, region: *Region) void {
-        const node: *ListType.Node = @fieldParentPtr("data", region);
-        self.list.remove(node);
+        const list_node: *ListNode = @fieldParentPtr("data", region);
+        self.list.remove(&list_node.node);
     }
 
     pub fn find(self: *Self, page: usize) ?*Region {
@@ -107,8 +114,9 @@ pub const RegionSet = struct {
     pub fn find_any_in_range(self: *Self, page: usize, npage: usize) ?*Region {
         var current = self.list.first;
         return while (current) |node| : (current = node.next) {
-            if (page + npage > node.data.begin and page < node.data.begin + node.data.len) {
-                break &node.data;
+            const list_node: *ListNode = @fieldParentPtr("node", node);
+            if (page + npage > list_node.data.begin and page < list_node.data.begin + list_node.data.len) {
+                break &list_node.data;
             }
         } else null;
     }

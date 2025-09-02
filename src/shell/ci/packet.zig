@@ -24,10 +24,10 @@ pub fn Packet(comptime T: type) type {
 
         pub fn sendf(self: *Self, comptime fmt: []const u8, args: anytype) void {
             if (self.err) |_| self.type = .Error;
-            var buffer = std.ArrayList(u8).init(allocator);
-            std.fmt.format(buffer.writer(), fmt, args) catch {};
+            var buffer: std.ArrayList(u8) = .empty;
+            std.fmt.format(buffer.writer(allocator), fmt, args) catch {};
             self.data = buffer.items;
-            defer buffer.deinit();
+            defer buffer.deinit(allocator);
             self.printValue(self.*);
             _ = self.writer.write("\n") catch {};
         }

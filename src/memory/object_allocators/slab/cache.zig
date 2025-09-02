@@ -329,7 +329,7 @@ pub const Cache = struct {
             @panic("Invalid alignment for slab allocator cache");
         _ = ret_addr;
 
-        self.free(@alignCast(@ptrCast(memory.ptr))) catch @panic("invalid free");
+        self.free(@ptrCast(@alignCast(memory.ptr))) catch @panic("invalid free");
     }
 
     const vTable = std.mem.Allocator.VTable{
