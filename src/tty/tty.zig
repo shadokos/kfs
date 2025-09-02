@@ -102,9 +102,9 @@ pub fn TtyN(comptime history_size: u32) type {
         const input_buffer_pos_t = std.meta.Int(.unsigned, std.math.log2(MAX_INPUT)); // todo: is this the right type?
 
         /// Writer object type
-        pub const Writer = std.io.Writer(*Self, Self.WriteError, Self.write);
+        pub const Writer = std.io.GenericWriter(*Self, Self.WriteError, Self.write);
         /// Reader object type
-        pub const Reader = std.io.Reader(*Self, Self.ReadError, Self.read);
+        pub const Reader = std.io.GenericReader(*Self, Self.ReadError, Self.read);
 
         pub const WriteError = error{};
         pub const ReadError = error{};
@@ -600,18 +600,17 @@ pub inline fn get_reader() std.io.AnyReader {
 
 /// return the writer object of the current tty
 pub inline fn get_writer() std.io.AnyWriter {
-    return get_tty().writer().any();
+    return tty_array[current_tty].writer().any();
 }
 
 /// The BufferWriter type for Tty
-const TtyBufferWriter = std.io.BufferedWriter(width, Tty.Writer);
+var buffers: [max_tty + 1][width * height]u8 = undefined;
 
 /// Array of BufferWriters, each one wrapping one instance of Tty
 var ttyBufferWriter = init: {
-    var array: [max_tty + 1]TtyBufferWriter = undefined;
+    var array: [max_tty + 1]*std.Io.Writer = undefined;
     for (0..max_tty + 1) |i| {
-        // array[i] = TtyBufferWriter{ .context = tty_array[i].writer() };
-        array[i] = TtyBufferWriter{ .unbuffered_writer = tty_array[i].writer() };
+        array[i] = @constCast(&tty_array[i].writer().adaptToNewApi(&buffers[i]).new_interface);
     }
     break :init array;
 };
@@ -623,7 +622,13 @@ pub inline fn printk(comptime fmt: []const u8, args: anytype) void {
     write_lock.acquire();
     defer write_lock.release();
 
-    ttyBufferWriter[current_tty].writer().print(fmt, args) catch {};
+    ttyBufferWriter[current_tty].print(fmt, args) catch {};
+}
+
+pub inline fn flush() void {
+    write_lock.acquire();
+    defer write_lock.release();
+
     ttyBufferWriter[current_tty].flush() catch {};
 }
 

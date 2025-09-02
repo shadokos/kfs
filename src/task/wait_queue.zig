@@ -1,3 +1,4 @@
+const std = @import("std");
 const TaskDescriptor = @import("task.zig").TaskDescriptor;
 const scheduler = @import("scheduler.zig");
 const ready_queue = @import("ready_queue.zig");
@@ -8,7 +9,12 @@ const Payload = struct {
     queue: *Queue,
 };
 
-const Queue = @import("std").DoublyLinkedList(Payload);
+pub const WaitQueueNode = struct {
+    node: std.DoublyLinkedList.Node = .{},
+    data: Payload,
+};
+
+const Queue = std.DoublyLinkedList;
 
 pub const Node = Queue.Node;
 
@@ -33,22 +39,20 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
         fn internal_block(self: *Self, task: *TaskDescriptor, interruptible: bool, data: ?*void) void {
             scheduler.lock();
             defer scheduler.unlock();
-            if (arg.predicate(@alignCast(@ptrCast(task)), data))
+            if (arg.predicate(@ptrCast(@alignCast(task)), data))
                 return;
 
-            const node: *Node = &task.wq_node;
-
-            node.data.data = data;
-            node.data.queue = &self.queue;
-            self.queue.append(node);
-            if (arg.block_callback) |callback| callback(@alignCast(@ptrCast(task)), node.data.data);
+            task.wq_node.data.data = data;
+            task.wq_node.data.queue = &self.queue;
+            self.queue.append(&task.wq_node.node);
+            if (arg.block_callback) |callback| callback(@ptrCast(@alignCast(task)), task.wq_node.data.data);
             task.state = if (interruptible) .Blocked else .BlockedUninterruptible;
             scheduler.schedule();
         }
 
         pub fn block(self: *Self, task: *TaskDescriptor, data: ?*void) !void {
             self.internal_block(task, true, data);
-            if (!arg.predicate(@alignCast(@ptrCast(task)), data))
+            if (!arg.predicate(@ptrCast(@alignCast(task)), data))
                 return Errno.EINTR;
         }
 
@@ -62,12 +66,14 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
 
             var node = self.queue.first;
             while (node) |n| {
-                const task: *TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", n));
+                const wait_queue_node: *WaitQueueNode = @fieldParentPtr("node", n);
+                const task: *TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", wait_queue_node));
                 const next = n.next;
-                if (arg.predicate(@alignCast(@ptrCast(task)), n.data.data)) {
+                if (arg.predicate(@ptrCast(@alignCast(task)), wait_queue_node.data.data)) {
                     ready_queue.push(task);
                     self.queue.remove(n);
-                    if (arg.unblock_callback) |callback| callback(@alignCast(@ptrCast(task)), n.data.data);
+                    if (arg.unblock_callback) |callback|
+                        callback(@ptrCast(@alignCast(task)), wait_queue_node.data.data);
                 }
                 node = next;
             }
@@ -79,11 +85,12 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
 
             var node = self.queue.first;
             while (node) |n| {
-                const task: *TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", n));
+                const wait_queue_node: *WaitQueueNode = @fieldParentPtr("node", n);
+                const task: *TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", wait_queue_node));
                 const next = n.next;
                 ready_queue.push(task);
                 self.queue.remove(n);
-                if (arg.unblock_callback) |callback| callback(@alignCast(@ptrCast(task)), n.data);
+                if (arg.unblock_callback) |callback| callback(@ptrCast(@alignCast(task)), wait_queue_node.data.data);
                 node = next;
             }
         }
@@ -97,7 +104,7 @@ pub fn interrupt(task: *TaskDescriptor) void {
         return;
 
     task.state = .Ready;
-    task.wq_node.data.queue.remove(&task.wq_node);
+    task.wq_node.data.queue.remove(&task.wq_node.node);
     ready_queue.push(task);
 }
 
@@ -106,5 +113,5 @@ pub fn force_remove(task: *TaskDescriptor) void {
     defer scheduler.unlock();
     if (task.state != .Blocked and task.state != .BlockedUninterruptible)
         return;
-    task.wq_node.data.queue.remove(&task.wq_node);
+    task.wq_node.data.queue.remove(&task.wq_node.node);
 }

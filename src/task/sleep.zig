@@ -3,7 +3,7 @@ const pit = @import("../drivers/pit/pit.zig");
 const scheduler = @import("scheduler.zig");
 
 fn sleep_predicate(_: *void, sleep_timeout_ptr: ?*void) bool {
-    const sleep_timeout: u64 = @as(*u64, @alignCast(@ptrCast(sleep_timeout_ptr.?))).*;
+    const sleep_timeout: u64 = @as(*u64, @ptrCast(@alignCast(sleep_timeout_ptr.?))).*;
     return pit.get_utime_since_boot() >= sleep_timeout;
 }
 

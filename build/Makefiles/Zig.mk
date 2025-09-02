@@ -1,5 +1,6 @@
-ZIG_VERSION ?= 0.14.0
-ZIG_LOCAL = zig-linux-x86_64-$(ZIG_VERSION)/zig
+ZIG_VERSION ?= 0.15.1
+ZIG_LONG = zig-x86_64-linux-$(ZIG_VERSION)
+ZIG_LOCAL = $(ZIG_LONG)/zig
 
 ifneq ($(shell zig version 2>/dev/null | grep -q "$(ZIG_VERSION)" && echo "found"),found)
     run: install_zig
@@ -26,7 +27,7 @@ install_zig: $(ZIG_LOCAL) zig_warning
 
 .PHONY: uninstall_zig
 uninstall_zig:
-	rm -rf $(ZIG_LOCAL)
+	rm -rf $(ZIG_LONG)
 
 $(ZIG_LOCAL):
-	curl -sSfL https://ziglang.org/download/$(ZIG_VERSION)/zig-linux-x86_64-$(ZIG_VERSION).tar.xz | tar -xJ
+	curl -sSfL https://ziglang.org/download/$(ZIG_VERSION)/$(ZIG_LONG).tar.xz | tar -xJ

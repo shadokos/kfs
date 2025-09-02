@@ -19,7 +19,7 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
         /// the strategy used for this fuzzing
         strategy: Strategy,
         /// writer used for output
-        writer: std.io.AnyWriter,
+        writer: *std.io.Writer,
 
         /// global instance of the xoroshiro algorithm
         var xoro = std.Random.Xoroshiro128.init(42);
@@ -44,7 +44,7 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
         /// init a fuzzer object
         pub fn init(
             _allocator: std.mem.Allocator,
-            _writer: std.io.AnyWriter,
+            _writer: *std.io.Writer,
             _strategy: ?Strategy,
         ) Self {
             return Self{
@@ -172,6 +172,7 @@ pub fn Fuzzer(comptime bag_size: comptime_int) type {
             self.writer.print("\x1b[31m{d: <6}\x1b[0m allocations\n", .{self.n_alloc}) catch {};
             self.writer.print("\x1b[31m{d: <6}\x1b[0m free\n", .{self.n_free}) catch {};
             self.writer.print("\x1b[31m{d: <6}\x1b[0m active\n", .{self.size}) catch {};
+            self.writer.flush() catch {};
         }
     };
 }

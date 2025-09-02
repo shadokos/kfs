@@ -1,14 +1,14 @@
 const paging = @import("memory/paging.zig");
 const signal = @import("task/signal.zig");
 
-fn poc_signal(id: u32) linksection(".userspace") callconv(.C) void {
+fn poc_signal(id: u32) linksection(".userspace") callconv(.c) void {
     const str = " Signal handled\n";
     const c = id + '0';
     _ = syscall(.write, .{ &c, 1 });
     _ = syscall(.write, .{ str, str.len });
 }
 
-fn poc_sigaction(id: u32, _: *signal.siginfo_t, _: *void) linksection(".userspace") callconv(.C) void {
+fn poc_sigaction(id: u32, _: *signal.siginfo_t, _: *void) linksection(".userspace") callconv(.c) void {
     const str = " Signal handled with sigaction\n";
     const c = id + '0';
     _ = syscall(.write, .{ &c, 1 });
@@ -178,7 +178,7 @@ export fn userland_count() linksection(".userspace") void {
 var byte: u8 linksection(".userspace") = 0;
 var byte_index: u5 linksection(".userspace") = 0;
 
-fn server_handler(id: u32) linksection(".userspace") callconv(.C) void {
+fn server_handler(id: u32) linksection(".userspace") callconv(.c) void {
     // putstr("bonjour\n");
     byte |= @truncate((id - @intFromEnum(signal.Id.SIGUSR1)) << byte_index);
     byte_index += 1;
