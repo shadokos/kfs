@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const tty = @import("../tty/tty.zig");
 
 pub const max_tokens = 32;
@@ -67,12 +67,12 @@ pub fn tokenize(data: []u8) TokenizerError![][]u8 {
                 (tokenizer.quote == .double and c.* == '"'))
             {
                 tokenizer.quote = .none;
-                ft.mem.copyForwards(
+                std.mem.copyForwards(
                     u8,
                     data[tokenizer.quote_offset .. i - 1],
                     data[tokenizer.quote_offset + 1 .. i],
                 );
-                ft.mem.copyForwards(u8, data[i - 1 .. data.len - 1], data[i + 1 .. data.len]);
+                std.mem.copyForwards(u8, data[i - 1 .. data.len - 1], data[i + 1 .. data.len]);
                 @memset(data[data.len - 2 .. data.len], 0);
                 i -|= 1;
             } else {

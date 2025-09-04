@@ -4,7 +4,7 @@ const Builder = @import("std").Build;
 
 pub const BuildContext = struct {
     builder: *Builder,
-    optimize: std.builtin.Mode = undefined,
+    optimize: std.builtin.OptimizeMode = undefined,
     iso_source_dir: []const u8 = undefined,
     name: []const u8 = undefined,
     bootloader: enum { grub, limine } = .grub,

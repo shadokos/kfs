@@ -1,16 +1,16 @@
+const std = @import("std");
 const paging = @import("memory/paging.zig");
-const ft = @import("ft");
 const cpu = @import("cpu.zig");
 
 pub const kernel_size = 0x10_000_000 + paging.direct_zone_size;
 
-const page_count = ft.math.divCeil(
+const page_count = std.math.divCeil(
     comptime_int,
     kernel_size,
     paging.page_size,
 ) catch unreachable;
 
-pub const table_count = ft.math.divCeil(
+pub const table_count = std.math.divCeil(
     comptime_int,
     page_count,
     paging.page_table_size,
@@ -35,7 +35,7 @@ pub export const page_tables: ([table_count][1024]paging.page_table_entry) align
 
 pub var page_directory: [1024]paging.page_directory_entry align(4096) linksection(".bootstrap") = undefined;
 
-export fn trampoline_jump() linksection(".bootstrap_code") callconv(.C) void {
+export fn trampoline_jump() linksection(".bootstrap_code") callconv(.c) void {
 
     // fill the page directory
     for (0..table_count) |t| {

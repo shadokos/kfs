@@ -1,8 +1,8 @@
+const std = @import("std");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const boot = @import("boot.zig");
 const paging = @import("memory/paging.zig");
 const tty = @import("tty/tty.zig");
-const ft = @import("ft");
 
 fn mbi_requestN(comptime types: []const u32) type {
     return extern struct {
@@ -254,10 +254,10 @@ pub fn get_tag(comptime t: usize) ?*get_tag_type(t) {
     var tag: *align(1) tag_header = @ptrFromInt(@intFromPtr(boot.multiboot_info) + @sizeOf(info_header));
     while (tag.type != multiboot2_h.MULTIBOOT_TAG_TYPE_END) {
         if (tag.type == t) {
-            return @alignCast(@ptrCast(tag));
+            return @ptrCast(@alignCast(tag));
         }
         tag = @ptrFromInt(@intFromPtr(tag) + tag.size);
-        tag = @ptrFromInt(ft.mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));
+        tag = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));
     }
     return null;
 }
@@ -268,7 +268,7 @@ pub fn list_tags() void {
     while (tag.type != multiboot2_h.MULTIBOOT_TAG_TYPE_END) {
         tty.printk("tag: type {d} size {d}\n", .{ tag.type, tag.size });
         tag = @ptrFromInt(@intFromPtr(tag) + tag.size);
-        tag = @ptrFromInt(ft.mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));
+        tag = @ptrFromInt(std.mem.alignForward(usize, @intFromPtr(tag), multiboot2_h.MULTIBOOT_TAG_ALIGN));
     }
 }
 

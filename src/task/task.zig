@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const memory = @import("../memory.zig");
 const interrupts = @import("../interrupts.zig");
 const paging = @import("../memory/paging.zig");
@@ -14,7 +14,7 @@ const ready_queue = @import("ready_queue.zig");
 const wait_queue = @import("wait_queue.zig");
 const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
-const logger = ft.log.scoped(.task);
+const logger = std.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
 pub const TaskDescriptor = struct {
@@ -46,8 +46,8 @@ pub const TaskDescriptor = struct {
     ucontext: ucontext.ucontext_t = .{},
 
     // scheduling
-    rq_node: ready_queue.Node = .{ .data = false },
-    wq_node: wait_queue.Node = .{ .data = undefined },
+    rq_node: ready_queue.QueueNode = .{ .data = false },
+    wq_node: wait_queue.WaitQueueNode = .{ .data = undefined },
 
     pub const State = enum(u8) {
         Running,
@@ -302,7 +302,7 @@ pub const TaskDescriptor = struct {
         scheduler.unlock();
     }
 
-    pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.C) noreturn {
+    pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.c) noreturn {
         const function: *const fn (usize) u8 = @ptrCast(function_ptr);
         self.state = .Running;
         scheduler.set_current_task(self);

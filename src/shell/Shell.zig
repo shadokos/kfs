@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const token = @import("token.zig");
 const colors = @import("colors");
 const allocator = @import("../memory.zig").smallAlloc.allocator();
@@ -42,14 +42,14 @@ pub fn Shell(comptime _builtins: anytype) type {
             .args = undefined,
             .err = null,
         },
-        reader: ft.io.AnyReader = undefined,
-        writer: ft.io.AnyWriter = undefined,
+        reader: std.io.AnyReader = undefined,
+        writer: std.io.AnyWriter = undefined,
         hooks: Hooks = Hooks{},
-        jobs: ft.ArrayList(Job) = undefined,
+        jobs: std.ArrayList(Job) = .empty,
 
         pub fn init(
-            reader: ft.io.AnyReader,
-            writer: ft.io.AnyWriter,
+            reader: std.io.AnyReader,
+            writer: std.io.AnyWriter,
             config: Config,
             hooks: struct {
                 on_init: ?*const anyopaque = null,
@@ -60,16 +60,15 @@ pub fn Shell(comptime _builtins: anytype) type {
             },
         ) Self {
             var ret = Self{
-                .jobs = ft.ArrayList(Job).init(allocator),
                 .reader = reader,
                 .writer = writer,
                 .config = config,
             };
-            if (hooks.on_init) |h| ret.hooks.on_init = @alignCast(@ptrCast(h));
-            if (hooks.on_error) |h| ret.hooks.on_error = @alignCast(@ptrCast(h));
-            if (hooks.pre_prompt) |h| ret.hooks.pre_prompt = @alignCast(@ptrCast(h));
-            if (hooks.pre_cmd) |h| ret.hooks.pre_cmd = @alignCast(@ptrCast(h));
-            if (hooks.post_cmd) |h| ret.hooks.post_cmd = @alignCast(@ptrCast(h));
+            if (hooks.on_init) |h| ret.hooks.on_init = @ptrCast(@alignCast(h));
+            if (hooks.on_error) |h| ret.hooks.on_error = @ptrCast(@alignCast(h));
+            if (hooks.pre_prompt) |h| ret.hooks.pre_prompt = @ptrCast(@alignCast(h));
+            if (hooks.pre_cmd) |h| ret.hooks.pre_cmd = @ptrCast(@alignCast(h));
+            if (hooks.post_cmd) |h| ret.hooks.post_cmd = @ptrCast(@alignCast(h));
             if (ret.hooks.on_init) |hook| hook(@constCast(&ret));
             return ret;
         }
@@ -108,7 +107,7 @@ pub fn Shell(comptime _builtins: anytype) type {
         fn exec_cmd(self: *Self, args: [][]u8, detach: bool) CmdError!?task.TaskDescriptor.Pid {
             // Search for a builtin command by iterating over those defined in shell/builtins.zig
             inline for (@typeInfo(builtins).@"struct".decls) |decl| {
-                if (ft.mem.eql(u8, decl.name, args[0])) {
+                if (std.mem.eql(u8, decl.name, args[0])) {
                     if (detach) {
                         return self.exec_detached(@field(builtins, decl.name), args);
                     } else {
@@ -124,11 +123,11 @@ pub fn Shell(comptime _builtins: anytype) type {
             const wait = @import("../task/wait.zig");
             var status: wait.Status = undefined;
             var i: u32 = 0;
-            while (i < self.jobs.slice.len) {
-                const job = self.jobs.slice[i];
+            while (i < self.jobs.items.len) {
+                const job = self.jobs.items[i];
                 if ((wait.wait(job.pid, .SELF, &status, null, .{ .WNOHANG = true }) catch 1) != 0) {
                     self.print("[{}] done {s}\n", .{ job.pid, job.command_line });
-                    allocator.destroy(job.command_line);
+                    allocator.free(job.command_line);
                     _ = self.jobs.swapRemove(i);
                 } else {
                     i += 1;
@@ -156,7 +155,7 @@ pub fn Shell(comptime _builtins: anytype) type {
                 if (self.hooks.on_error) |hook| hook(self);
                 return;
             };
-            if (self.execution_context.args.len > 0 and ft.mem.eql(u8, self.execution_context.args[0], "&")) {
+            if (self.execution_context.args.len > 0 and std.mem.eql(u8, self.execution_context.args[0], "&")) {
                 self.execution_context.detach = true;
                 self.execution_context.args = self.execution_context.args[1..];
             } else {
@@ -173,7 +172,7 @@ pub fn Shell(comptime _builtins: anytype) type {
                 allocator.free(slice);
                 return;
             }) |pid| {
-                self.jobs.append(.{ .pid = pid, .command_line = slice }) catch @panic("todo");
+                self.jobs.append(allocator, .{ .pid = pid, .command_line = slice }) catch @panic("todo");
                 self.print("[{}]\n", .{pid});
             } else {
                 allocator.free(slice);

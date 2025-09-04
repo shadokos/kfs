@@ -1,9 +1,8 @@
-const ft = @import("ft");
 const paging = @import("paging.zig");
 const pageFrameAllocator = &@import("../memory.zig").pageFrameAllocator;
 const PageAllocator = @import("page_allocator.zig");
 const mapping = @import("mapping.zig");
-const logger = @import("ft").log.scoped(.DirectPageAllocator);
+const logger = @import("std").log.scoped(.DirectPageAllocator);
 
 pub const DirectPageAllocator = struct {
     mapping_offset: paging.PhysicalPtrDiff,

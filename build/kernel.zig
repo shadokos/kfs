@@ -16,14 +16,16 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
 
     const kernel = context.builder.addExecutable(.{
         .name = context.name,
-        .root_source_file = .{ .cwd_relative = "src/boot.zig" },
-        .target = context.builder.resolveTargetQuery(Target.Query{
-            .cpu_arch = Target.Cpu.Arch.x86,
-            .os_tag = Target.Os.Tag.freestanding,
-            .abi = Target.Abi.none,
-            .cpu_features_sub = cpu_features_sub,
+        .root_module = context.builder.createModule(.{
+            .root_source_file = context.builder.path("src/boot.zig"),
+            .target = context.builder.resolveTargetQuery(Target.Query{
+                .cpu_arch = Target.Cpu.Arch.x86,
+                .os_tag = Target.Os.Tag.freestanding,
+                .abi = Target.Abi.none,
+                .cpu_features_sub = cpu_features_sub,
+            }),
+            .optimize = context.optimize,
         }),
-        .optimize = context.optimize,
     });
 
     const build_options = context.builder.addOptions();
@@ -32,9 +34,6 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
     build_options.addOption(bool, "ci", context.ci);
     kernel.root_module.addOptions("build_options", build_options);
 
-    const ft_module = context.builder.createModule(
-        .{ .root_source_file = .{ .cwd_relative = "./src/ft/ft.zig" } },
-    );
     const colors_module = context.builder.createModule(
         .{ .root_source_file = .{ .cwd_relative = "./src/misc/colors.zig" } },
     );
@@ -42,16 +41,9 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
         .{ .root_source_file = .{ .cwd_relative = "./src/config.zig" } },
     );
 
-    // Add "ft" and "config" module in colors_module
-    colors_module.addImport("ft", ft_module);
     colors_module.addImport("config", config_module);
-
-    // Add "ft" and "colors" module in config module
-    config_module.addImport("ft", ft_module);
     config_module.addImport("colors", colors_module);
 
-    // Add "ft, "colors" and "config" modules to the kernel
-    kernel.root_module.addImport("ft", ft_module);
     kernel.root_module.addImport("colors", colors_module);
     kernel.root_module.addImport("config", config_module);
 

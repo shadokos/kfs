@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const tty = @import("../tty/tty.zig");
 const get_time_since_boot = &@import("../drivers/pit/pit.zig").get_time_since_boot;
 
@@ -61,6 +61,7 @@ pub const Philosopher = struct {
         self.check_eos();
         tty.printk("{} {} is eating\n", .{ self.last_meal, self.id });
         @import("../task/sleep.zig").sleep(time_to_eat) catch {};
+        tty.flush();
     }
 
     fn check_eos(self: *Self) void {
@@ -93,6 +94,7 @@ fn philosopher_task(data: usize) u8 {
         philosopher.check_eos();
         tty.printk("{} {} is sleeping\n", .{ get_time_since_boot() - start_time, philosopher.id });
         @import("../task/sleep.zig").sleep(time_to_sleep) catch {};
+        tty.flush();
         philosopher.check_eos();
         tty.printk("{} {} is thinking\n", .{ get_time_since_boot() - start_time, philosopher.id });
     }
@@ -150,7 +152,7 @@ pub fn main(nb: u8, ttd: usize, tte: usize, tts: usize) void {
             &stat,
             null,
             .{},
-        ) catch ft.log.warn("Failed to wait for philosopher {}", .{philo.id});
+        ) catch std.log.warn("Failed to wait for philosopher {}", .{philo.id});
     }
 
     tty.printk("End of simulation {}\n", .{status});

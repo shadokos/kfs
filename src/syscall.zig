@@ -1,13 +1,11 @@
+const std = @import("std");
 const interrupts = @import("interrupts.zig");
 const tty = @import("./tty/tty.zig");
-const ft = @import("ft");
 const scheduler = @import("task/scheduler.zig");
-const std = @import("std");
 const syscall_table = @import("syscall_table.zig");
-const log = @import("ft").log;
 const errno = @import("errno.zig");
 
-const syscall_logger = log.scoped(.syscall);
+const syscall_logger = std.log.scoped(.syscall);
 
 pub fn syscall_enum(comptime T: type) type {
     const decls: []const std.builtin.Type.Declaration = @typeInfo(T).@"struct".decls;
@@ -26,7 +24,7 @@ pub fn syscall_enum(comptime T: type) type {
 
 // Todo: Maybe found a better name for this enum
 // /!\ these syscalls are dummy ones for the example
-pub const Code = syscall_enum(syscall_table); // todo implement in ft
+pub const Code = syscall_enum(syscall_table); // todo use std ones
 
 fn get_fn_proto_tuple(comptime proto: std.builtin.Type.Fn) type {
     comptime var fields: [proto.params.len]std.builtin.Type.StructField = undefined;

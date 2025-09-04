@@ -1,7 +1,6 @@
 const paging = @import("paging.zig");
-const ft = @import("ft");
 const cpu = @import("../cpu.zig");
-const logger = @import("ft").log.scoped(.mapping);
+const logger = @import("std").log.scoped(.mapping);
 
 pub const Directory: type = extern struct {
     userspace: [768]paging.TableEntry = [1]paging.TableEntry{.{ .not_mapped = .{} }} ** 768,

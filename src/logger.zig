@@ -1,4 +1,4 @@
-const log = @import("ft").log;
+const log = @import("std").log;
 const tty = @import("tty/tty.zig");
 const colors = @import("colors");
 const screen_of_death = @import("screen_of_death.zig").screen_of_death;
@@ -24,6 +24,7 @@ pub fn kernel_log(
             (" " ** padding) ++ scope_str ++ format ++ "\n",
         args,
     );
+    tty.flush();
     if (message_level == .err and scope == .default) {
         @import("task/scheduler.zig").lock();
         if (@import("build_options").ci) {

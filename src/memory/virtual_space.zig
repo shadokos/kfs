@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 const paging = @import("paging.zig");
 const VirtualSpaceAllocator = @import("virtual_space_allocator.zig").VirtualSpaceAllocator;
 const mapping = @import("mapping.zig");
@@ -90,8 +90,9 @@ pub const VirtualSpace = struct {
 
         var current = ret.regions.list.first;
         while (current) |r| : (current = r.next) {
-            if (&r.data == directory_region) continue;
-            self.clone_region(&r.data);
+            const node: *RegionSet.ListNode = @fieldParentPtr("node", r);
+            if (&node.data == directory_region) continue;
+            self.clone_region(&node.data);
         }
         return ret;
     }
@@ -109,9 +110,10 @@ pub const VirtualSpace = struct {
         const directory_region = self.directory_region orelse @panic("todo");
         var current = self.regions.list.first;
         while (current) |r| {
+            const node: *RegionSet.ListNode = @fieldParentPtr("node", r);
             const next = r.next;
-            if (&r.data != directory_region) {
-                self.close_region(&r.data);
+            if (&node.data != directory_region) {
+                self.close_region(&node.data);
             }
             current = next;
         }
@@ -196,12 +198,12 @@ pub const VirtualSpace = struct {
         physical: paging.PhysicalPtr,
         size: usize,
     ) !paging.VirtualPtr {
-        const physical_pages = ft.mem.alignBackward(
+        const physical_pages = std.mem.alignBackward(
             paging.PhysicalPtr,
             physical,
             paging.page_size,
         );
-        const npages = (ft.mem.alignForward(
+        const npages = (std.mem.alignForward(
             paging.PhysicalPtr,
             physical + size,
             paging.page_size,
@@ -214,7 +216,7 @@ pub const VirtualSpace = struct {
     pub fn unmap_object(self: *Self, virtual: paging.VirtualPtr, n: usize) !void {
         const first_page: usize = @as(usize, @intFromPtr(virtual)) / paging.page_size;
 
-        const npage = ft.math.divCeil(
+        const npage = std.math.divCeil(
             usize,
             @as(usize, @intFromPtr(virtual)) % paging.page_size + n,
             paging.page_size,

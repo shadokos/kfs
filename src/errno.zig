@@ -1,4 +1,4 @@
-const ft = @import("ft");
+const std = @import("std");
 
 pub const Errno = error{
     E2BIG,
@@ -90,7 +90,7 @@ pub fn is_in_set(e: anytype, comptime s: type) bool {
         inline else => |ce| comptime b: {
             const errors = @typeInfo(s).error_set orelse return false;
             for (errors) |err| {
-                if (ft.mem.eql(u8, err.name, @errorName(ce))) break :b true;
+                if (std.mem.eql(u8, err.name, @errorName(ce))) break :b true;
             }
             break :b false;
         },
@@ -103,7 +103,7 @@ pub fn error_num(e: Errno) usize {
         inline else => |ce| comptime b: {
             const errors = @typeInfo(Errno).error_set orelse unreachable;
             for (errors, 1..) |err, n| {
-                if (ft.mem.eql(u8, err.name, @errorName(ce))) break :b n;
+                if (std.mem.eql(u8, err.name, @errorName(ce))) break :b n;
             }
             unreachable;
         },

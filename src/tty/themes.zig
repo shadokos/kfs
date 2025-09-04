@@ -1,10 +1,8 @@
+const std = @import("std");
 const vga = @import("../drivers/vga/text.zig");
 const themes = @import("themes/index.zig");
-const ft = @import("ft");
 const config = @import("config");
 const colors = @import("colors");
-
-// const vga_diff = @import("colors").vga_diff;
 
 pub const Theme = struct {
     palette: vga.Palette,
@@ -17,10 +15,10 @@ pub const Theme = struct {
 /// try to convert a gogh theme to a vga theme
 pub fn convert(theme: Theme) Theme {
     var ret: Theme = theme;
-    ft.mem.swap(vga.Color, &ret.palette[1], &ret.palette[4]);
-    ft.mem.swap(vga.Color, &ret.palette[3], &ret.palette[6]);
-    ft.mem.swap(vga.Color, &ret.palette[8 + 1], &ret.palette[8 + 4]);
-    ft.mem.swap(vga.Color, &ret.palette[8 + 3], &ret.palette[8 + 6]);
+    std.mem.swap(vga.Color, &ret.palette[1], &ret.palette[4]);
+    std.mem.swap(vga.Color, &ret.palette[3], &ret.palette[6]);
+    std.mem.swap(vga.Color, &ret.palette[8 + 1], &ret.palette[8 + 4]);
+    std.mem.swap(vga.Color, &ret.palette[8 + 3], &ret.palette[8 + 6]);
 
     // Get the color difference function
     const delta_e = switch (config.theme.delta_e) {
@@ -65,7 +63,7 @@ pub fn convert(theme: Theme) Theme {
 /// return a theme by its name
 pub fn get_theme(name: []const u8) ?Theme {
     inline for (@typeInfo(themes).@"struct".decls) |decl| {
-        if (ft.mem.eql(u8, decl.name, name)) {
+        if (std.mem.eql(u8, decl.name, name)) {
             return @field(themes, decl.name).theme;
         }
     }

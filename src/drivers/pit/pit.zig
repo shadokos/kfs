@@ -1,3 +1,4 @@
+const std = @import("std");
 const tty = @import("../../tty/tty.zig");
 const cpu = @import("../../cpu.zig");
 const MonoState = @import("../../misc/monostate.zig").Monostate;
@@ -5,9 +6,8 @@ const pic = @import("../pic/pic.zig");
 const interrupts = @import("../../interrupts.zig");
 const Handler = interrupts.Handler;
 
-const math = @import("ft").math;
-const log = @import("ft").log;
-const pit_logger = log.scoped(.driver_pit);
+const math = std.math;
+const pit_logger = std.log.scoped(.driver_pit);
 
 // The PIT driver (Intel 8254), implemented according to osdev.org
 // See: https://wiki.osdev.org/Programmable_Interval_Timer
@@ -79,9 +79,9 @@ pub fn send_command(cmd: ModeCmdRegister) void {
 
 fn get_channel_logger(comptime channel: SelectChannel) type {
     return switch (channel) {
-        .Channel_0 => log.scoped(.@"pit(ch0)"),
-        .Channel_1 => log.scoped(.@"pit(ch1)"),
-        .Channel_2 => log.scoped(.@"pit(ch2)"),
+        .Channel_0 => std.log.scoped(.@"pit(ch0)"),
+        .Channel_1 => std.log.scoped(.@"pit(ch1)"),
+        .Channel_2 => std.log.scoped(.@"pit(ch2)"),
     };
 }
 

@@ -1,10 +1,10 @@
+const std = @import("std");
 const Errno = @import("../errno.zig").Errno;
 const scheduler = @import("../task/scheduler.zig");
 const paging = @import("../memory/paging.zig");
 const VirtualSpace = @import("../memory/virtual_space.zig").VirtualSpace;
 const regions = @import("../memory/regions.zig");
 const RegionSet = @import("../memory/region_set.zig").RegionSet;
-const ft = @import("ft");
 const tty = @import("../tty/tty.zig");
 
 pub const Id = 12;
@@ -33,7 +33,7 @@ fn create_anonymous_mapping(addr: ?*void, len: usize, prot: Prot, flags: Flags) 
     const task = scheduler.get_current_task();
     const vm = task.vm.?;
 
-    const npage = ft.math.divCeil(
+    const npage = std.math.divCeil(
         usize,
         len,
         paging.page_size,
