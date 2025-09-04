@@ -1,7 +1,7 @@
 ZIG_VERSION ?= 0.14.0
 ZIG_LOCAL = zig-linux-x86_64-$(ZIG_VERSION)/zig
 
-ifeq ($(shell which zig),)
+ifneq ($(shell zig version 2>/dev/null | grep -q "$(ZIG_VERSION)" && echo "found"),found)
     run: install_zig
     build: install_zig
     debug: install_zig
