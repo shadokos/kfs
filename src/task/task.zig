@@ -94,6 +94,15 @@ pub const TaskDescriptor = struct {
     pub fn deinit(self: *Self) void {
         self.status_wait_queue.unblock_all();
 
+        // Hot fix;
+        // When a task exits, the callback are called only for the parent task.
+        // This behaviour leads to remaining child tasks in either waiting or running queues.
+        // The hot fix ensures the callback are called for every tasks destroyed in any way.
+        // Important note:
+        // the callback can be called in both exit() and deinit() for a same task leading to some side effects.
+        for (on_terminate_callback.items) |callback|
+            callback(self);
+
         if (self.parent) |p| {
             p.status_stack.remove(&self.status_stack_process_node);
             var n: ?*Self = p.childs;
