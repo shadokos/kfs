@@ -413,3 +413,65 @@ pub fn pci(shell: anytype, args: [][]u8) CmdError!void {
         else => CmdError.InvalidNumberOfArguments,
     };
 }
+
+pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
+    const block = @import("../../block/registry.zig");
+
+    shell.print("Character devices:\n", .{});
+    shell.print("N/A\n\n", .{}); // Not implemented yet
+
+    block.show_block_dev(shell.writer);
+}
+
+pub fn partitions(shell: anytype, _: [][]u8) CmdError!void {
+    const block = @import("../../block/registry.zig");
+
+    block.show_partitions(shell.writer);
+}
+
+pub fn lookup_devt(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+
+    const name = args[1];
+    const partno = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
+
+    const devt = @import("../../block/registry.zig").lookup_devt(name, @truncate(partno)) orelse {
+        utils.print_error(shell, "No such device", .{});
+        return CmdError.OtherError;
+    };
+    const udev_t = @import("../../block/block.zig").udev_t;
+    shell.print("{d} ({d}:{d})\n", .{ @as(udev_t, @bitCast(devt)), devt.major, devt.minor });
+}
+
+// Hexdump a block device content with a given start and count
+// args: [1] = name, [2] = start, [3] count
+pub fn blkread(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 4) return CmdError.InvalidNumberOfArguments;
+    const name = args[1];
+    const start = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
+    const count = std.fmt.parseInt(u32, args[3], 0) catch return CmdError.InvalidParameter;
+
+    const block_size = @import("../../block/block.zig").STANDARD_BLOCK_SIZE;
+
+    const part = @import("../../block/registry.zig").get_partition_by_name(name) orelse {
+        utils.print_error(shell, "No such device", .{});
+        return CmdError.OtherError;
+    };
+
+    const allocator = @import("../../memory.zig").bigAlloc.allocator();
+    const buffer = allocator.alloc(u8, @as(usize, count) * block_size) catch {
+        utils.print_error(shell, "Failed to allocate memory", .{});
+        return CmdError.OtherError;
+    };
+    @memset(buffer, 0x66);
+    defer allocator.free(buffer);
+
+    part.read(start, count, buffer) catch |e| {
+        utils.print_error(shell, "Read error: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+
+    const start_ptr = @intFromPtr(&buffer[0]);
+    const end_ptr = start_ptr + buffer.len;
+    @import("../../debug.zig").memory_dump(start_ptr, end_ptr, start_ptr - (start * block_size));
+}
