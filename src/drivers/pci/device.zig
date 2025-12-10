@@ -50,9 +50,9 @@ pub fn isSATAController(self: *const Self) bool {
 }
 
 /// Get IDE interface type for this controller
-pub fn getIDEInterface(self: *const Self) ?pci.IDEInterface {
+pub fn getIDEInterface(self: *const Self) ?pci_config.IDEInterface {
     if (!self.isIDEController()) return null;
-    return pci.IDEInterface.fromU8(self.prog_if);
+    return pci_config.IDEInterface.fromU8(self.prog_if);
 }
 
 pub fn decodeBAR(self: *const Self, bar_index: u8) ?pci_config.BAR.Info {

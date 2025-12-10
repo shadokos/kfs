@@ -212,8 +212,8 @@ pub fn enableDevice(bus: u8, device: u5, function: u3) void {
 
 /// Find all devices matching a specific class and optionally subclass
 pub fn findDevicesByClass(class: PCIClass, subclass: ?u8) ?[]PCIDevice {
-    var result = PCIDeviceList.init(allocator);
-    defer result.deinit();
+    var result: PCIDeviceList = .empty;
+    defer result.deinit(allocator);
 
     for (devices.items) |device| {
         if (device.class_code == class) {
@@ -226,7 +226,7 @@ pub fn findDevicesByClass(class: PCIClass, subclass: ?u8) ?[]PCIDevice {
         }
     }
 
-    return result.toOwnedSlice() catch null;
+    return result.toOwnedSlice(allocator) catch null;
 }
 
 /// Find all IDE controllers
