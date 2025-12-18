@@ -16,6 +16,9 @@ const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = std.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
+const vfs = @import("../fs/vfs.zig");
+const TNode = @import("../fs/tnode.zig");
+const File = @import("../fs/file.zig");
 
 const callback_allocator = @import("../memory.zig").smallAlloc.allocator();
 const Callback = *const fn (*TaskDescriptor) void;
@@ -39,10 +42,15 @@ pub fn remove_on_terminate_callback(callback: *const fn (*TaskDescriptor) void) 
 pub const TaskDescriptor = struct {
     // todo: define the appropriate size for a kernelspace stack or get this value from config
     stack: [64 * 1024]u8 align(4096) = undefined,
+
+    files: [1024]?*File = [1]?*File{null} ** 1024,
+
     pid: Pid,
     pgid: Pid,
 
     owner: u32 = 0,
+    cwd: *TNode,
+    root: *TNode,
 
     state: State,
 
@@ -77,6 +85,7 @@ pub const TaskDescriptor = struct {
         Zombie,
     };
     pub const Pid = i32;
+    pub const Fd = i32;
     pub const Self = @This();
 
     pub var cache: *Cache = undefined;
@@ -123,6 +132,12 @@ pub const TaskDescriptor = struct {
             vm.deinit();
             VirtualSpace.cache.allocator().destroy(vm);
             self.vm = null;
+        }
+        for (self.files[0..]) |*opt_file| {
+            if (opt_file.*) |file| {
+                file.close() catch {};
+                opt_file.* = null;
+            }
         }
 
         // todo: process group status_stack
@@ -213,6 +228,7 @@ pub const TaskDescriptor = struct {
                     .signaled = true,
                     .siginfo = sig,
                 });
+                scheduler.schedule(); // todo
             },
             .Continue => if (self.state == .Stopped) {
                 self.update_status(.{
@@ -337,6 +353,36 @@ pub const TaskDescriptor = struct {
         gdt.flush();
         scheduler.exit_critical();
         exit(function(data));
+    }
+
+    pub fn chdir(self: *Self, new_dir: *TNode) void {
+        if (new_dir.inode.mode.type != .Directory) {
+            @panic("todo");
+        }
+        self.cwd.release();
+        self.cwd = new_dir.get_ref();
+    }
+
+    pub fn get_file(self: *Self, fd: Fd) ?*File {
+        if (fd < 0 or fd >= self.files.len) {
+            return null;
+        }
+        return self.files[@intCast(fd)];
+    }
+
+    pub fn add_file(self: *Self, file: *File) ?Fd {
+        // todo: remove minimum 3 when we have tty char devices
+        for (self.files[3..], 3..) |*f, fd| {
+            if (f.* == null) {
+                f.* = file;
+                return @intCast(fd);
+            }
+        }
+        return null;
+    }
+
+    pub fn remove_file(self: *Self, fd: Fd) void {
+        self.files[@intCast(fd)] = null;
     }
 };
 

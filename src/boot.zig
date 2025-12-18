@@ -114,6 +114,8 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
 
     @import("task/scheduler.zig").init(idle_task);
 
+    @import("fs/vfs.zig").init() catch @panic("Cannot initialize vfs");
+
     const kernel_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create kernel task");
 
     const main = if (!@import("build_options").ci) kernel.main else @import("ci.zig").main;

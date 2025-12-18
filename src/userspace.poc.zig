@@ -4,15 +4,15 @@ const signal = @import("task/signal.zig");
 fn poc_signal(id: u32) linksection(".userspace") callconv(.c) void {
     const str = " Signal handled\n";
     const c = id + '0';
-    _ = syscall(.write, .{ &c, 1 });
-    _ = syscall(.write, .{ str, str.len });
+    _ = syscall(.write, .{ 1, &c, 1 });
+    _ = syscall(.write, .{ 1, str, str.len });
 }
 
 fn poc_sigaction(id: u32, _: *signal.siginfo_t, _: *void) linksection(".userspace") callconv(.c) void {
     const str = " Signal handled with sigaction\n";
     const c = id + '0';
-    _ = syscall(.write, .{ &c, 1 });
-    _ = syscall(.write, .{ str, str.len });
+    _ = syscall(.write, .{ 1, &c, 1 });
+    _ = syscall(.write, .{ 1, str, str.len });
 }
 
 pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
@@ -58,7 +58,15 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
 }
 
 fn putchar(c: u8) linksection(".userspace") void {
-    _ = syscall(.write, &.{ &c, 1 });
+    _ = syscall(.write, &.{ 1, &c, 1 });
+}
+
+fn putchar_fd(fd: i32, c: u8) linksection(".userspace") void {
+    _ = syscall(.write, &.{ fd, &c, 1 });
+}
+
+fn putstr_fd(fd: i32, s: []const u8) linksection(".userspace") void {
+    _ = syscall(.write, &.{ fd, s.ptr, s.len });
 }
 
 fn putstr(s: []const u8) linksection(".userspace") void {
@@ -183,7 +191,7 @@ fn server_handler(id: u32) linksection(".userspace") callconv(.c) void {
     byte |= @truncate((id - @intFromEnum(signal.Id.SIGUSR1)) << byte_index);
     byte_index += 1;
     if (byte_index == 8) {
-        _ = syscall(.write, &.{ &byte, 1 });
+        _ = syscall(.write, &.{ 1, &byte, 1 });
         byte_index = 0;
         byte = 0;
     }
@@ -244,5 +252,24 @@ export fn userland_fork() linksection(".userspace") void {
     _ = syscall(.sleep, .{100 * id});
     putstr("fork 4\n");
     _ = syscall(.sleep, .{20000});
+    _ = syscall(.exit, .{0});
+}
+
+const open = @import("syscall/open.zig");
+
+export fn userland_io() linksection(".userspace") void {
+    const fd = syscall(.open, .{
+        "/bonjour".ptr,
+        open.Flags{
+            .openMode = .wronly,
+            .create = true,
+            .exclusive = true,
+        },
+        open.Mode{},
+    });
+    putnbr(fd);
+    putstr_fd(fd, "AAAAAAAAAAAAAAAAAAAAAA\n");
+    _ = syscall(.truncate, .{ "/bonjour", 10 });
+    putstr_fd(fd, "BBBBBBBBBBBBBBBBBBBBBB\n");
     _ = syscall(.exit, .{0});
 }
