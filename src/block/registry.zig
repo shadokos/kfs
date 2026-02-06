@@ -93,6 +93,108 @@ pub fn show_partitions(writer: std.io.AnyWriter) void {
     }
 }
 
+pub fn show_lsblk(writer: std.io.AnyWriter, filter: ?[]const u8) void {
+    const BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
+
+    var it = partitions.inorderIterator();
+    while (it.next()) |entry| {
+        const part = entry.key;
+
+        // Only process whole disk entries (partno == 0)
+        if (part.partno != 0) continue;
+
+        const disk = part.disk;
+        const disk_name = std.mem.sliceTo(&disk.name, 0);
+
+        // If filter is set, check if this disk matches or contains the partition
+        if (filter) |f| {
+            // Check if filter matches disk name
+            const matches_disk = std.mem.eql(u8, disk_name, f);
+            // Check if filter matches any partition name
+            var matches_partition = false;
+            for (disk.partition_table.items) |p| {
+                if (std.mem.eql(u8, std.mem.sliceTo(&p.name, 0), f)) {
+                    matches_partition = true;
+                    break;
+                }
+            }
+            if (!matches_disk and !matches_partition) continue;
+        }
+
+        // Calculate disk size in bytes
+        const whole_disk = disk.partition_table.items[0];
+        const disk_sectors = whole_disk.total_blocks;
+        const disk_bytes = @as(u64, disk_sectors) * BLOCK_SIZE;
+
+        // Print disk header (like fdisk -l)
+        _ = writer.print(
+            "\nDisk {s}: {d} MiB, {d} bytes, {d} sectors\n",
+            .{ disk_name, disk_bytes / (1024 * 1024), disk_bytes, disk_sectors },
+        ) catch {};
+
+        _ = writer.print(
+            "Sector size: {d} bytes\n",
+            .{disk.sector_size},
+        ) catch {};
+
+        // Print partition table header
+        _ = writer.print(
+            "\n{s: <12} {s: <4} {s: >10} {s: >10} {s: >10} {s: >6} {s: >2} {s}\n",
+            .{ "Device", "Boot", "Start", "End", "Sectors", "Size", "Id", "Type" },
+        ) catch {};
+
+        // Print each partition (skip partition 0 = whole disk)
+        for (disk.partition_table.items) |p| {
+            if (p.partno == 0) continue;
+
+            const start = p.translator.logical_offset;
+            const sectors = p.total_blocks;
+            const end = start + sectors - 1;
+            const size_bytes = @as(u64, sectors) * BLOCK_SIZE;
+
+            // Format size nicely
+            var size_buf: [8]u8 = undefined;
+            const size_str = formatSize(size_bytes, &size_buf);
+
+            // Boot flag
+            const boot_str: []const u8 = if (p.bootable) "*" else "";
+
+            _ = writer.print(
+                "{s: <12} {s: <4} {d: >10} {d: >10} {d: >10} {s: >6} {X:0>2} {s}\n",
+                .{
+                    std.mem.sliceTo(&p.name, 0),
+                    boot_str,
+                    start,
+                    end,
+                    sectors,
+                    size_str,
+                    @intFromEnum(p.partition_type),
+                    p.partition_type.displayName(),
+                },
+            ) catch {};
+        }
+    }
+}
+
+/// Format bytes into human-readable size (K, M, G)
+/// Returns a string like "512B", "1K", "2M", "3G", etc.
+fn formatSize(bytes: u64, buf: []u8) []const u8 {
+    const units = [_][]const u8{ "B", "K", "M", "G", "T" };
+    var size: f64 = @floatFromInt(bytes);
+    var unit_idx: usize = 0;
+
+    while (size >= 1024 and unit_idx < units.len - 1) {
+        size /= 1024;
+        unit_idx += 1;
+    }
+
+    if (unit_idx == 0) {
+        return std.fmt.bufPrint(buf, "{d}B", .{@as(u64, @intFromFloat(size))}) catch "?";
+    } else {
+        return std.fmt.bufPrint(buf, "{d:.0}{s}", .{ size, units[unit_idx] }) catch "?";
+    }
+}
+
 pub fn lookup_devt(name: []const u8, partno: minor_t) ?dev_t {
     var it = partitions.inorderIterator();
     while (it.next()) |entry| {
