@@ -25,6 +25,8 @@ total_blocks: u32, // Total logical blocks
 translator: *BlockTranslator, // Handles physical/logical translation
 stats: Statistics = .{},
 readonly: bool = false,
+bootable: bool = false, // Boot flag from MBR
+partition_type: u8 = 0, // Partition type ID (0x83 = Linux, etc.)
 
 /// Read logical blocks (always 512-byte blocks)
 pub fn read(self: *Self, start_block: u32, count: u32, buffer: []u8) BlockError!void {

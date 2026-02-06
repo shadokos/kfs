@@ -429,6 +429,14 @@ pub fn partitions(shell: anytype, _: [][]u8) CmdError!void {
     block.show_partitions(shell.writer);
 }
 
+pub fn lsblk(shell: anytype, args: [][]u8) CmdError!void {
+    const block = @import("../../block/registry.zig");
+
+    // lsblk [device_name]
+    const filter: ?[]const u8 = if (args.len >= 2) args[1] else null;
+    block.show_lsblk(shell.writer, filter);
+}
+
 pub fn lookup_devt(shell: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) return CmdError.InvalidNumberOfArguments;
 
