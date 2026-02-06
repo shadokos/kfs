@@ -12,6 +12,7 @@ const dev_t = core.dev_t;
 
 pub const PART_NAME_LEN = 16;
 const GenDisk = @import("gendisk.zig");
+const PartitionType = @import("partitions/mbr.zig").PartitionType;
 
 const errno = @import("../errno.zig").Errno;
 
@@ -20,11 +21,13 @@ const Self = @This();
 devt: dev_t = .{ .major = 0, .minor = 0 },
 partno: core.minor_t,
 disk: *GenDisk,
-name: [PART_NAME_LEN]u8,
+name: [PART_NAME_LEN:0]u8,
 total_blocks: u32, // Total logical blocks
 translator: *BlockTranslator, // Handles physical/logical translation
 stats: Statistics = .{},
 readonly: bool = false,
+bootable: bool = false, // Boot flag from MBR
+partition_type: PartitionType = .Empty,
 
 /// Read logical blocks (always 512-byte blocks)
 pub fn read(self: *Self, start_block: u32, count: u32, buffer: []u8) BlockError!void {

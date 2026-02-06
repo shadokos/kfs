@@ -110,3 +110,13 @@ pub fn add_partition(self: *Self, offset: u32, limit: u32) !*Partition {
 
     return partition;
 }
+
+pub fn scan_partitions(self: *Self) void {
+    const partitions = @import("partitions/partitions.zig");
+    partitions.scan(self) catch |e| {
+        std.log.warn("Partition scan failed for {s}: {s}", .{
+            std.mem.sliceTo(&self.name, 0),
+            @errorName(e),
+        });
+    };
+}

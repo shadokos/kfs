@@ -105,6 +105,8 @@ pub fn create_disk(channel: *Channel, info: DriveInfo, channel_idx: usize) !*Gen
         return e;
     };
 
+    disk.scan_partitions();
+
     return disk;
 }
 
