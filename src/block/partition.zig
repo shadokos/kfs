@@ -27,7 +27,7 @@ stats: Statistics = .{},
 readonly: bool = false,
 
 /// Read logical blocks (always 512-byte blocks)
-pub fn read(self: *Self, start_block: u32, count: u32, buffer: []u8) BlockError!void {
+pub fn read_bytes(self: *Self, start_block: u32, count: u32, buffer: []u8) BlockError!void {
     if (buffer.len < count * STANDARD_BLOCK_SIZE) return BlockError.BufferTooSmall;
     if (start_block + count > self.total_blocks) return BlockError.OutOfBounds;
     if (self.disk.vtable == null) return BlockError.IoError;
@@ -47,8 +47,12 @@ pub fn read(self: *Self, start_block: u32, count: u32, buffer: []u8) BlockError!
     self.stats.blocks_read += count;
 }
 
+pub fn read(self : *Self, T : type, start_block : u32, count: u32, buffer : []T) BlockError!void {
+   return self.read_bytes(start_block, count, std.mem.sliceAsBytes(buffer)); 
+}
+
 /// Write logical blocks (always 512-byte blocks)
-pub fn write(self: *Self, start_block: u32, count: u32, buffer: []const u8) BlockError!void {
+pub fn write_bytes(self: *Self, start_block: u32, count: u32, buffer: []const u8) BlockError!void {
     if (buffer.len < count * STANDARD_BLOCK_SIZE) return BlockError.BufferTooSmall;
     if (start_block + count > self.total_blocks) return BlockError.OutOfBounds;
     if (self.disk.vtable == null) return BlockError.IoError;
@@ -61,6 +65,10 @@ pub fn write(self: *Self, start_block: u32, count: u32, buffer: []const u8) Bloc
 
     self.stats.writes_completed += 1;
     self.stats.blocks_written += count;
+}
+
+pub fn write(self : *Self, T : type, start_block : u32, count: u32, buffer : []T) BlockError!void {
+   return self.write_bytes(start_block, count, std.mem.sliceAsBytes(buffer)); 
 }
 
 pub fn alloc_devt(self: *Self) !dev_t {

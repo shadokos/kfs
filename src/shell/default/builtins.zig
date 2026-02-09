@@ -466,7 +466,7 @@ pub fn blkread(shell: anytype, args: [][]u8) CmdError!void {
     @memset(buffer, 0x66);
     defer allocator.free(buffer);
 
-    part.read(start, count, buffer) catch |e| {
+    part.read_bytes(start, count, buffer) catch |e| {
         utils.print_error(shell, "Read error: {s}", .{@errorName(e)});
         return CmdError.OtherError;
     };
@@ -474,4 +474,183 @@ pub fn blkread(shell: anytype, args: [][]u8) CmdError!void {
     const start_ptr = @intFromPtr(&buffer[0]);
     const end_ptr = start_ptr + buffer.len;
     @import("../../debug.zig").memory_dump(start_ptr, end_ptr, start_ptr - (start * block_size));
+}
+
+const ext2 = @import("../../fs/ext2/driver.zig").fs;
+const SuperBlock = @import("../../fs/superblock.zig");
+const Inode = @import("../../fs/inode.zig");
+
+var sb : ?SuperBlock = null;
+var cwd : []const u8 = undefined;
+var current_inode : Inode = undefined;
+
+pub fn mount(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+    const allocator = @import("../../memory.zig").smallAlloc.allocator();
+    const part_name = args[1];
+
+    const part = @import("../../block/registry.zig").get_partition_by_name(part_name) orelse {
+        utils.print_error(shell, "No such device", .{});
+        return CmdError.OtherError;
+    };
+    if (!ext2.identify(part)) {
+        utils.print_error(shell, "Not an {s} filesystem", .{ext2.name});
+        return CmdError.OtherError;
+    }
+    sb = ext2.create(part, allocator);
+    current_inode = sb.?.get_root();
+    cwd = allocator.dupe(u8, "/") catch @panic("OOM");
+}
+
+pub fn pwd(shell: anytype, _: [][]u8) CmdError!void {
+    if (sb == null) {
+        utils.print_error(shell, "No filesystem mounted", .{});
+        return CmdError.OtherError;
+    }
+    shell.print("{s}\n", .{cwd});
+}
+
+pub fn ls(shell: anytype, _: [][]u8) CmdError!void {
+    if (sb == null) {
+        utils.print_error(shell, "No filesystem mounted", .{});
+        return CmdError.OtherError;
+    }
+    const file = current_inode.open();
+
+    var ent : @import("../../fs/file.zig").DirEnt = undefined;
+    while (file.vtable.readdir(file, &ent)) {
+        shell.print("{s}\n", .{ent.name[0..ent.name_len]});
+    }
+}
+
+pub fn cd(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+    const allocator = @import("../../memory.zig").smallAlloc.allocator();
+
+    if (sb == null) {
+        utils.print_error(shell, "No filesystem mounted", .{});
+        return CmdError.OtherError;
+    }
+
+    var iterator = std.fs.path.componentIterator(args[1]) catch {
+        utils.print_error(shell, "Not a valid path", .{});
+        return CmdError.OtherError;
+    };
+
+    var tmp_inode = current_inode;
+
+    if (iterator.root() != null) {
+        tmp_inode = sb.?.get_root();
+    }
+
+    while (iterator.next()) |component| {
+        if (tmp_inode.lookup(component.name)) |next_inode| {
+            if (next_inode.get_type() != .Directory) {
+                utils.print_error(shell, "Invalid path: {s} is not a directory", .{component.path});
+                return CmdError.OtherError;
+            }
+            tmp_inode = next_inode;
+        } else {
+            utils.print_error(shell, "Invalid path: {s} does not exist", .{component.path});
+            return CmdError.OtherError;
+        }
+    }
+    current_inode = tmp_inode;
+    const tmp = cwd;
+    cwd = std.fs.path.join(allocator, &.{cwd, args[1]}) catch @panic("OOM");
+    allocator.free(tmp);
+}
+
+pub fn cat(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+    if (sb == null) {
+        utils.print_error(shell, "No filesystem mounted", .{});
+        return CmdError.OtherError;
+    }
+
+    const file_inode = current_inode.lookup(args[1]) orelse {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    if (file_inode.get_type() != .Regular) {
+        utils.print_error(shell, "Invalid path: {s} is not a regular file", .{args[1]});
+        return CmdError.OtherError;
+    }
+    
+    const file = file_inode.open();
+    var buffer : [50]u8 = undefined;
+    var read_size : usize = undefined;
+
+    read_size = file.read(buffer[0..]);
+    while (read_size != 0) {
+        shell.print("{s}", .{buffer[0..read_size]});
+        read_size = file.read(buffer[0..]);
+    }
+}
+
+pub fn write(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 4) return CmdError.InvalidNumberOfArguments;
+    if (sb == null) {
+        utils.print_error(shell, "No filesystem mounted", .{});
+        return CmdError.OtherError;
+    }
+
+    const offset = std.fmt.parseInt(usize, args[3], 0) catch {
+        utils.print_error(shell, "Invalid offset", .{});
+        return CmdError.OtherError;
+    };
+    const data = args[2];
+    const file_inode = current_inode.lookup(args[1]) orelse {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+
+    if (file_inode.get_type() != .Regular) {
+        utils.print_error(shell, "Invalid path: {s} is not a regular file", .{args[1]});
+        return CmdError.OtherError;
+    }
+    
+    const file = file_inode.open();
+    _ = offset;
+    shell.print("{} bytes written\n", .{file.write(data)});
+}
+
+pub fn stat(shell : anytype, args : [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+    if (sb == null) {
+        utils.print_error(shell, "No filesystem mounted", .{});
+        return CmdError.OtherError;
+    }
+
+    const file_inode = current_inode.lookup(args[1]) orelse {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    shell.print("inode: {}\n", .{file_inode.get_ino()});
+    shell.print("type: {?}\n", .{file_inode.get_type()});
+    shell.print("size: {}\n", .{file_inode.get_size()});
+}
+
+pub fn truncate(shell : anytype, args : [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+    if (sb == null) {
+        utils.print_error(shell, "No filesystem mounted", .{});
+        return CmdError.OtherError;
+    }
+
+    const file_inode = current_inode.lookup(args[1]) orelse {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    if (file_inode.get_type() != .Regular) {
+        utils.print_error(shell, "Invalid path: {s} is not a regular file", .{args[1]});
+        return CmdError.OtherError;
+    }
+
+    const offset = std.fmt.parseInt(u64, args[2], 0) catch {
+        utils.print_error(shell, "Invalid size", .{});
+        return CmdError.OtherError;
+    };
+
+    file_inode.open().truncate(offset);
 }

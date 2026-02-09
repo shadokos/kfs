@@ -29,7 +29,7 @@ pub fn compare(a: *core.Partition, b: *core.Partition) std.math.Order {
     return std.math.order(a.devt.toInt(), b.devt.toInt());
 }
 
-var partitions = Treap{};
+pub var partitions = Treap{};
 
 pub fn register_block_dev(major: major_t, name: []const u8) !void {
     if (majors[major]) |_| return Errno.EBUSY;

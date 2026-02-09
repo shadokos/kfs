@@ -150,14 +150,14 @@ pub fn test_disk() void {
     @memset(buffer[256..512], 0x02);
 
     // Write first block of the first partition
-    disk.partition_table.items[1].write(0, 1, &buffer) catch |e| {
+    disk.partition_table.items[1].write_bytes(0, 1, &buffer) catch |e| {
         logger.debug("Test write failed: {s}", .{@errorName(e)});
         return;
     };
 
     // Read it back, from the whole disk (partition 0)
     @memset(buffer[0..], 0);
-    disk.partition_table.items[0].read(2, 1, &buffer) catch |e| {
+    disk.partition_table.items[0].read_bytes(2, 1, &buffer) catch |e| {
         logger.debug("Test read failed: {s}", .{@errorName(e)});
         return;
     };

@@ -1,4 +1,5 @@
 const core = @import("../block.zig");
+const std = @import("std");
 const STANDARD_BLOCK_SIZE = core.STANDARD_BLOCK_SIZE;
 
 const BlockError = core.BlockError;
@@ -32,7 +33,7 @@ pub fn read(
     if (buffer.len < logical_count * self.block_size) {
         return BlockError.BufferTooSmall;
     }
-
+    
     // Check partition limits
     if (self.logical_limit) |limit| if (logical_start + logical_count > limit)
         return BlockError.OutOfBounds;

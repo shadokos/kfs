@@ -6,7 +6,9 @@ OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo ReleaseSafe) | 
 
 BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
 QEMU_BOOT_DRIVE ?= -hda kfs.iso
-QEMU_DRIVE ?=
+QEMU_DRIVE ?= -hdb fs.iso
+
+WATCHEXEC=/tmp/watchexec
 
 .PHONY: all
 all: build
@@ -20,7 +22,6 @@ all: build
 .PHONY: run
 run: build
 	qemu-system-i386 $(QEMU_BOOT_DRIVE) ${QEMU_DRIVE}
-
 
 .PHONY: build
 build: .optimize-$(OPTIMIZE) .bootloader-$(BOOTLOADER)
