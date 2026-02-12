@@ -1,14 +1,16 @@
 const std = @import("std");
 
 const core = @import("block.zig");
-const dev_t = core.dev_t;
-const udev_t = core.udev_t;
-const major_t = core.major_t;
-const minor_t = core.minor_t;
 
-const Errno = @import("../errno.zig").Errno;
+const types = @import("../types.zig");
+const dev_t = types.dev_t;
+const udev_t = types.udev_t;
+const major_t = types.major_t;
+const minor_t = types.minor_t;
 
-const allocator = @import("../memory.zig").smallAlloc.allocator();
+const Errno = @import("../../errno.zig").Errno;
+
+const allocator = @import("../../memory.zig").smallAlloc.allocator();
 const MAX_MAJOR = std.math.maxInt(major_t);
 
 var majors: [MAX_MAJOR]?[]const u8 = .{null} ** MAX_MAJOR;

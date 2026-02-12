@@ -4,7 +4,7 @@ const blk = @import("../block.zig");
 const GenDisk = @import("../gendisk.zig");
 const STANDARD_BLOCK_SIZE = blk.STANDARD_BLOCK_SIZE;
 
-const allocator = @import("../../memory.zig").smallAlloc.allocator();
+const allocator = @import("../../../memory.zig").smallAlloc.allocator();
 
 const logger = std.log.scoped(.partitions);
 

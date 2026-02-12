@@ -6,15 +6,17 @@ const ide = @import("../ide/ide.zig");
 
 const log = std.log.scoped(.ide_hd);
 
-const blk = @import("../../block/block.zig");
+const blk = @import("../../device/block/block.zig");
 const STANDARD_BLOCK_SIZE = blk.STANDARD_BLOCK_SIZE;
-const major_t = blk.major_t;
-const minor_t = blk.minor_t;
-const dev_t = blk.dev_t;
+
+const types = @import("../../device/types.zig");
+const major_t = types.major_t;
+const minor_t = types.minor_t;
+const dev_t = types.dev_t;
 const GenDisk = blk.GenDisk;
 const Partition = blk.Partition;
 
-const registry = @import("../../block/registry.zig");
+const registry = @import("../../device/block/registry.zig");
 
 // Define Major numbers for standard IDE controllers
 // - Primary Controller (IDE0): Major 3
