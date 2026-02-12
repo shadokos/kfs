@@ -8,18 +8,21 @@ const BlockTranslator = core.BlockTranslator;
 const Statistics = core.Statistics;
 const BlockError = core.BlockError;
 const Operations = core.Operations;
-const dev_t = core.dev_t;
+
+const types = @import("../types.zig");
+const dev_t = types.dev_t;
+const minor_t = types.minor_t;
 
 pub const PART_NAME_LEN = 16;
 const GenDisk = @import("gendisk.zig");
 const PartitionType = @import("partitions/mbr.zig").PartitionType;
 
-const errno = @import("../errno.zig").Errno;
+const errno = @import("../../errno.zig").Errno;
 
 const Self = @This();
 
 devt: dev_t = .{ .major = 0, .minor = 0 },
-partno: core.minor_t,
+partno: minor_t,
 disk: *GenDisk,
 name: [PART_NAME_LEN:0]u8,
 total_blocks: u32, // Total logical blocks
@@ -91,7 +94,7 @@ pub fn alloc_devt(self: *Self) !dev_t {
         return self.devt;
     }
 
-    const idx: core.minor_t = try registry.blkext_alloc_id();
+    const idx: minor_t = try registry.blkext_alloc_id();
 
     self.devt = dev_t{ .major = registry.MAJOR, .minor = idx };
     return self.devt;

@@ -415,22 +415,23 @@ pub fn pci(shell: anytype, args: [][]u8) CmdError!void {
 }
 
 pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
-    const block = @import("../../block/registry.zig");
+    const block = @import("../../device/block/registry.zig");
+    const char = @import("../../device/char/registry.zig");
 
-    shell.print("Character devices:\n", .{});
-    shell.print("N/A\n\n", .{}); // Not implemented yet
+    char.show_char_dev(shell.writer);
+    _ = shell.writer.write("\n") catch {};
 
     block.show_block_dev(shell.writer);
 }
 
 pub fn partitions(shell: anytype, _: [][]u8) CmdError!void {
-    const block = @import("../../block/registry.zig");
+    const block = @import("../../device/block/registry.zig");
 
     block.show_partitions(shell.writer);
 }
 
 pub fn lsblk(shell: anytype, args: [][]u8) CmdError!void {
-    const block = @import("../../block/registry.zig");
+    const block = @import("../../device/block/registry.zig");
 
     // lsblk [device_name]
     const filter: ?[]const u8 = if (args.len >= 2) args[1] else null;
@@ -443,11 +444,11 @@ pub fn lookup_devt(shell: anytype, args: [][]u8) CmdError!void {
     const name = args[1];
     const partno = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
 
-    const devt = @import("../../block/registry.zig").lookup_devt(name, @truncate(partno)) orelse {
+    const devt = @import("../../device/block/registry.zig").lookup_devt(name, @truncate(partno)) orelse {
         utils.print_error(shell, "No such device", .{});
         return CmdError.OtherError;
     };
-    const udev_t = @import("../../block/block.zig").udev_t;
+    const udev_t = @import("../../device/types.zig").udev_t;
     shell.print("{d} ({d}:{d})\n", .{ @as(udev_t, @bitCast(devt)), devt.major, devt.minor });
 }
 
@@ -459,9 +460,9 @@ pub fn blkread(shell: anytype, args: [][]u8) CmdError!void {
     const start = std.fmt.parseInt(u32, args[2], 0) catch return CmdError.InvalidParameter;
     const count = std.fmt.parseInt(u32, args[3], 0) catch return CmdError.InvalidParameter;
 
-    const block_size = @import("../../block/block.zig").STANDARD_BLOCK_SIZE;
+    const block_size = @import("../../device/block/block.zig").STANDARD_BLOCK_SIZE;
 
-    const part = @import("../../block/registry.zig").get_partition_by_name(name) orelse {
+    const part = @import("../../device/block/registry.zig").get_partition_by_name(name) orelse {
         utils.print_error(shell, "No such device", .{});
         return CmdError.OtherError;
     };
@@ -482,4 +483,79 @@ pub fn blkread(shell: anytype, args: [][]u8) CmdError!void {
     const start_ptr = @intFromPtr(&buffer[0]);
     const end_ptr = start_ptr + buffer.len;
     @import("../../debug.zig").memory_dump(start_ptr, end_ptr, start_ptr - (start * block_size));
+}
+
+/// Read N bytes from a character device and hexdump the result.
+/// Usage: charread <name> <count>
+pub fn charread(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+
+    const name = args[1];
+    const count = std.fmt.parseInt(usize, args[2], 0) catch return CmdError.InvalidParameter;
+
+    const char_reg = @import("../../device/char/registry.zig");
+    const dev = char_reg.get_device_by_name(name) orelse {
+        utils.print_error(shell, "No such character device: {s}", .{name});
+        return CmdError.OtherError;
+    };
+
+    const allocator = @import("../../memory.zig").bigAlloc.allocator();
+    const buffer = allocator.alloc(u8, count) catch {
+        utils.print_error(shell, "Failed to allocate {d} bytes", .{count});
+        return CmdError.OtherError;
+    };
+    defer allocator.free(buffer);
+
+    // Fill with 0xAA so we can see what the device actually writes
+    @memset(buffer, 0xAA);
+
+    const bytes_read = dev.read(buffer) catch |err| {
+        utils.print_error(shell, "Read error: {s}", .{@errorName(err)});
+        return CmdError.OtherError;
+    };
+
+    shell.print("Read {d} bytes from '{s}' (1:{d}):\n", .{ bytes_read, name, dev.devt.minor });
+
+    if (bytes_read == 0) {
+        shell.print("(EOF)\n", .{});
+    } else {
+        const start_ptr = @intFromPtr(&buffer[0]);
+        @import("../../debug.zig").memory_dump(start_ptr, start_ptr + bytes_read, null);
+    }
+}
+
+/// Write a string to a character device.
+/// Usage: charwrite <name> <string>
+pub fn charwrite(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+
+    const name = args[1];
+    const data = args[2];
+
+    const char_reg = @import("../../device/char/registry.zig");
+    const dev = char_reg.get_device_by_name(name) orelse {
+        utils.print_error(shell, "No such character device: {s}", .{name});
+        return CmdError.OtherError;
+    };
+
+    const bytes_written = dev.write(data) catch |err| {
+        utils.print_error(shell, "Write error: {s}", .{@errorName(err)});
+        return CmdError.OtherError;
+    };
+
+    shell.print("Wrote {d}/{d} bytes to '{s}' (1:{d})\n", .{
+        bytes_written,
+        data.len,
+        name,
+        dev.devt.minor,
+    });
+}
+
+/// List character devices with optional name filter.
+/// Usage: lschar [device_name]
+pub fn lschar(shell: anytype, args: [][]u8) CmdError!void {
+    const char_reg = @import("../../device/char/registry.zig");
+
+    const filter: ?[]const u8 = if (args.len >= 2) args[1] else null;
+    char_reg.show_lschar(shell.writer, filter);
 }

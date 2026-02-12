@@ -6,13 +6,15 @@ const core = @import("block.zig");
 const Features = core.Features;
 const Partition = core.Partition;
 const Operations = core.Operations;
-const dev_t = core.dev_t;
-const major_t = core.major_t;
-const minor_t = core.minor_t;
+
+const types = @import("../types.zig");
+const dev_t = types.dev_t;
+const major_t = types.major_t;
+const minor_t = types.minor_t;
 
 const PartitionList = std.ArrayList(*Partition);
 
-const allocator = @import("../memory.zig").bigAlloc.allocator();
+const allocator = @import("../../memory.zig").bigAlloc.allocator();
 
 const DISK_NAME_LEN = 16;
 
