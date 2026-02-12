@@ -6,10 +6,8 @@
 const std = @import("std");
 
 const char = @import("../../device/char/char.zig");
-const cdev = @import("../../device/char/cdev.zig");
 const registry = @import("../../device/char/registry.zig");
 
-// Submodules
 pub const null_dev = @import("mem/null.zig");
 pub const zero_dev = @import("mem/zero.zig");
 
@@ -23,13 +21,17 @@ pub fn init() void {
         return;
     };
 
-    _ = cdev.create("null", MAJOR, null_dev.MINOR, &null_dev.ops) catch |err| {
-        log.err("Failed to create /dev/null: {s}", .{@errorName(err)});
+    const CharDevice = @import("../../device/char/cdev.zig");
+
+    null_dev.cdev = CharDevice.init("null", MAJOR, null_dev.MINOR, &null_dev.ops);
+    null_dev.cdev.register() catch |err| {
+        log.err("Failed to register /dev/null: {s}", .{@errorName(err)});
         return;
     };
 
-    _ = cdev.create("zero", MAJOR, zero_dev.MINOR, &zero_dev.ops) catch |err| {
-        log.err("Failed to create /dev/zero: {s}", .{@errorName(err)});
+    zero_dev.cdev = CharDevice.init("zero", MAJOR, zero_dev.MINOR, &zero_dev.ops);
+    zero_dev.cdev.register() catch |err| {
+        log.err("Failed to register /dev/zero: {s}", .{@errorName(err)});
         return;
     };
 
