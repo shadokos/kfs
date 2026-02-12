@@ -100,7 +100,9 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     @import("task/ready_queue.zig").init();
     @import("task/wait_queue.zig").init();
 
-    @import("block/registry.zig").init();
+    @import("device/block/registry.zig").init();
+    @import("device/char/registry.zig").init();
+    @import("drivers/char/mem.zig").init();
 
     @import("drivers/pci/pci.zig").init() catch @panic("Failed to initialize PCI subsystem");
     @import("drivers/ide/ide.zig").init() catch @panic("Failed to initialize IDE subsystem");

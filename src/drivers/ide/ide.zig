@@ -16,7 +16,7 @@ pub const DriveType = types.DriveType;
 pub const Capacity = types.Capacity;
 pub const Buffer = types.Buffer;
 
-const IOType = @import("../../block/block.zig").IOType;
+const IOType = @import("../../device/block/block.zig").IOType;
 
 /// Drive information (used only during discovery)
 pub const DriveInfo = struct {

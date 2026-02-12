@@ -13,7 +13,7 @@ const dev_t = core.dev_t;
 pub const PART_NAME_LEN = 16;
 const GenDisk = @import("gendisk.zig");
 
-const errno = @import("../errno.zig").Errno;
+const errno = @import("../../errno.zig").Errno;
 
 const Self = @This();
 
