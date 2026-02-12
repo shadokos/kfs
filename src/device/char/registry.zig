@@ -96,38 +96,6 @@ pub fn show_char_dev(writer: std.io.AnyWriter) void {
     }
 }
 
-/// Print detailed info about all registered character devices.
-pub fn show_char_devices(writer: std.io.AnyWriter) void {
-    _ = writer.print(
-        "{s: <12} {s: >5}:{s: <5} {s: >4} {s: <6} {s}\n",
-        .{ "Device", "major", "minor", "refs", "ops", "driver" },
-    ) catch {};
-
-    var it = devices.inorderIterator();
-    while (it.next()) |entry| {
-        const dev = entry.key;
-        const driver_name = majors[dev.devt.major] orelse "???";
-
-        // Build ops flags string: R=read W=write I=ioctl
-        var ops_buf: [3]u8 = .{ '-', '-', '-' };
-        if (dev.ops.read != null) ops_buf[0] = 'R';
-        if (dev.ops.write != null) ops_buf[1] = 'W';
-        if (dev.ops.ioctl != null) ops_buf[2] = 'I';
-
-        _ = writer.print(
-            "{s: <12} {d: >5}:{d: <5} {d: >4} {s: <6} {s}\n",
-            .{
-                std.mem.sliceTo(&dev.name, 0),
-                dev.devt.major,
-                dev.devt.minor,
-                dev.ref_count,
-                &ops_buf,
-                driver_name,
-            },
-        ) catch {};
-    }
-}
-
 /// List character devices, optionally filtered by name.
 pub fn show_lschar(writer: std.io.AnyWriter, filter: ?[]const u8) void {
     _ = writer.print(
