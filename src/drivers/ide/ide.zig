@@ -18,9 +18,9 @@ pub const Buffer = types.Buffer;
 
 const IOType = @import("../../block/block.zig").IOType;
 
-/// Informations basiques d'un drive (utilisé uniquement pendant la découverte)
+/// Drive information (used only during discovery)
 pub const DriveInfo = struct {
-    model: [41]u8,
+    model: [40]u8,
     capacity: Capacity,
     drive_type: DriveType,
     removable: bool,
@@ -77,7 +77,7 @@ pub fn deinit() void {
 }
 
 /// Effectuer une opération IDE
-pub fn performOperation(drive_type: DriveType, op: *const IDEOperation) IDEError!void {
+pub fn performOperation(drive_type: DriveType, op: *IDEOperation) IDEError!void {
     const channel = op.channel;
 
     // Valider l'opération
@@ -91,8 +91,8 @@ pub fn performOperation(drive_type: DriveType, op: *const IDEOperation) IDEError
 
     // Effectuer l'opération selon le type de drive
     if (drive_type == .ATA) {
-        try ata.performPolling(@constCast(op));
+        try ata.performPolling(op);
     } else {
-        try atapi.performPolling(@constCast(op));
+        try atapi.performPolling(op);
     }
 }

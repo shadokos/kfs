@@ -32,7 +32,7 @@ interface: Interface = .{},
 const Self = @This();
 
 pub fn reset(self: *Self) void {
-    cpu.outb(self.ctrl, 0x04);
+    cpu.outb(self.ctrl, constants.ATA.CTRL_SRST);
     for (0..100) |_| cpu.io_wait();
 
     cpu.outb(self.ctrl, 0x00);
@@ -52,10 +52,10 @@ pub fn get_channels(allocator: Allocator, controller: *const pci.PCIDevice) ?[]S
     // Default values for legacy IDE controllers
     // TODO: These values are hard-coded for the first controller
     // Handling more interfaces may require to manually configure the pci BARs etc I guess
-    var primary_base: u16 = 0x1F0;
-    var primary_ctrl: u16 = 0x3F6;
-    var secondary_base: u16 = 0x170;
-    var secondary_ctrl: u16 = 0x376;
+    var primary_base: u16 = constants.ATA.PRIMARY_BASE;
+    var primary_ctrl: u16 = constants.ATA.PRIMARY_CTRL;
+    var secondary_base: u16 = constants.ATA.SECONDARY_BASE;
+    var secondary_ctrl: u16 = constants.ATA.SECONDARY_CTRL;
 
     if (interface.isPCINative()) {
         primary_base = @truncate(controller.bars[0] & 0xFFFC);
@@ -68,7 +68,7 @@ pub fn get_channels(allocator: Allocator, controller: *const pci.PCIDevice) ?[]S
             .base = primary_base,
             .ctrl = primary_ctrl,
             .channel_type = .Primary,
-            .irq = if (interface.isPCINative()) controller.irq_line else 14,
+            .irq = if (interface.isPCINative()) controller.irq_line else constants.ATA.PRIMARY_IRQ,
         }) catch return null;
     }
     if (secondary_base != 0) {
@@ -76,7 +76,7 @@ pub fn get_channels(allocator: Allocator, controller: *const pci.PCIDevice) ?[]S
             .base = secondary_base,
             .ctrl = secondary_ctrl,
             .channel_type = .Secondary,
-            .irq = if (interface.isPCINative()) controller.irq_line else 15,
+            .irq = if (interface.isPCINative()) controller.irq_line else constants.ATA.SECONDARY_IRQ,
         }) catch return null;
     }
 
@@ -99,7 +99,7 @@ pub fn get_all_channels(allocator: Allocator) ?[]Self {
             continue;
         }
         defer allocator.free(chans.?);
-        for (chans.?) |*chan| chan.interface = .{ .index = @truncate(idx), .device = controller };
+        for (chans.?) |*chan| chan.interface = .{ .index = @intCast(idx), .device = controller };
         list.appendSlice(allocator, chans.?) catch |err| {
             logger.warn("0x{x}: Failed to retrieve channels for : {s}", .{
                 controller.device_id,

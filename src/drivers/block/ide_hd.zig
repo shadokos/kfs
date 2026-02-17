@@ -58,12 +58,13 @@ const HdData = struct {
 /// - `channel_idx`: Global index of the channel (0 for Primary, 1 for Secondary)
 pub fn create_disk(channel: *Channel, info: DriveInfo, channel_idx: usize) !*GenDisk {
     const disk = try blk.GenDisk.create(MINORS);
+    errdefer disk.destroy();
 
     // Position within the channel (Master=0, Slave=1)
     const pos: u8 = if (info.position == .Master) 0 else 1;
 
     if (channel_idx >= channel_to_major.len) {
-        return error.TooManyChannels;
+        @panic("Too many channels for IDE block driver static configuration");
     }
 
     disk.major = channel_to_major[channel_idx].major;
@@ -78,10 +79,9 @@ pub fn create_disk(channel: *Channel, info: DriveInfo, channel_idx: usize) !*Gen
     // 'a' + (1*2 + 0) = 'c' (hdc) -> Secondary Master
     _ = std.fmt.bufPrint(&disk.name, "hd{c}", .{
         @as(u8, @intCast('a' + (channel_idx * 2 + pos))),
-    }) catch {};
+    }) catch |e| return e;
 
     const data: *HdData = try small_allocator.create(HdData);
-    errdefer small_allocator.destroy(data);
 
     data.drive_info = info;
     data.channel = channel;
@@ -157,6 +157,7 @@ fn probe() u32 {
                                 disk.major,
                                 @errorName(err),
                             });
+                            disk.destroy();
                         }
                     };
                 }
@@ -178,8 +179,6 @@ fn physical_io(
     io_type: blk.IOType,
 ) blk.BlockError!void {
     // Context is the Partition instance calling for IO.
-    // We assert alignment to catch any unsafe pointer casting issues early.
-    std.debug.assert(std.mem.isAligned(@intFromPtr(context), @alignOf(Partition)));
     const partition: *Partition = @ptrCast(@alignCast(context));
 
     if (partition.disk.private_data == null) return blk.BlockError.IoError;
@@ -194,7 +193,7 @@ fn physical_io(
     // Retrieve hardware-specific data (Channel, Position) from Generic Disk private data
     const data: *HdData = @ptrCast(@alignCast(partition.disk.private_data.?));
 
-    const op = ide.IDEOperation{
+    var op = ide.IDEOperation{
         .channel = data.channel,
         .position = data.drive_info.position,
         .lba = sector,

@@ -37,24 +37,14 @@ pub fn performPolling(op: *@import("ide.zig").IDEOperation) types.IDEError!void 
 
     // 6. Send the SCSI Command Packet (12 bytes)
     // We construct a SCSI READ(10) command manually.
-    var packet: [12]u8 = .{0} ** 12;
-    packet[0] = constants.ATAPI.CMD_READ10; // Operation Code
-    // LBA (Logical Block Address) - Big Endian for SCSI
-    packet[2] = @truncate(op.lba >> 24);
-    packet[3] = @truncate(op.lba >> 16);
-    packet[4] = @truncate(op.lba >> 8);
-    packet[5] = @truncate(op.lba);
-    // Transfer Length (in blocks) - Big Endian
-    packet[7] = @truncate(op.count >> 8);
-    packet[8] = @truncate(op.count);
+    var packet = std.mem.zeroes(constants.SCSI.Read10);
+    packet.opcode = constants.ATAPI.CMD_READ10;
+    packet.lba = std.mem.nativeToBig(u32, @intCast(op.lba));
+    packet.transfer_len = std.mem.nativeToBig(u16, @intCast(op.count));
 
     // Send the 12 bytes of the packet as 6 words (16-bit writes)
-    for (0..6) |i| {
-        const low = packet[i * 2];
-        const high = packet[i * 2 + 1];
-        const word: u16 = (@as(u16, high) << 8) | low;
-        cpu.outw(op.channel.base + constants.ATA.REG_DATA, word);
-    }
+    const packet_bytes = std.mem.asBytes(&packet);
+    cpu.outsw_bytes(op.channel.base + constants.ATA.REG_DATA, packet_bytes);
 
     // 7. Data Transfer Phase
     var bytes_read: usize = 0;
@@ -64,7 +54,7 @@ pub fn performPolling(op: *@import("ide.zig").IDEOperation) types.IDEError!void 
         // Wait for IRQ or polling status. DRQ indicates data is ready to be read.
         // If BUSY clears and DRQ is missing, the transfer is over.
         const status = try common.waitForDataOrCompletion(op.channel.base, 5000);
-        if ((status & constants.ATA.STATUS_DRQ) == 0) break;
+        if (!status.drq) break;
 
         // Read the actual size of the data chunk available from LBA Mid/High registers
         const byte_count_low = cpu.inb(op.channel.base + constants.ATA.REG_LBA_MID);
@@ -75,19 +65,19 @@ pub fn performPolling(op: *@import("ide.zig").IDEOperation) types.IDEError!void 
 
         // Sanity check preventing buffer overflow
         const bytes_to_read = @min(byte_count, expected_bytes - bytes_read);
-        const word_count = (bytes_to_read + 1) / 2;
 
         // Read the chunk data
-        for (0..word_count) |i| {
-            const word = cpu.inw(op.channel.base + constants.ATA.REG_DATA);
-            const offset = bytes_read + i * 2;
+        const full_words = bytes_to_read / 2;
+        const has_partial = bytes_to_read % 2 != 0;
 
-            if (offset < op.buffer.read.len) {
-                op.buffer.read[offset] = @truncate(word);
-            }
-            if (offset + 1 < op.buffer.read.len) {
-                op.buffer.read[offset + 1] = @truncate(word >> 8);
-            }
+        if (bytes_read + full_words * 2 <= op.buffer.read.len) {
+            const data_slice = op.buffer.read[bytes_read..][0 .. full_words * 2];
+            cpu.insw_bytes(op.channel.base + constants.ATA.REG_DATA, data_slice);
+        }
+
+        if (has_partial and bytes_read + full_words * 2 < op.buffer.read.len) {
+            const word = cpu.inw(op.channel.base + constants.ATA.REG_DATA);
+            op.buffer.read[bytes_read + full_words * 2] = @truncate(word);
         }
 
         bytes_read += bytes_to_read;
@@ -96,7 +86,7 @@ pub fn performPolling(op: *@import("ide.zig").IDEOperation) types.IDEError!void 
 
 /// Get ATAPI drive capacity (improved version)
 fn getCapacity(channel: *const Channel, position: Channel.DrivePosition) !Capacity {
-    const select: u8 = if (position == .Master) 0xA0 else 0xB0;
+    const select: u8 = if (position == .Master) constants.ATA.SELECT_MASTER else constants.ATA.SELECT_SLAVE;
     cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
     cpu.io_wait();
 
@@ -112,43 +102,29 @@ fn getCapacity(channel: *const Channel, position: Channel.DrivePosition) !Capaci
 
     // Wait for DRQ
     const status = try common.waitForData(channel.base, 1000);
-    if (status & constants.ATA.STATUS_ERROR != 0) {
+    if (status.err) {
         return IDEError.ReadError;
     }
 
     // Send READ CAPACITY packet
-    var packet: [12]u8 = .{0} ** 12;
-    packet[0] = constants.ATAPI.CMD_READ_CAPACITY;
+    var packet = std.mem.zeroes(constants.SCSI.ReadCapacity);
+    packet.opcode = constants.ATAPI.CMD_READ_CAPACITY;
 
     // Send packet (6 words)
-    for (0..6) |i| {
-        const low = packet[i * 2];
-        const high = if (i * 2 + 1 < packet.len) packet[i * 2 + 1] else 0;
-        const word: u16 = (@as(u16, high) << 8) | low;
-        cpu.outw(channel.base + constants.ATA.REG_DATA, word);
-    }
+    const packet_bytes = std.mem.asBytes(&packet);
+    cpu.outsw_bytes(channel.base + constants.ATA.REG_DATA, packet_bytes);
 
     // Wait for data
     _ = try common.waitForData(channel.base, 1000);
 
     // Read response (8 bytes)
     var response: [8]u8 = undefined;
-    for (0..4) |i| {
-        const word = cpu.inw(channel.base + constants.ATA.REG_DATA);
-        response[i * 2] = @truncate(word);
-        response[i * 2 + 1] = @truncate(word >> 8);
-    }
+    cpu.insw_bytes(channel.base + constants.ATA.REG_DATA, &response);
 
     // Parse response
-    const last_lba = (@as(u32, response[0]) << 24) |
-        (@as(u32, response[1]) << 16) |
-        (@as(u32, response[2]) << 8) |
-        response[3];
+    const last_lba = std.mem.readInt(u32, response[0..4], .big);
 
-    const block_size = (@as(u32, response[4]) << 24) |
-        (@as(u32, response[5]) << 16) |
-        (@as(u32, response[6]) << 8) |
-        response[7];
+    const block_size = std.mem.readInt(u32, response[4..8], .big);
 
     return Capacity{ .sectors = last_lba + 1, .sector_size = block_size };
 }
@@ -156,36 +132,22 @@ fn getCapacity(channel: *const Channel, position: Channel.DrivePosition) !Capaci
 /// Parse ATAPI IDENTIFY response
 fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) DriveInfo {
     var raw: [256]u16 = undefined;
-    for (0..256) |i| {
-        raw[i] = cpu.inw(channel.base + constants.ATA.REG_DATA);
-    }
+    cpu.insw(channel.base + constants.ATA.REG_DATA, &raw);
 
     _ = cpu.inb(channel.base + constants.ATA.REG_STATUS);
 
-    // Extract model string
-    var model_arr: [41]u8 = .{0} ** 41;
-    var widx: usize = 27;
-    var midx: usize = 0;
-    while (widx <= 46) : (widx += 1) {
-        const w = raw[widx];
-        model_arr[midx] = @truncate(w >> 8);
-        model_arr[midx + 1] = @truncate(w & 0xFF);
-        midx += 2;
-    }
-
-    // Trim trailing spaces
-    var model_len: usize = 40;
-    while (model_len > 0) : (model_len -= 1) {
-        if (model_arr[model_len - 1] != ' ' and model_arr[model_len - 1] != 0) break;
-    }
-    if (model_len < model_arr.len) model_arr[model_len] = 0;
+    // Extract model string (Words 27-46 of REG_DATA response)
+    std.mem.byteSwapAllFields([20]u16, raw[27..47]);
+    var model: [40]u8 = .{0} ** 40;
+    const trimmed = std.mem.trim(u8, std.mem.asBytes(raw[27..47]), " \x00");
+    @memcpy(model[0..trimmed.len], trimmed);
 
     const removable = (raw[0] & 0x80) != 0;
 
     logger.debug("identified {s} {s}: {s} (removable: {s})", .{
         @tagName(channel.channel_type),
         @tagName(position),
-        model_arr[0..model_len],
+        std.mem.trim(u8, &model, " \x00"),
         if (removable) "yes" else "no",
     });
 
@@ -201,7 +163,7 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
         .drive_type = .ATAPI,
         .channel = channel.channel_type,
         .position = position,
-        .model = model_arr,
+        .model = model,
         .capacity = capacity,
         .removable = removable,
     };
@@ -212,13 +174,13 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
 /// Instead, we must check for a specific "Signature" in the Cylinder/LBA registers after a soft reset.
 pub fn detectDrive(channel: *const Channel, position: Channel.DrivePosition) ?DriveInfo {
     // 1. Select drive
-    const select: u8 = if (position == .Master) 0xA0 else 0xB0;
+    const select: u8 = if (position == .Master) constants.ATA.SELECT_MASTER else constants.ATA.SELECT_SLAVE;
     cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
     cpu.io_wait();
 
     // 2. Send Software Reset (bit 2 of Control Register)
     // This resets the drive logic but keeps the configuration.
-    cpu.outb(channel.ctrl, 0x04);
+    cpu.outb(channel.ctrl, constants.ATA.CTRL_SRST);
     cpu.io_wait();
     cpu.outb(channel.ctrl, 0x00); // Clear reset
     cpu.io_wait();
@@ -243,7 +205,7 @@ pub fn detectDrive(channel: *const Channel, position: Channel.DrivePosition) ?Dr
 
         // 6. Wait for data
         const status = common.waitForData(channel.base, 1000) catch return null;
-        if (status & constants.ATA.STATUS_ERROR != 0) return null;
+        if (status.err) return null;
 
         // 7. Parse identification data (similar structure to ATA IDENTIFY)
         return parseIdentifyData(channel, position);
