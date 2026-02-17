@@ -8,13 +8,13 @@ const DrivePosition = @import("channel.zig").DrivePosition;
 const Channel = @import("channel.zig");
 const common = @import("common.zig");
 
-pub fn waitForReady(base: u16, timeout_ms: usize) types.IDEError!u8 {
+pub fn waitForReady(base: u16, timeout_ms: usize) types.IDEError!types.Status {
     const deadline = timer.get_time_since_boot() + timeout_ms;
 
     while (true) {
-        const status = cpu.inb(base + constants.ATA.REG_STATUS);
-        if ((status & constants.ATA.STATUS_BUSY) == 0) {
-            if (status & constants.ATA.STATUS_ERROR != 0) {
+        const status: types.Status = @bitCast(cpu.inb(base + constants.ATA.REG_STATUS));
+        if (!status.busy) {
+            if (status.err) {
                 return parseError(base);
             }
             return status;
@@ -26,12 +26,12 @@ pub fn waitForReady(base: u16, timeout_ms: usize) types.IDEError!u8 {
     }
 }
 
-pub fn waitForData(base: u16, timeout_ms: usize) types.IDEError!u8 {
+pub fn waitForData(base: u16, timeout_ms: usize) types.IDEError!types.Status {
     const deadline = timer.get_time_since_boot() + timeout_ms;
 
     while (true) {
-        const status = cpu.inb(base + constants.ATA.REG_STATUS);
-        if ((status & (constants.ATA.STATUS_BUSY | constants.ATA.STATUS_DRQ)) == constants.ATA.STATUS_DRQ) {
+        const status: types.Status = @bitCast(cpu.inb(base + constants.ATA.REG_STATUS));
+        if (status.drq and !status.busy) {
             return status;
         }
         if (timer.get_time_since_boot() >= deadline) {
@@ -41,15 +41,15 @@ pub fn waitForData(base: u16, timeout_ms: usize) types.IDEError!u8 {
     }
 }
 
-pub fn waitForDataOrCompletion(base: u16, timeout_ms: usize) types.IDEError!u8 {
+pub fn waitForDataOrCompletion(base: u16, timeout_ms: usize) types.IDEError!types.Status {
     const deadline = timer.get_time_since_boot() + timeout_ms;
 
     while (true) {
-        const status = cpu.inb(base + constants.ATA.REG_STATUS);
-        if (status & constants.ATA.STATUS_ERROR != 0) {
+        const status: types.Status = @bitCast(cpu.inb(base + constants.ATA.REG_STATUS));
+        if (status.err) {
             return parseError(base);
         }
-        if ((status & constants.ATA.STATUS_BUSY) == 0) {
+        if (!status.busy) {
             return status;
         }
         if (timer.get_time_since_boot() >= deadline) {

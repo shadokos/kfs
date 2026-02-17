@@ -40,6 +40,17 @@ pub const IDEError = error{
     PacketTooLarge,
 };
 
+pub const Status = packed struct {
+    err: bool,
+    idx: bool,
+    corrected: bool,
+    drq: bool,
+    seek_complete: bool,
+    write_fault: bool,
+    ready: bool,
+    busy: bool,
+};
+
 pub const DriveType = enum {
     ATA,
     ATAPI,
@@ -67,7 +78,7 @@ pub const DriveInfo = struct {
     drive_type: DriveType,
     channel: Channel.ChannelType,
     position: Channel.DrivePosition,
-    model: [41]u8,
+    model: [40]u8,
     capacity: Capacity,
     removable: bool,
 

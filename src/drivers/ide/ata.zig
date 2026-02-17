@@ -14,11 +14,19 @@ const Capacity = types.Capacity;
 
 const logger = std.log.scoped(.ATA);
 
+// ATA controllers have a maximum number of sectors per command:
+//   - LBA28: max 256 sectors
+//   - LBA48: max 65536 sectors
+//
+// To transfer more sectors than the limit, we split the operation into "chunks".
+
+/// Returns how many ATA commands are needed.
 fn getTotalChunks(count: u32) usize {
     const max_chunk_size: u16 = 255;
     return (count + max_chunk_size - 1) / max_chunk_size;
 }
 
+/// Returns the LBA and sector count for a specific chunk.
 fn getChunkInfo(total_count: u32, chunk_index: usize) struct { count: u8, offset_sectors: u32 } {
     const max_chunk_size: u32 = 255;
 
@@ -33,7 +41,7 @@ fn getChunkInfo(total_count: u32, chunk_index: usize) struct { count: u8, offset
     const chunk_size = @min(remaining, max_chunk_size);
 
     return .{
-        .count = @as(u8, @truncate(chunk_size)),
+        .count = @intCast(chunk_size),
         .offset_sectors = offset_sectors,
     };
 }
@@ -52,7 +60,7 @@ pub fn performPolling(op: *IDEOperation) IDEError!void {
 
         // Calculate the actual LBA for this specific chunk
         const chunk_lba = op.lba + chunk_info.offset_sectors;
-        const lba32 = @as(u32, @truncate(chunk_lba));
+        const lba32: u32 = @intCast(chunk_lba);
 
         // 1. Select the specific drive (Master/Slave) and set the top 4 bits of LBA
         common.selectLBADevice(.ATA, op);
@@ -104,34 +112,16 @@ pub fn performPolling(op: *IDEOperation) IDEError!void {
 /// This function extracts the drive model and total capacity from the data block returned by the drive.
 fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) DriveInfo {
     var raw: [256]u16 = undefined;
-    // Read 256 words (512 bytes) from the Data Register
-    for (0..256) |i| {
-        raw[i] = cpu.inw(channel.base + constants.ATA.REG_DATA);
-    }
+    cpu.insw(channel.base + constants.ATA.REG_DATA, &raw);
 
     // Read status to clear any pending flags
     _ = cpu.inb(channel.base + constants.ATA.REG_STATUS);
 
-    // Extract model string (Words 27-46)
-    // The string is stored as a sequence of 16-bit words.
-    // KEY DETAIL: Each word contains two ASCII characters, but they are SWAPPED (Big Endian in a Little Endian world).
-    // Example: "QM" is stored as 0x4D51 ('M' << 8 | 'Q'). We must unswap them.
-    var model_arr: [41]u8 = .{0} ** 41;
-    var widx: usize = 27;
-    var midx: usize = 0;
-    while (widx <= 46) : (widx += 1) {
-        const w = raw[widx];
-        model_arr[midx] = @truncate(w >> 8); // High byte is the first character
-        model_arr[midx + 1] = @truncate(w & 0xFF); // Low byte is the second character
-        midx += 2;
-    }
-
-    // Trim trailing spaces to get a clean model name
-    var model_len: usize = 40;
-    while (model_len > 0) : (model_len -= 1) {
-        if (model_arr[model_len - 1] != ' ' and model_arr[model_len - 1] != 0) break;
-    }
-    if (model_len < model_arr.len) model_arr[model_len] = 0;
+    // Extract model string (Words 27-46 of REG_DATA response)
+    std.mem.byteSwapAllFields([20]u16, raw[27..47]);
+    var model: [40]u8 = .{0} ** 40;
+    const trimmed = std.mem.trim(u8, std.mem.asBytes(raw[27..47]), " \x00");
+    @memcpy(model[0..trimmed.len], trimmed);
 
     // Extract total sectors (Words 60-61 for LBA28)
     // Word 60: Low 16 bits of LBA count
@@ -140,12 +130,12 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
     // This driver currently assumes LBA28 capacity for simplicity (max 128GB support).
     const sec_lo: u32 = raw[60];
     const sec_hi: u32 = raw[61];
-    const total: u32 = (@as(u32, sec_hi) << 16) | sec_lo;
+    const total: u32 = (sec_hi << 16) | sec_lo;
 
     logger.debug("identified {s} {s}: {s} ({} sectors)", .{
         @tagName(channel.channel_type),
         @tagName(position),
-        model_arr[0..model_len],
+        model,
         total,
     });
 
@@ -153,7 +143,7 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
         .drive_type = .ATA,
         .channel = channel.channel_type,
         .position = position,
-        .model = model_arr,
+        .model = model,
         .capacity = Capacity{ .sectors = total, .sector_size = 512 },
         .removable = false,
     };
@@ -163,7 +153,7 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
 /// Sequence: SELECT -> RESET STATUS -> SEND IDENTIFY -> WAIT -> READ DATA
 pub fn detectDrive(channel: *const Channel, position: Channel.DrivePosition) ?DriveInfo {
     // 1. Select drive (0xA0 for Master, 0xB0 for Slave)
-    const select: u8 = if (position == .Master) 0xA0 else 0xB0;
+    const select: u8 = if (position == .Master) constants.ATA.SELECT_MASTER else constants.ATA.SELECT_SLAVE;
     cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
     cpu.io_wait();
 
@@ -177,15 +167,15 @@ pub fn detectDrive(channel: *const Channel, position: Channel.DrivePosition) ?Dr
 
     // 4. Check if a drive exists
     // If Status is 0, no drive is present.
-    var status = cpu.inb(channel.base + constants.ATA.REG_STATUS);
+    const status = cpu.inb(channel.base + constants.ATA.REG_STATUS);
     if (status == 0 or status == 0xFF) {
         return null;
     }
 
     // 5. Wait for the data to be ready (DRQ set, BUSY clear)
-    status = common.waitForData(channel.base, 1000) catch return null;
+    const wait_status = common.waitForData(channel.base, 1000) catch return null;
 
-    if (status & constants.ATA.STATUS_ERROR != 0) {
+    if (wait_status.err) {
         return null;
     }
 

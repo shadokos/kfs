@@ -332,3 +332,73 @@ pub inline fn save_all_flags() usize {
 pub inline fn restore_all_flags(saved_flags: usize) void {
     write_flags(saved_flags);
 }
+
+/// Read multiple bytes from a port into a u8 slice
+pub fn insb(port: u16, buffer: []u8) void {
+    for (buffer) |*byte| {
+        byte.* = inb(port);
+    }
+}
+
+/// Write multiple bytes to a port from a u8 slice
+pub fn outsb(port: u16, buffer: []const u8) void {
+    for (buffer) |byte| {
+        outb(port, byte);
+    }
+}
+
+/// Read multiple words from a port into a u16 slice
+pub fn insw(port: u16, buffer: []align(1) u16) void {
+    for (buffer) |*word| {
+        word.* = inw(port);
+    }
+}
+
+/// Read multiple words from a port into a u8 slice (must be even length)
+pub fn insw_bytes(port: u16, buffer: []u8) void {
+    std.debug.assert(buffer.len % 2 == 0);
+    const words = std.mem.bytesAsSlice(u16, buffer);
+    insw(port, words);
+}
+
+/// Write multiple words to a port from a u16 slice
+pub fn outsw(port: u16, buffer: []align(1) const u16) void {
+    for (buffer) |word| {
+        outw(port, word);
+    }
+}
+
+/// Write multiple words to a port from a u8 slice (must be even length)
+pub fn outsw_bytes(port: u16, buffer: []const u8) void {
+    std.debug.assert(buffer.len % 2 == 0);
+    const words = std.mem.bytesAsSlice(u16, buffer);
+    outsw(port, words);
+}
+
+/// Read multiple double-words from a port into a u32 slice
+pub fn insl(port: u16, buffer: []align(1) u32) void {
+    for (buffer) |*dword| {
+        dword.* = inl(port);
+    }
+}
+
+/// Read multiple double-words from a port into a u8 slice (must be multiple of 4)
+pub fn insl_bytes(port: u16, buffer: []u8) void {
+    std.debug.assert(buffer.len % 4 == 0);
+    const dwords = std.mem.bytesAsSlice(u32, buffer);
+    insl(port, dwords);
+}
+
+/// Write multiple double-words to a port from a u32 slice
+pub fn outsl(port: u16, buffer: []align(1) const u32) void {
+    for (buffer) |dword| {
+        outl(port, dword);
+    }
+}
+
+/// Write multiple double-words to a port from a u8 slice (must be multiple of 4)
+pub fn outsl_bytes(port: u16, buffer: []const u8) void {
+    std.debug.assert(buffer.len % 4 == 0);
+    const dwords = std.mem.bytesAsSlice(u32, buffer);
+    outsl(port, dwords);
+}
