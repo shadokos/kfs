@@ -63,6 +63,23 @@ pub fn write(self: *Self, start_block: u32, count: u32, buffer: []const u8) Bloc
     self.stats.blocks_written += count;
 }
 
+/// Fill logical blocks with a repeating byte value.
+pub fn fillBlock(self: *Self, start_block: u32, count: u32, value: u8) BlockError!void {
+    var buf: [STANDARD_BLOCK_SIZE]u8 = undefined;
+    @memset(&buf, value);
+    for (0..count) |i| {
+        try self.write(start_block + @as(u32, @intCast(i)), 1, &buf);
+    }
+}
+
+/// Zero out logical blocks. Uses a comptime zero buffer to avoid runtime init.
+pub fn zeroBlock(self: *Self, start_block: u32, count: u32) BlockError!void {
+    const zero_buf = comptime [_]u8{0} ** STANDARD_BLOCK_SIZE;
+    for (0..count) |i| {
+        try self.write(start_block + @as(u32, @intCast(i)), 1, &zero_buf);
+    }
+}
+
 pub fn alloc_devt(self: *Self) !dev_t {
     const disk = self.disk;
 
