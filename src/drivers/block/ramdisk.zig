@@ -137,6 +137,7 @@ pub fn test_disk() void {
 
     errdefer disk.destroy();
 
+    // Partition 1 at offset 2, size 10 blocks
     _ = disk.add_partition(2, 10) catch |e| {
         logger.debug("Failed to add test partition: {s}", .{@errorName(e)});
         return;
@@ -144,30 +145,53 @@ pub fn test_disk() void {
 
     logger.debug("Created test ramdisk: {s} (1MB)", .{disk.name});
 
-    // Simple read/write test
+    // Step 1: Fill 3 blocks on Whole Disk (Partition 0) starting at offset 2
+    // This covers Partition 1 blocks 0, 1, and 2
+    disk.partition_table.items[0].fillBlock(2, 3, 0xff) catch |e| {
+        logger.debug("Step 1: fillBlock on part 0 failed: {s}", .{@errorName(e)});
+        return;
+    };
+
+    // Step 2: Zero out the middle block (offset 3) on Whole Disk
+    // This corresponds to Partition 1 block 1
+    disk.partition_table.items[0].zeroBlock(3, 1) catch |e| {
+        logger.debug("Step 2: zeroBlock on part 0 failed: {s}", .{@errorName(e)});
+        return;
+    };
+
     var buffer: [512]u8 = undefined;
-    @memset(buffer[0..256], 0x01);
-    @memset(buffer[256..512], 0x02);
 
-    // Write first block of the first partition
-    disk.partition_table.items[1].write(0, 1, &buffer) catch |e| {
-        logger.debug("Test write failed: {s}", .{@errorName(e)});
+    // Step 3: Verify on Partition 1
+
+    // Verify Block 0 (should be 0xff)
+    disk.partition_table.items[1].read(0, 1, &buffer) catch |e| {
+        logger.debug("Step 3: read part 1 block 0 failed: {s}", .{@errorName(e)});
         return;
     };
-
-    // Read it back, from the whole disk (partition 0)
-    @memset(buffer[0..], 0);
-    disk.partition_table.items[0].read(2, 1, &buffer) catch |e| {
-        logger.debug("Test read failed: {s}", .{@errorName(e)});
+    if (buffer[0] != 0xff or buffer[511] != 0xff) {
+        logger.debug("Step 3 Failed: Part 1 Block 0 not 0xff", .{});
         return;
-    };
-
-    const start: usize = @intFromPtr(&buffer);
-    debug.memory_dump(start, start + buffer.len, start);
-
-    if (buffer[0] == 0x01 and buffer[256] == 0x02) {
-        logger.debug("Ramdisk test passed", .{});
-    } else {
-        logger.debug("Ramdisk test failed", .{});
     }
+
+    // Verify Block 1 (should be 0x00)
+    disk.partition_table.items[1].read(1, 1, &buffer) catch |e| {
+        logger.debug("Step 3: read part 1 block 1 failed: {s}", .{@errorName(e)});
+        return;
+    };
+    if (buffer[0] != 0 or buffer[511] != 0) {
+        logger.debug("Step 3 Failed: Part 1 Block 1 not 0x00", .{});
+        return;
+    }
+
+    // Verify Block 2 (should be 0xff)
+    disk.partition_table.items[1].read(2, 1, &buffer) catch |e| {
+        logger.debug("Step 3: read part 1 block 2 failed: {s}", .{@errorName(e)});
+        return;
+    };
+    if (buffer[0] != 0xff or buffer[511] != 0xff) {
+        logger.debug("Step 3 Failed: Part 1 Block 2 not 0xff", .{});
+        return;
+    }
+
+    logger.debug("Ramdisk test passed (fillBlock/zeroBlock on whole disk and verification on partition)", .{});
 }
