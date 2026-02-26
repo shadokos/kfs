@@ -5,7 +5,7 @@ const utils = @import("../utils.zig");
 const CmdError = @import("../Shell.zig").CmdError;
 const colors = @import("colors");
 
-// TODO Replace printk with format(shell.writer, format, args)...
+// TODO Replace printk with format(shell.writer(), format, args)...
 // As this builtin definitions are only used with graphic mode, it's ok to use printk for now
 const printk = tty.printk;
 
@@ -255,7 +255,7 @@ pub fn kfuzz(shell: anytype, args: [][]u8) CmdError!void {
     var buffer: [4096]u8 = undefined;
     return utils.fuzz(
         @import("../../memory.zig").directMemory.allocator(),
-        @constCast(&shell.writer.adaptToNewApi(&buffer).new_interface),
+        @constCast(&shell.writer().adaptToNewApi(&buffer).new_interface),
         nb,
         max_size,
         false,
@@ -275,7 +275,7 @@ pub fn vfuzz(shell: anytype, args: [][]u8) CmdError!void {
     var buffer: [4096]u8 = undefined;
     return utils.fuzz(
         @import("../../memory.zig").bigAlloc.allocator(),
-        @constCast(&shell.writer.adaptToNewApi(&buffer).new_interface),
+        @constCast(&shell.writer().adaptToNewApi(&buffer).new_interface),
         nb,
         max_size,
         false,
@@ -411,7 +411,7 @@ pub fn pci(shell: anytype, args: [][]u8) CmdError!void {
                 utils.print_error(shell, "No device found ({}:{}.{})", .{ bus, dev, func });
                 break :b CmdError.InvalidParameter;
             };
-            device.printInfo(shell.writer);
+            device.printInfo(shell.writer());
         },
         else => CmdError.InvalidNumberOfArguments,
     };
@@ -421,16 +421,16 @@ pub fn devices(shell: anytype, _: [][]u8) CmdError!void {
     const block = @import("../../device/block/registry.zig");
     const char = @import("../../device/char/registry.zig");
 
-    char.show_char_dev(shell.writer);
-    _ = shell.writer.write("\n") catch {};
+    char.show_char_dev(shell.writer());
+    _ = shell.writer().write("\n") catch {};
 
-    block.show_block_dev(shell.writer);
+    block.show_block_dev(shell.writer());
 }
 
 pub fn partitions(shell: anytype, _: [][]u8) CmdError!void {
     const block = @import("../../device/block/registry.zig");
 
-    block.show_partitions(shell.writer);
+    block.show_partitions(shell.writer());
 }
 
 pub fn lsblk(shell: anytype, args: [][]u8) CmdError!void {
@@ -438,7 +438,7 @@ pub fn lsblk(shell: anytype, args: [][]u8) CmdError!void {
 
     // lsblk [device_name]
     const filter: ?[]const u8 = if (args.len >= 2) args[1] else null;
-    block.show_lsblk(shell.writer, filter);
+    block.show_lsblk(shell.writer(), filter);
 }
 
 pub fn lookup_devt(shell: anytype, args: [][]u8) CmdError!void {
@@ -560,5 +560,5 @@ pub fn lschar(shell: anytype, args: [][]u8) CmdError!void {
     const char_reg = @import("../../device/char/registry.zig");
 
     const filter: ?[]const u8 = if (args.len >= 2) args[1] else null;
-    char_reg.show_lschar(shell.writer, filter);
+    char_reg.show_lschar(shell.writer(), filter);
 }

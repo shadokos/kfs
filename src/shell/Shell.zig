@@ -4,6 +4,7 @@ const colors = @import("colors");
 const allocator = @import("../memory.zig").smallAlloc.allocator();
 const task = @import("../task/task.zig");
 const task_set = @import("../task/task_set.zig");
+const TtyStruct = @import("../device/tty/tty_struct.zig");
 
 pub const CmdError = error{ CommandNotFound, InvalidNumberOfArguments, InvalidParameter, OtherError };
 pub const Config = struct {
@@ -42,14 +43,23 @@ pub fn Shell(comptime _builtins: anytype) type {
             .args = undefined,
             .err = null,
         },
-        reader: std.io.AnyReader = undefined,
-        writer: std.io.AnyWriter = undefined,
+        /// The controlling TTY for this shell.
+        tty: *TtyStruct = undefined,
         hooks: Hooks = Hooks{},
         jobs: std.ArrayList(Job) = .empty,
 
+        /// Reader derived from the TTY.
+        pub inline fn reader(self: *const Self) std.io.AnyReader {
+            return self.tty.reader().any();
+        }
+
+        /// Writer derived from the TTY.
+        pub inline fn writer(self: *const Self) std.io.AnyWriter {
+            return self.tty.writer().any();
+        }
+
         pub fn init(
-            reader: std.io.AnyReader,
-            writer: std.io.AnyWriter,
+            tty_ref: *TtyStruct,
             config: Config,
             hooks: struct {
                 on_init: ?*const anyopaque = null,
@@ -60,8 +70,7 @@ pub fn Shell(comptime _builtins: anytype) type {
             },
         ) Self {
             var ret = Self{
-                .reader = reader,
-                .writer = writer,
+                .tty = tty_ref,
                 .config = config,
             };
             if (hooks.on_init) |h| ret.hooks.on_init = @ptrCast(@alignCast(h));
@@ -141,8 +150,9 @@ pub fn Shell(comptime _builtins: anytype) type {
             self.execution_context.args = &.{};
             if (self.hooks.pre_prompt) |hook| hook(self);
 
-            // Read a line from the reader
-            const slice = self.reader.readUntilDelimiterAlloc(allocator, '\n', max_line_size) catch |e| {
+            // Read a line from the TTY
+            const the_reader = self.reader();
+            const slice = the_reader.readUntilDelimiterAlloc(allocator, '\n', max_line_size) catch |e| {
                 if (e == error.EndOfStream) return;
                 self.execution_context.err = e;
                 if (self.hooks.on_error) |hook| hook(self);
@@ -181,13 +191,13 @@ pub fn Shell(comptime _builtins: anytype) type {
         }
 
         pub fn print(self: *Self, comptime fmt: []const u8, args: anytype) void {
-            self.writer.print(fmt, args) catch {};
+            self.writer().print(fmt, args) catch {};
         }
 
         pub fn print_error(self: *Self, comptime fmt: []const u8, args: anytype) void {
             const red = if (self.config.colors) colors.red else "";
             const reset = if (self.config.colors) colors.reset else "";
-            self.writer.print("{s}Error{s}: " ++ fmt ++ "\n", .{ red, reset } ++ args) catch {};
+            self.writer().print("{s}Error{s}: " ++ fmt ++ "\n", .{ red, reset } ++ args) catch {};
         }
 
         pub fn strerror(_: *Self, err: anyerror) []const u8 {
@@ -210,7 +220,7 @@ pub fn Shell(comptime _builtins: anytype) type {
                 error.OtherError => {}, // specific errors are handled by the command itself
                 error.StreamTooLong => {
                     shell.print_error("Line is too long", .{});
-                    _ = shell.reader.skipUntilDelimiterOrEof('\n') catch {};
+                    _ = shell.reader().skipUntilDelimiterOrEof('\n') catch {};
                 },
                 error.CommandNotFound => shell.print_error("{s}: {s}", .{ args[0], shell.strerror(err) }),
                 error.MaxTokensReached => shell.print_error(

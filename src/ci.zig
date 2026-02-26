@@ -12,8 +12,7 @@ pub fn main(_: usize) u8 {
     const ci_shell = @import("shell/ci/shell.zig");
 
     var shell = ci_shell.Shell.init(
-        tty_s.reader().any(),
-        tty_s.writer().any(),
+        tty_s,
         .{ .colors = false },
         .{ .on_init = &ci_shell.on_init, .on_error = &ci_shell.on_error },
     );
