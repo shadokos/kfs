@@ -1,8 +1,8 @@
 const std = @import("std");
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 const paging = @import("paging.zig");
 const bitmap = @import("../misc/bitmap.zig");
-const printk = @import("../tty/tty.zig").printk;
+const printk = @import("../device/tty/tty.zig").printk;
 const multiboot_h = @cImport({
     @cInclude("multiboot.h");
 });

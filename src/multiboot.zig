@@ -2,7 +2,7 @@ const std = @import("std");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const boot = @import("boot.zig");
 const paging = @import("memory/paging.zig");
-const tty = @import("tty/tty.zig");
+const tty = @import("device/tty/tty.zig");
 
 fn mbi_requestN(comptime types: []const u32) type {
     return extern struct {

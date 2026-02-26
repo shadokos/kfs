@@ -1,4 +1,5 @@
-const tty = @import("tty/tty.zig");
+const tty = @import("device/tty/tty.zig");
+const vt_console = @import("drivers/tty/vt_console.zig");
 const c = @import("colors");
 
 const logo = @embedFile("misc/ascii_art/logo.ascii");
@@ -35,7 +36,7 @@ pub fn print_ascii_art(
 
 pub fn screen_of_death(comptime format: []const u8, args: anytype) void {
     tty.printk(c.bg_red ++ "{s}", .{(" " ** (tty.width * tty.height))});
-    tty.get_tty().scroll(1);
+    vt_console.consoles[tty.current_tty].scroll(1);
     print_ascii_art(logo, .{ .x = 37, .y = 0 }, .{ .bg = c.bg_red, .fg = c.white });
     print_ascii_art(letter_o, .{ .x = 3, .y = 2 }, .{ .bg = c.bg_black, .fg = c.black ++ c.dim });
     print_ascii_art(letter_h, .{ .x = 10, .y = 2 }, .{ .bg = c.bg_black, .fg = c.black ++ c.dim });

@@ -1,5 +1,5 @@
 const std = @import("std");
-const tty = @import("../../tty/tty.zig");
+const tty = @import("../../device/tty/tty.zig");
 const cpu = @import("../../cpu.zig");
 const MonoState = @import("../../misc/monostate.zig").Monostate;
 const pic = @import("../pic/pic.zig");

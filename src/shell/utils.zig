@@ -1,5 +1,5 @@
 const std = @import("std");
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 const StackIterator = std.debug.StackIterator;
 
 const c = @import("colors");

@@ -1,6 +1,6 @@
 const std = @import("std");
 const interrupts = @import("interrupts.zig");
-const tty = @import("./tty/tty.zig");
+const tty = @import("./device/tty/tty.zig");
 const scheduler = @import("task/scheduler.zig");
 const syscall_table = @import("syscall_table.zig");
 const errno = @import("errno.zig");

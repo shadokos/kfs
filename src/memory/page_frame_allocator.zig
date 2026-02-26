@@ -133,7 +133,7 @@ pub fn PageFrameAllocator(comptime _Zones: type) type {
         pub fn print(self: *Self) void {
             inline for (0..nzones) |z| {
                 if (self.zones[z]) |*unwrapped| {
-                    @import("../tty/tty.zig").printk("{s}:\n", .{@tagName(@as(Zones, @enumFromInt(z)))});
+                    @import("../device/tty/tty.zig").printk("{s}:\n", .{@tagName(@as(Zones, @enumFromInt(z)))});
                     unwrapped.allocator.print();
                 }
             }

@@ -534,7 +534,7 @@ pub const VirtualSpaceAllocator = struct {
 
     /// print recursively the content of a node in the tree `field`, `depth` is the depth of this node
     fn print_node(self: *Self, n: *Node, field: AVL_type, depth: u32) void {
-        const printk = @import("../tty/tty.zig").printk;
+        const printk = @import("../device/tty/tty.zig").printk;
         if (n.avl[@intFromEnum(field)].l) |l| {
             self.print_node(l, field, depth + 1);
         }
@@ -554,7 +554,7 @@ pub const VirtualSpaceAllocator = struct {
 
     /// print the two AVLs using printk
     pub fn print(self: *Self) void {
-        const printk = @import("../tty/tty.zig").printk;
+        const printk = @import("../device/tty/tty.zig").printk;
         printk("\naddress tree:\n", .{});
         if (self.tree[@intFromEnum(AVL_type.Address)]) |r| {
             self.print_node(r, AVL_type.Address, 0);

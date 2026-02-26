@@ -1,5 +1,5 @@
 const log = @import("std").log;
-const tty = @import("tty/tty.zig");
+const tty = @import("device/tty/tty.zig");
 const colors = @import("colors");
 const screen_of_death = @import("screen_of_death.zig").screen_of_death;
 const scheduler = @import("task/scheduler.zig");

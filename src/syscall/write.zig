@@ -1,4 +1,4 @@
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 
 pub const Id = 2;
 

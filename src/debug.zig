@@ -3,7 +3,7 @@ const c = @import("colors");
 const logger = std.log.scoped(.debug);
 const allocator = @import("memory.zig").bigAlloc.allocator();
 const utils = @import("shell/utils.zig");
-const tty = @import("tty/tty.zig");
+const tty = @import("device/tty/tty.zig");
 
 var sections: std.debug.Dwarf.SectionArray = std.debug.Dwarf.null_section_array;
 pub var dwarf_info: ?std.debug.Dwarf = null;

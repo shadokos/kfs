@@ -1,4 +1,4 @@
-const tty = @import("../../tty/tty.zig");
+const tty = @import("../../device/tty/tty.zig");
 const c = @import("colors");
 
 const Help = struct { name: [:0]const u8, description: [:0]const u8, usage: ?[:0]const u8 = null };

@@ -1,11 +1,11 @@
 const utils = @import("../utils.zig");
 pub const Shell = @import("../Shell.zig").Shell(@import("builtins.zig"));
 const colors = @import("colors");
-const tty = @import("../../tty/tty.zig");
+const tty = @import("../../device/tty/tty.zig");
 
 pub fn on_init(shell: *Shell) void {
     shell.writer.print("tty {d}, Hello {s}{d}{s}\n", .{
-        @import("../../tty/tty.zig").current_tty,
+        @import("../../device/tty/tty.zig").current_tty,
         colors.green,
         42,
         colors.reset,
