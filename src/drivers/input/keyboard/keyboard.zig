@@ -1,8 +1,8 @@
-const tty = @import("tty.zig");
-const ps2 = @import("../drivers/ps2/ps2.zig");
-const pic = @import("../drivers/pic/pic.zig");
-const keymap = @import("keyboard/keymap.zig");
-const scanmap = @import("keyboard/scanmap.zig");
+const tty = @import("../../../tty/tty.zig");
+const ps2 = @import("../../ps2/ps2.zig");
+const pic = @import("../../pic/pic.zig");
+const keymap = @import("keymap.zig");
+const scanmap = @import("scanmap.zig");
 const scanmap_normal = scanmap.scanmap_normal;
 const scanmap_special = scanmap.scanmap_special;
 
@@ -138,7 +138,7 @@ pub fn kb_read() void {
     }
 }
 
-const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
+const InterruptFrame = @import("../../../interrupts.zig").InterruptFrame;
 
 pub fn handler(_: InterruptFrame) void {
     const scan_code: u8 = ps2.get_data();
@@ -170,7 +170,7 @@ fn is_key_available() bool {
 }
 
 pub fn init() void {
-    const interrupts = @import("../interrupts.zig");
+    const interrupts = @import("../../../interrupts.zig");
     ps2.set_first_port_interrupts(true);
     interrupts.set_intr_gate(.Keyboard, interrupts.Handler.create(&handler, false));
     pic.enable_irq(pic.IRQ.Keyboard);

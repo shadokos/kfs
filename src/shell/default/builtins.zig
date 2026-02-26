@@ -59,7 +59,7 @@ pub fn elf(_: anytype, _: [][]u8) CmdError!void {
 }
 
 pub fn keymap(_: anytype, args: [][]u8) CmdError!void {
-    const km = @import("../../tty/keyboard/keymap.zig");
+    const km = @import("../../drivers/input/keyboard/keymap.zig");
     switch (args.len) {
         1 => {
             const list = km.keymap_list;

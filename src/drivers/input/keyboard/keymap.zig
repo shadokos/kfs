@@ -1,7 +1,7 @@
 const std = @import("std");
 const InputKey = @import("scanmap.zig").InputKey;
 const keymaps = @import("keymap_index.zig");
-const keyboard = @import("../keyboard.zig");
+const keyboard = @import("keyboard.zig");
 
 var current_map: *const [232][6]u16 = &keymaps.@"us-std";
 
