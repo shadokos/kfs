@@ -4,7 +4,7 @@ const colors = @import("colors");
 const tty = @import("../../device/tty/tty.zig");
 
 pub fn on_init(shell: *Shell) void {
-    shell.writer.print("tty {d}, Hello {s}{d}{s}\n", .{
+    shell.writer().print("tty {d}, Hello {s}{d}{s}\n", .{
         @import("../../device/tty/tty.zig").current_tty,
         colors.green,
         42,
@@ -14,7 +14,7 @@ pub fn on_init(shell: *Shell) void {
 }
 
 pub fn on_error(shell: *Shell) void {
-    utils.ensure_newline(shell.writer);
+    utils.ensure_newline(shell.writer());
     shell.defaultErrorHook();
 }
 
@@ -24,5 +24,5 @@ pub fn pre_process(shell: *Shell) void {
 }
 
 pub fn pre_cmd(shell: *Shell) void {
-    utils.ensure_newline(shell.writer);
+    utils.ensure_newline(shell.writer());
 }
