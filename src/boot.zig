@@ -64,7 +64,7 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
 
     @import("trampoline.zig").clean();
 
-    @import("tty/tty.zig").init();
+    @import("drivers/tty/vt_console.zig").init();
     log.info("Terminal initialized", .{});
 
     @import("gdt.zig").init();

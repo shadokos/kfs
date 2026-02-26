@@ -5,7 +5,7 @@ const paging = @import("../memory/paging.zig");
 const VirtualSpace = @import("../memory/virtual_space.zig").VirtualSpace;
 const regions = @import("../memory/regions.zig");
 const RegionSet = @import("../memory/region_set.zig").RegionSet;
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 
 pub const Id = 12;
 

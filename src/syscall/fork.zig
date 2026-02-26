@@ -3,7 +3,7 @@ const scheduler = @import("../task/scheduler.zig");
 const task_set = @import("../task/task_set.zig");
 const Errno = @import("../errno.zig").Errno;
 const interrupts = @import("../interrupts.zig");
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 
 const paging = @import("../memory/paging.zig");
 const mapping = @import("../memory/mapping.zig");

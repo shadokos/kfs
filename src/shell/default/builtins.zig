@@ -1,5 +1,5 @@
 const std = @import("std");
-const tty = @import("../../tty/tty.zig");
+const tty = @import("../../device/tty/tty.zig");
 const helpers = @import("helpers.zig");
 const utils = @import("../utils.zig");
 const CmdError = @import("../Shell.zig").CmdError;
@@ -75,7 +75,8 @@ pub fn keymap(_: anytype, args: [][]u8) CmdError!void {
 }
 
 pub fn theme(_: anytype, args: [][]u8) CmdError!void {
-    const t = @import("../../tty/themes.zig");
+    const t = @import("../../drivers/tty/themes.zig");
+    const vt = @import("../../drivers/tty/vt_console.zig");
     switch (args.len) {
         1 => {
             const list = t.theme_list;
@@ -88,7 +89,9 @@ pub fn theme(_: anytype, args: [][]u8) CmdError!void {
             utils.show_palette();
         },
         2 => {
-            tty.get_tty().set_theme(t.get_theme(args[1]) orelse return CmdError.InvalidParameter);
+            vt.consoles[@import("../../device/tty/tty.zig").current_tty].set_theme(
+                t.get_theme(args[1]) orelse return CmdError.InvalidParameter,
+            );
             printk("\x1b[2J\x1b[H", .{});
             utils.show_palette();
         },
