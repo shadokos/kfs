@@ -1,11 +1,16 @@
+const sdt = @import("sdt.zig");
+
+/// Fixed ACPI Description Table (FADT / signature "FACP").
+///
+/// According to ACPI 6.5 spec §5.2.9
+/// https://uefi.org/specs/ACPI/6.5/05_ACPI_Software_Programming_Model.html#fixed-acpi-description-table-fadt
+///
 pub const FADT = extern struct {
+    header: sdt.SdtHeader,
     firmware_ctrl: u32,
     dsdt: u32,
-
-    // field used in ACPI 1.0; no longer in use, for compatibility only
-    reserved: u8,
-
-    preferred_power_management_profile: u8,
+    reserved: u8, // ACPI 1.0 only, unused in 2.0+
+    preferred_pm_profile: u8,
     sci_interrupt: u16,
     smi_command_port: u32,
     acpi_enable: u8,
@@ -37,4 +42,5 @@ pub const FADT = extern struct {
     day_alarm: u8,
     month_alarm: u8,
     century: u8,
+    // ACPI 2.0+ extensions not supported yet
 };
