@@ -7,17 +7,33 @@ pub const idx_t = usize;
 /// order type (for buddy allocation)
 pub const order_t = std.meta.Int(.unsigned, std.math.log2(@typeInfo(idx_t).int.bits));
 
+/// buddy block descriptor
+pub const buddy_metadata = struct {
+    next: ?*page_frame_descriptor = null,
+    prev: ?*page_frame_descriptor = null,
+};
+
+pub const slab_metadata = struct {
+    const Cache = @import("object_allocators/slab/cache.zig").Cache;
+    const Slab = @import("object_allocators/slab/slab.zig").Slab;
+
+    cache: *Cache = undefined,
+    slab: *Slab = undefined,
+};
+
 /// flags of a page frame
 pub const page_flags = packed struct {
     available: bool = false,
-    slab: bool = false,
 };
 
 /// page frame descriptor
 pub const page_frame_descriptor = struct {
     flags: page_flags,
-    next: ?*page_frame_descriptor = null,
-    prev: ?*page_frame_descriptor = null,
+    state: union(enum) {
+        buddy: buddy_metadata,
+        slab: slab_metadata,
+        other: u0,
+    } = .other,
 };
 
 pub const page_table_size = 1024;

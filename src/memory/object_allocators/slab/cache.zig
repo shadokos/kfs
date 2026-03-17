@@ -76,9 +76,7 @@ pub const Cache = struct {
         for (0..self.pages_per_slab) |i| {
             const page_addr = @as(usize, @intFromPtr(slab)) + (i * paging.page_size);
             var pfd = self.get_page_frame_descriptor(@ptrFromInt(page_addr));
-            pfd.flags.slab = false;
-            pfd.prev = null;
-            pfd.next = null;
+            pfd.state = .other;
         }
     }
 
@@ -129,9 +127,7 @@ pub const Cache = struct {
             for (0..self.pages_per_slab) |i| {
                 const page_addr = @as(usize, @intFromPtr(obj)) + (i * paging.page_size);
                 var pfd = self.get_page_frame_descriptor(@ptrFromInt(page_addr));
-                pfd.prev = @ptrCast(@alignCast(self));
-                pfd.next = @ptrCast(@alignCast(slab));
-                pfd.flags.slab = true;
+                pfd.state = .{ .slab = .{ .cache = self, .slab = slab } };
             }
             self.unsafe_move_slab(slab, SlabState.Empty);
             self.nb_slab += 1;
@@ -181,13 +177,9 @@ pub const Cache = struct {
 
     pub fn unsafe_free(_: *Self, ptr: *usize) (Slab.Error || BitMap.Error)!void {
         const addr = std.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size);
-        const page_descriptor = mapping.get_page_frame_descriptor(
-            @ptrFromInt(addr),
-        ) catch return Slab.Error.InvalidArgument;
+        const pfd = mapping.get_page_frame_descriptor(@ptrFromInt(addr)) catch return Slab.Error.InvalidArgument;
 
-        if (page_descriptor.flags.slab == false) return Slab.Error.InvalidArgument;
-        const slab: *Slab = @ptrCast(@alignCast(page_descriptor.next));
-        try slab.free_object(ptr);
+        try pfd.state.slab.slab.free_object(ptr);
     }
 
     // The following methods are the thread safe wrapper to unsafe methods.
@@ -250,9 +242,7 @@ pub const Cache = struct {
 
     pub fn has_obj(self: *Self, obj: *usize) bool {
         const pfd = self.get_page_frame_descriptor(@ptrCast(obj));
-        if (pfd.flags.slab == false) return false;
-        const cache: *Self = @ptrCast(@alignCast(pfd.prev));
-        return cache == self;
+        return pfd.state.slab.cache == self;
     }
 
     pub fn debug(self: *Self) void {
