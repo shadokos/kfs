@@ -93,15 +93,12 @@ pub const MultipoolAllocator = struct {
 
     pub fn obj_size(_: *Self, ptr: anytype) !usize {
         const pfd = globalCache.cache.get_page_frame_descriptor(@ptrCast(@alignCast(ptr)));
-        if (!pfd.flags.slab) return error.InvalidArgument;
-        const slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
+        const slab: *Slab = pfd.state.slab.slab;
 
-        if (slab) |s| {
-            return if (s.is_obj_in_slab(@ptrCast(@alignCast(ptr))))
-                s.header.cache.size_obj
-            else
-                error.InvalidArgument;
-        } else return error.InvalidArgument;
+        return if (slab.is_obj_in_slab(@ptrCast(@alignCast(ptr))))
+            slab.header.cache.size_obj
+        else
+            error.InvalidArgument;
     }
 
     fn vtable_alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize) ?[*]u8 {
