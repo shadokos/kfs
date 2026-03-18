@@ -7,6 +7,10 @@ pub const idx_t = usize;
 /// order type (for buddy allocation)
 pub const order_t = std.meta.Int(.unsigned, std.math.log2(@typeInfo(idx_t).int.bits));
 
+/// index/obj count (for slab allocator)
+/// objects held by a single slab
+pub const obj_idx_t = u16;
+
 /// buddy block descriptor
 pub const buddy_metadata = struct {
     next: ?*page_frame_descriptor = null,
@@ -34,9 +38,9 @@ pub const slab_head_metadata = struct {
     next: ?*page_frame_descriptor = null,
 
     /// number of objects currently allocated in this slab
-    in_use: u16 = 0,
+    in_use: obj_idx_t = 0,
 
-    /// address of the first free object in this slab, or 0 if none is free
+    /// address of the first free object in this slab, or 0 if none is free (Slab full)
     next_free: usize = 0,
 };
 
@@ -52,7 +56,7 @@ pub const page_frame_descriptor = struct {
         buddy: buddy_metadata,
         slab_head: slab_head_metadata,
         slab_tail: slab_tail_metadata,
-        other: u0,
+        other,
     } = .other,
 };
 

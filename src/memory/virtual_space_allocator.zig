@@ -44,6 +44,7 @@ pub const VirtualSpaceAllocator = struct {
                 @sizeOf(@This()),
                 @alignOf(@This()),
                 4,
+                .{},
             );
         }
     };
