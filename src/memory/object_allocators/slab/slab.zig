@@ -9,6 +9,26 @@ const Slab = @This();
 pub const SlabState = enum { Empty, Partial, Full };
 pub const Error = error{ InvalidArgument, SlabFull, SlabCorrupted, DoubleFree };
 
+pub const REDZONE_SIZE: usize = @sizeOf(usize);
+pub const REDZONE_MAGIC: u8 = 0xBB;
+pub const POISON_FREE: u8 = 0x6B;
+pub const POISON_ALLOC: u8 = 0xA5;
+
+pub const DebugFlags = packed struct(u8) {
+    /// Fill freed objects with POISON_FREE; on next alloc verify they weren't
+    /// written to (use-after-free detection). Fill allocated objects with
+    /// POISON_ALLOC so uninitialised-read is obvious.
+    poison: bool = false,
+    /// Insert REDZONE_SIZE guard bytes before and after each object. Checked
+    /// on every alloc and free to catch buffer overflows/underflows.
+    redzone: bool = false,
+    /// Walk the entire freelist on every alloc/free: count, bounds-check each
+    /// entry, and abort on cycle (count > obj_per_slab).
+    sanity: bool = false,
+
+    _: u5 = 0,
+};
+
 var secret: usize = 0;
 
 pub fn init_secret(s: usize) void {

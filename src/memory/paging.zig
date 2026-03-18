@@ -36,7 +36,7 @@ pub const slab_head_metadata = struct {
     /// number of objects currently allocated in this slab
     in_use: u16 = 0,
 
-    /// address of the first free object in this slab, or 0 if none is free
+    /// address of the first free object in this slab, or 0 if none is free (Slab full)
     next_free: usize = 0,
 };
 

@@ -12,7 +12,7 @@ pub const MultipoolAllocator = struct {
 
     caches: [14]*Cache = undefined,
 
-    pub fn init(comptime name: []const u8, page_allocator: PageAllocator) !Self {
+    pub fn init(comptime name: []const u8, page_allocator: PageAllocator, dbg: Slab.DebugFlags) !Self {
         const CacheDescription = struct {
             name: []const u8,
             size: usize,
@@ -45,6 +45,7 @@ pub const MultipoolAllocator = struct {
                 cache_descriptions[i].size,
                 @alignOf(usize),
                 cache_descriptions[i].order,
+                dbg,
             );
         }
 
@@ -94,11 +95,12 @@ pub const MultipoolAllocator = struct {
     pub fn obj_size(_: *Self, ptr: anytype) !usize {
         const slab = Slab.resolve_head(@ptrCast(@alignCast(ptr))) catch return error.InvalidArgument;
         const cache: *Cache = slab.cache();
-        const obj_addr = @intFromPtr(ptr);
+        const slot_addr = @intFromPtr(ptr);
         const base = slab.base_addr();
-        if (obj_addr < base or obj_addr > base + cache.size_obj * cache.obj_per_slab)
+        const slab_end = base + cache.slot_size * cache.obj_per_slab;
+        if (slot_addr < base or slot_addr + cache.slot_size > slab_end)
             return error.InvalidArgument;
-        if ((obj_addr - base) % cache.size_obj != 0)
+        if ((slot_addr - base) % cache.slot_size != 0)
             return error.InvalidArgument;
         return cache.size_obj;
     }
