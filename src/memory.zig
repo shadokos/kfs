@@ -83,10 +83,13 @@ fn init_medium(medium_begin: paging.PhysicalPtr, medium_size: paging.PhysicalUsi
 
 fn init_physical_memory() void {
     logger.debug("\tInitializing physical memory allocator...", .{});
-    directMemory = MultipoolAllocator.init("dma_kmalloc", directPageAllocator.page_allocator()) catch {
+    directMemory = MultipoolAllocator.init("dma_kmalloc", directPageAllocator.page_allocator(), .{}) catch {
         @panic("cannot cache_init MultipoolAllocator");
     };
-    smallAlloc = MultipoolAllocator.init("kmalloc", virtually_contiguous_page_allocator.page_allocator()) catch {
+    smallAlloc = MultipoolAllocator.init("kmalloc", virtually_contiguous_page_allocator.page_allocator(), .{
+        .sanity = @import("build_options").optimize == .Debug,
+        .poison = @import("build_options").optimize == .Debug,
+    }) catch {
         @panic("cannot cache_init MultipoolAllocator");
     };
     logger.debug("\tPhysical memory allocator initialized", .{});
