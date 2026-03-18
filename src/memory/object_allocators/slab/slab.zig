@@ -9,7 +9,19 @@ const Slab = @This();
 pub const SlabState = enum { Empty, Partial, Full };
 pub const Error = error{ InvalidArgument, SlabFull, SlabCorrupted, DoubleFree };
 
-pub const FREE_SENTINEL: u16 = 0xFFFF;
+var secret: usize = 0;
+
+pub fn init_secret(s: usize) void {
+    secret = s;
+}
+
+pub fn encode_ptr(own_addr: usize, next_addr: usize) usize {
+    return own_addr ^ next_addr ^ secret;
+}
+
+pub fn decode_ptr(own_addr: usize, stored: usize) usize {
+    return own_addr ^ stored ^ secret;
+}
 
 pfd: *pfd_t,
 
@@ -64,7 +76,7 @@ pub fn reset_pfds(self: Slab, pages_per_slab: usize) void {
 
 pub fn get_state(self: Slab) SlabState {
     if (self.pfd.state.slab_head.in_use == 0) return SlabState.Empty;
-    if (self.pfd.state.slab_head.next_free == FREE_SENTINEL) return SlabState.Full;
+    if (self.pfd.state.slab_head.next_free == 0) return SlabState.Full;
     return SlabState.Partial;
 }
 
@@ -84,11 +96,11 @@ pub fn cache(self: Slab) *Cache {
     return self.pfd.state.slab_head.cache;
 }
 
-pub fn next_free(self: Slab) u16 {
+pub fn next_free(self: Slab) usize {
     return self.pfd.state.slab_head.next_free;
 }
 
-pub fn set_next_free(self: Slab, value: u16) void {
+pub fn set_next_free(self: Slab, value: usize) void {
     self.pfd.state.slab_head.next_free = value;
 }
 

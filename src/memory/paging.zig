@@ -36,8 +36,8 @@ pub const slab_head_metadata = struct {
     /// number of objects currently allocated in this slab
     in_use: u16 = 0,
 
-    /// index of the first free object in this slab, or `FREE_SENTINEL` if none is free
-    next_free: u16 = 0,
+    /// address of the first free object in this slab, or 0 if none is free
+    next_free: usize = 0,
 };
 
 /// flags of a page frame
