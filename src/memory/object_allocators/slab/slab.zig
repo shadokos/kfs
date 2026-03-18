@@ -9,6 +9,24 @@ const Slab = @This();
 pub const SlabState = enum { Empty, Partial, Full };
 pub const Error = error{ InvalidArgument, SlabFull, SlabCorrupted, DoubleFree };
 
+pub const REDZONE_SIZE: usize = @sizeOf(usize);
+pub const REDZONE_MAGIC: u8 = 0xBB;
+pub const POISON_FREE: u8 = 0x6B;
+pub const POISON_ALLOC: u8 = 0xA5;
+
+pub const DebugFlags = packed struct {
+    /// Fill freed objects with POISON_FREE; on next alloc verify they weren't
+    /// written to (use-after-free detection). Fill allocated objects with
+    /// POISON_ALLOC so uninitialised-read is obvious.
+    poison: bool = false,
+    /// Insert REDZONE_SIZE guard bytes before and after each object. Checked
+    /// on every alloc and free to catch buffer overflows/underflows.
+    redzone: bool = false,
+    /// Walk the entire freelist on every alloc/free: count, bounds-check each
+    /// entry, and abort on cycle (count > obj_per_slab).
+    sanity: bool = false,
+};
+
 var secret: usize = 0;
 
 pub fn init_secret(s: usize) void {
@@ -30,7 +48,7 @@ pub fn from_pfd(pfd: *pfd_t) Slab {
 }
 
 pub fn from_page(ptr: paging.VirtualPagePtr) !Slab {
-    return Slab{ .pfd = Slab.get_pfd(ptr) };
+    return Slab{ .pfd = try Slab.get_pfd(ptr) };
 }
 
 pub fn resolve_head(ptr: paging.VirtualPtr) !Slab {
@@ -68,7 +86,7 @@ pub fn reset_pfds(self: Slab, pages_per_slab: usize) void {
     for (0..pages_per_slab) |i| {
         const page_addr: paging.VirtualPagePtr = @ptrFromInt(base + (i * paging.page_size));
         const pfd = Slab.get_pfd(page_addr) catch unreachable;
-        pfd.state = .{ .other = 0 };
+        pfd.state = .other;
     }
 }
 
@@ -80,11 +98,11 @@ pub fn get_state(self: Slab) SlabState {
     return SlabState.Partial;
 }
 
-pub fn in_use(self: Slab) u16 {
+pub fn in_use(self: Slab) paging.obj_idx_t {
     return self.pfd.state.slab_head.in_use;
 }
 
-pub fn set_in_use(self: Slab, value: u16) void {
+pub fn set_in_use(self: Slab, value: paging.obj_idx_t) void {
     self.pfd.state.slab_head.in_use = value;
 }
 
