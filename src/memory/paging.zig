@@ -13,12 +13,31 @@ pub const buddy_metadata = struct {
     prev: ?*page_frame_descriptor = null,
 };
 
-pub const slab_metadata = struct {
-    const Cache = @import("object_allocators/slab/cache.zig").Cache;
-    const Slab = @import("object_allocators/slab/slab.zig").Slab;
+pub const slab_tail_metadata = struct {
+    /// if a slab needs more than one page,
+    /// the first page frame descriptor is the slab head and contains metadata about the slab,
+    /// while the others points to the head
+    head: *page_frame_descriptor = undefined,
+};
 
-    cache: *Cache = undefined,
-    slab: *Slab = undefined,
+pub const slab_head_metadata = struct {
+    const Cache = @import("object_allocators/slab/cache.zig").Cache;
+
+    /// pointer to the cache this slab belongs to
+    cache: *@import("object_allocators/slab/cache.zig").Cache = undefined,
+
+    /// virtual address of the slab's first page (needed to compute object addresses)
+    page: VirtualPagePtr = undefined,
+
+    /// previous slab head's page frame descriptor in empty/partial/full list of a given cache
+    prev: ?*page_frame_descriptor = null,
+    next: ?*page_frame_descriptor = null,
+
+    /// number of objects currently allocated in this slab
+    in_use: u16 = 0,
+
+    /// index of the first free object in this slab, or `FREE_SENTINEL` if none is free
+    next_free: u16 = 0,
 };
 
 /// flags of a page frame
@@ -31,7 +50,8 @@ pub const page_frame_descriptor = struct {
     flags: page_flags,
     state: union(enum) {
         buddy: buddy_metadata,
-        slab: slab_metadata,
+        slab_head: slab_head_metadata,
+        slab_tail: slab_tail_metadata,
         other: u0,
     } = .other,
 };
