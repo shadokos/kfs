@@ -1,5 +1,5 @@
 const std = @import("std");
-const Slab = @import("slab/slab.zig").Slab;
+const Slab = @import("slab/slab.zig");
 const Cache = @import("slab/cache.zig").Cache;
 const PageAllocator = @import("../page_allocator.zig");
 const globalCache = &@import("../../memory.zig").globalCache;
@@ -92,13 +92,15 @@ pub const MultipoolAllocator = struct {
     }
 
     pub fn obj_size(_: *Self, ptr: anytype) !usize {
-        const pfd = globalCache.cache.get_page_frame_descriptor(@ptrCast(@alignCast(ptr)));
-        const slab: *Slab = pfd.state.slab.slab;
-
-        return if (slab.is_obj_in_slab(@ptrCast(@alignCast(ptr))))
-            slab.header.cache.size_obj
-        else
-            error.InvalidArgument;
+        const slab = Slab.resolve_head(@ptrCast(@alignCast(ptr))) catch return error.InvalidArgument;
+        const cache: *Cache = slab.cache();
+        const obj_addr = @intFromPtr(ptr);
+        const base = slab.base_addr();
+        if (obj_addr < base or obj_addr > base + cache.size_obj * cache.obj_per_slab)
+            return error.InvalidArgument;
+        if ((obj_addr - base) % cache.size_obj != 0)
+            return error.InvalidArgument;
+        return cache.size_obj;
     }
 
     fn vtable_alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize) ?[*]u8 {
