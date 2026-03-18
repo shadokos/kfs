@@ -111,9 +111,11 @@ pub const Cache = struct {
 
             for (0..self.obj_per_slab) |i| {
                 const obj_addr = base + (i * self.size_obj);
-                const obj_ptr: *u16 = @ptrFromInt(obj_addr);
-                obj_ptr.* = if (i + 1 < self.obj_per_slab) @truncate(i + 1) else Slab.FREE_SENTINEL;
+                const next_addr = if (i + 1 < self.obj_per_slab) base + ((i + 1) * self.size_obj) else 0;
+                const obj_ptr: *usize = @ptrFromInt(obj_addr);
+                obj_ptr.* = Slab.encode_ptr(obj_addr, next_addr);
             }
+            slab.set_next_free(base);
 
             self.link(slab, SlabState.Empty);
             self.nb_slab += 1;
@@ -155,22 +157,23 @@ pub const Cache = struct {
     fn unsafe_alloc_one(self: *Self) AllocError!*usize {
         const slab: ?Slab = if (self.slab_partial) |slab| slab else if (self.slab_empty) |slab| slab else null;
         if (slab) |s| {
-            const next = s.next_free();
-            if (next == Slab.FREE_SENTINEL) return Slab.Error.SlabFull;
-
-            const base = s.base_addr();
-            const obj_addr = base + (next * self.size_obj);
+            const obj_addr = s.next_free();
+            if (obj_addr == 0) return Slab.Error.SlabFull;
 
             const is_empty = s.in_use() == 0;
 
-            // Read the next free index from object's
-            const obj_ptr: *u16 = @ptrFromInt(obj_addr);
-            s.set_next_free(obj_ptr.*);
+            const obj_ptr: *usize = @ptrFromInt(obj_addr);
+            const new_next = Slab.decode_ptr(obj_addr, obj_ptr.*);
+            s.set_next_free(new_next);
             s.set_in_use(s.in_use() + 1);
+            // Overwrite the freelist encoding so that double-free detection in
+            // unsafe_free doesn't misread leftover freelist data as evidence the
+            // slot is already free.  ~0 decodes to an address outside any slab.
+            obj_ptr.* = Slab.encode_ptr(obj_addr, ~@as(usize, 0));
 
             if (is_empty) {
                 self.unsafe_move_slab(s, SlabState.Empty, SlabState.Partial);
-            } else if (s.next_free() == Slab.FREE_SENTINEL) {
+            } else if (s.next_free() == 0) {
                 self.unsafe_move_slab(s, SlabState.Partial, SlabState.Full);
             }
 
@@ -187,24 +190,26 @@ pub const Cache = struct {
 
         const cache = slab.cache();
         const base = slab.base_addr();
+        const slab_end = base + cache.size_obj * cache.obj_per_slab;
 
-        // Check if the object belongs to this cache
-        if (obj_addr < base or obj_addr >= base + (cache.size_obj * cache.obj_per_slab))
+        if (obj_addr < base or obj_addr >= slab_end)
             return Slab.Error.InvalidArgument;
         if ((obj_addr - base) % cache.size_obj != 0)
             return Slab.Error.InvalidArgument;
 
-        const index: u16 = @truncate((obj_addr - base) / cache.size_obj);
+        // Double-free detection: decode the stored value; if it decodes to 0
+        // (null sentinel) or a valid aligned object address in this slab, the
+        // slot is already in the freelist.
+        const obj_ptr: *usize = @ptrFromInt(obj_addr);
+        const decoded = Slab.decode_ptr(obj_addr, obj_ptr.*);
+        if (decoded == 0 or (decoded >= base and decoded < slab_end and (decoded - base) % cache.size_obj == 0))
+            return Slab.Error.DoubleFree;
 
-        // TODO: Double Free check
-
-        const was_full = slab.next_free() == Slab.FREE_SENTINEL;
+        const was_full = slab.next_free() == 0;
         slab.set_in_use(slab.in_use() - 1);
 
-        // Write the next free index to object's
-        const obj_ptr: *u16 = @ptrFromInt(obj_addr);
-        obj_ptr.* = slab.next_free();
-        slab.set_next_free(index);
+        obj_ptr.* = Slab.encode_ptr(obj_addr, slab.next_free());
+        slab.set_next_free(obj_addr);
 
         if (was_full) {
             cache.unsafe_move_slab(slab, SlabState.Full, SlabState.Partial);
