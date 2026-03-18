@@ -53,6 +53,7 @@ pub const RegionSet = struct {
             @sizeOf(ListNode),
             @alignOf(ListNode),
             4,
+            .{},
         );
     }
 

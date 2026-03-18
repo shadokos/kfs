@@ -11,9 +11,6 @@ const Mutex = @import("../../../task/semaphore.zig").Mutex;
 const Slab = @import("slab.zig");
 const SlabState = @import("slab.zig").SlabState;
 
-// DEPRECATED
-const logger = std.log.scoped(.cache);
-
 const CACHE_NAME_LEN = 20;
 
 pub const Cache = struct {
@@ -34,6 +31,8 @@ pub const Cache = struct {
     obj_per_slab: u16 = 0,
     size_obj: usize = 0,
     align_obj: usize = 0,
+    debug: Slab.DebugFlags = .{},
+    slot_size: usize = 0, // slot_size = size_obj + optional redzone, rounded up to obj_align
     lock: Mutex = .{},
 
     pub fn init(
@@ -42,6 +41,7 @@ pub const Cache = struct {
         obj_size: usize,
         obj_align: usize,
         order: u5,
+        dbg: Slab.DebugFlags,
     ) Error!Cache {
         var new = Cache{
             .page_allocator = page_allocator,
@@ -50,8 +50,14 @@ pub const Cache = struct {
             .align_obj = obj_align,
         };
 
+        new.debug = dbg;
+        new.slot_size = if (dbg.redzone)
+            std.mem.alignForward(usize, new.size_obj + Slab.REDZONE_SIZE, obj_align)
+        else
+            new.size_obj;
+
         const total = paging.page_size * new.pages_per_slab;
-        new.obj_per_slab = @intCast(total / new.size_obj);
+        new.obj_per_slab = @intCast(total / new.slot_size);
 
         if (new.obj_per_slab == 0 or new.obj_per_slab >= (1 << 16))
             return Error.InitializationFailed;
@@ -102,21 +108,36 @@ pub const Cache = struct {
         self.unlink(slab, from);
         self.link(slab, to);
     }
-
     pub fn unsafe_grow(self: *Self, nb_slab: usize) PageAllocator.Error!void {
         for (0..nb_slab) |_| {
+            // Allocate pages for the new slab and initialize it
             const page = try self.page_allocator.alloc_pages(self.pages_per_slab);
             const slab: Slab = Slab.init_pfds(page, self);
             const base = slab.base_addr();
 
+            // Initialize the freelist for this slab, with optional debugging features
             for (0..self.obj_per_slab) |i| {
-                const obj_addr = base + (i * self.size_obj);
-                const next_addr = if (i + 1 < self.obj_per_slab) base + ((i + 1) * self.size_obj) else 0;
-                const obj_ptr: *usize = @ptrFromInt(obj_addr);
-                obj_ptr.* = Slab.encode_ptr(obj_addr, next_addr);
+                const slot_addr = base + (i * self.slot_size);
+                const next_addr = if (i + 1 < self.obj_per_slab) base + ((i + 1) * self.slot_size) else 0;
+                const slot: [*]u8 = @ptrFromInt(slot_addr);
+
+                // Poison the object body
+                if (self.debug.poison)
+                    @memset(slot[@sizeOf(usize)..self.size_obj], Slab.POISON_FREE);
+
+                // Right guard only: [size_obj .. slot_size] = REDZONE_MAGIC
+                if (self.debug.redzone)
+                    @memset(slot[self.size_obj..self.slot_size], Slab.REDZONE_MAGIC);
+
+                // The freelist is encoded in-place in the first bytes of the slot
+                const slot_ptr: *usize = @ptrFromInt(slot_addr);
+                slot_ptr.* = Slab.encode_ptr(slot_addr, next_addr);
             }
+
+            // Set the first freelist entry in the slab head PFD state
             slab.set_next_free(base);
 
+            // Link the new slab into the empty list and update cache metadata
             self.link(slab, SlabState.Empty);
             self.nb_slab += 1;
         }
@@ -155,67 +176,118 @@ pub const Cache = struct {
     }
 
     fn unsafe_alloc_one(self: *Self) AllocError!*usize {
-        const slab: ?Slab = if (self.slab_partial) |slab| slab else if (self.slab_empty) |slab| slab else null;
+        // Try to retrieve the first partial slab if any, otherwise the first empty slab
+        // If both are null, slab will be null and the function will try to grow the cache and retry allocation
+        const slab: ?Slab = self.slab_partial orelse self.slab_empty;
+
         if (slab) |s| {
-            const obj_addr = s.next_free();
-            if (obj_addr == 0) return Slab.Error.SlabFull;
+            const slot_addr = s.next_free();
+            if (slot_addr == 0) return Slab.Error.SlabFull;
 
             const is_empty = s.in_use() == 0;
 
-            const obj_ptr: *usize = @ptrFromInt(obj_addr);
-            const new_next = Slab.decode_ptr(obj_addr, obj_ptr.*);
+            // Decode the freelist entry at slot_addr to get the next free slot address,
+            // and update the slab metadata
+            const slot_ptr: *usize = @ptrFromInt(slot_addr);
+            const new_next = Slab.decode_ptr(slot_addr, slot_ptr.*);
             s.set_next_free(new_next);
             s.set_in_use(s.in_use() + 1);
-            // Overwrite the freelist encoding so that double-free detection in
-            // unsafe_free doesn't misread leftover freelist data as evidence the
-            // slot is already free.  ~0 decodes to an address outside any slab.
-            obj_ptr.* = Slab.encode_ptr(obj_addr, ~@as(usize, 0));
 
+            // Transition the slab to the appropriate state if needed
             if (is_empty) {
                 self.unsafe_move_slab(s, SlabState.Empty, SlabState.Partial);
             } else if (s.next_free() == 0) {
                 self.unsafe_move_slab(s, SlabState.Partial, SlabState.Full);
             }
 
-            return @ptrFromInt(obj_addr);
+            // Right-guard check: slot[size_obj..slot_size] must be REDZONE_MAGIC.  This detects
+            if (self.debug.redzone) try self.validate_redzone(slot_ptr);
+
+            // Check for use-after-free by verifying the object body is still poisoned
+            if (self.debug.poison) {
+                const slot = @as([*]u8, @ptrFromInt(slot_addr))[0..self.size_obj];
+                if (!std.mem.allEqual(u8, slot[@sizeOf(usize)..], Slab.POISON_FREE))
+                    return Slab.Error.SlabCorrupted;
+                @memset(slot, Slab.POISON_ALLOC);
+            }
+
+            // Overwrite the freelist encoding so that double-free detection in
+            // unsafe_free doesn't misread leftover freelist data as evidence the
+            // slot is already free.  ~0 decodes to an address outside any slab.
+            slot_ptr.* = Slab.encode_ptr(slot_addr, ~@as(usize, 0));
+
+            return slot_ptr;
         } else {
             try self.unsafe_grow(1);
             return self.unsafe_alloc_one();
         }
     }
 
-    pub fn unsafe_free(_: *Self, ptr: *usize) Slab.Error!void {
-        const obj_addr = @intFromPtr(ptr);
-        const slab = Slab.resolve_head(@ptrCast(ptr)) catch return Slab.Error.InvalidArgument;
+    pub fn unsafe_free(_: *Self, slot_ptr: *usize) Slab.Error!void {
+        const slot_addr = @intFromPtr(slot_ptr);
+        const slab = Slab.resolve_head(@ptrCast(slot_ptr)) catch return Slab.Error.InvalidArgument;
 
         const cache = slab.cache();
         const base = slab.base_addr();
-        const slab_end = base + cache.size_obj * cache.obj_per_slab;
+        const slab_end = base + cache.slot_size * cache.obj_per_slab;
 
-        if (obj_addr < base or obj_addr >= slab_end)
+        if (slot_addr < base or slot_addr + cache.slot_size > slab_end)
             return Slab.Error.InvalidArgument;
-        if ((obj_addr - base) % cache.size_obj != 0)
+        if ((slot_addr - base) % cache.slot_size != 0)
             return Slab.Error.InvalidArgument;
+
+        if (cache.debug.redzone) try cache.validate_redzone(slot_ptr);
 
         // Double-free detection: decode the stored value; if it decodes to 0
-        // (null sentinel) or a valid aligned object address in this slab, the
+        // (null sentinel) or a valid aligned slot address in this slab, the
         // slot is already in the freelist.
-        const obj_ptr: *usize = @ptrFromInt(obj_addr);
-        const decoded = Slab.decode_ptr(obj_addr, obj_ptr.*);
-        if (decoded == 0 or (decoded >= base and decoded < slab_end and (decoded - base) % cache.size_obj == 0))
+        const decoded = Slab.decode_ptr(slot_addr, slot_ptr.*);
+        if (decoded == 0 or (decoded >= base and decoded < slab_end and (decoded - base) % cache.slot_size == 0))
             return Slab.Error.DoubleFree;
+
+        if (cache.debug.sanity) try cache.validate_freelist(slab);
 
         const was_full = slab.next_free() == 0;
         slab.set_in_use(slab.in_use() - 1);
+        slot_ptr.* = Slab.encode_ptr(slot_addr, slab.next_free());
+        slab.set_next_free(slot_addr);
 
-        obj_ptr.* = Slab.encode_ptr(obj_addr, slab.next_free());
-        slab.set_next_free(obj_addr);
+        // Poison object body, skipping the freelist word just written at slot[0].
+        if (cache.debug.poison) {
+            const slot: [*]u8 = @ptrFromInt(slot_addr);
+            @memset(slot[@sizeOf(usize)..cache.size_obj], Slab.POISON_FREE);
+        }
 
+        // Transition the slab to the appropriate state if needed
         if (was_full) {
             cache.unsafe_move_slab(slab, SlabState.Full, SlabState.Partial);
         } else if (slab.in_use() == 0) {
             cache.unsafe_move_slab(slab, SlabState.Partial, SlabState.Empty);
         }
+    }
+
+    fn validate_freelist(self: *Cache, slab: Slab) Slab.Error!void {
+        var cursor = slab.next_free();
+        var count: u16 = 0;
+        const base = slab.base_addr();
+        const slab_end = base + self.slot_size * self.obj_per_slab;
+
+        // Walk the freelist and perform sanity checks
+        // Note: Maybe we could add some SlabError instead of only SlabCorrupted
+        while (cursor != 0) : (count += 1) {
+            if (count > self.obj_per_slab) return Slab.Error.SlabCorrupted; // cycle
+            if (cursor < base or cursor >= slab_end) return Slab.Error.SlabCorrupted; // oob address
+            if ((cursor - base) % self.slot_size != 0) return Slab.Error.SlabCorrupted; // misaligned address
+
+            const stored = @as(*usize, @ptrFromInt(cursor)).*;
+            cursor = Slab.decode_ptr(cursor, stored);
+        }
+    }
+
+    fn validate_redzone(self: *Cache, slot_ptr: *usize) Slab.Error!void {
+        const redzone = @as([*]u8, @ptrCast(@alignCast(slot_ptr)))[self.size_obj..self.slot_size];
+        if (!std.mem.allEqual(u8, redzone, Slab.REDZONE_MAGIC))
+            return Slab.Error.SlabCorrupted;
     }
 
     // Thread safe wrapper
@@ -269,7 +341,7 @@ pub const Cache = struct {
         return slab.cache() == self;
     }
 
-    pub fn debug(self: *Self) void {
+    pub fn dump(self: *Self) void {
         var nb_slab_empty: usize = 0;
         var nb_slab_partial: usize = 0;
         var nb_slab_full: usize = 0;
@@ -365,7 +437,7 @@ pub const GlobalCache = struct {
     lock: Mutex = Mutex{},
 
     pub fn init(allocator: PageAllocator) !GlobalCache {
-        return .{ .cache = try Cache.init("global", allocator, @sizeOf(Cache), @alignOf(Cache), 0) };
+        return .{ .cache = try Cache.init("global", allocator, @sizeOf(Cache), @alignOf(Cache), 0, .{}) };
     }
 
     pub fn create(
@@ -375,13 +447,14 @@ pub const GlobalCache = struct {
         obj_size: usize,
         obj_align: usize,
         order: u5,
+        dbg: Slab.DebugFlags,
     ) !*Cache {
         self.lock.acquire();
         defer self.lock.release();
 
         var cache: *Cache = @ptrCast(@alignCast(self.cache.alloc_one() catch |e| return e));
 
-        cache.* = try Cache.init(name, allocator, obj_size, obj_align, order);
+        cache.* = try Cache.init(name, allocator, obj_size, obj_align, order, dbg);
 
         cache.next = self.cache.next;
         if (self.cache.next) |next| next.prev = cache;
@@ -425,7 +498,7 @@ pub const GlobalCache = struct {
         printk("  \x1b[36mfull\x1b[0m", .{});
         printk("\n", .{});
         var node: ?*Cache = self.cache.next;
-        while (node) |n| : (node = n.next) n.debug();
-        self.cache.debug();
+        while (node) |n| : (node = n.next) n.dump();
+        self.cache.dump();
     }
 };
