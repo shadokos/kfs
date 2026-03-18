@@ -155,6 +155,9 @@ pub fn init() void {
     logger.debug("\tInitializing direct page allocator...", .{});
     directPageAllocator = DirectPageAllocator.init(paging.high_half);
 
+    const tsc = @import("cpu.zig").read_tsc();
+    @import("memory/object_allocators/slab/slab.zig").init_secret(@truncate(tsc ^ (tsc >> 32)));
+
     logger.debug("\tInitializing slab allocator's global cache...", .{});
     const GlobalCache = @import("memory/object_allocators/slab/cache.zig").GlobalCache;
     globalCache = GlobalCache.init(directPageAllocator.page_allocator()) catch @panic("cannot init globalCache");
