@@ -200,6 +200,15 @@ fn get_id(obj: anytype) u8 {
     };
 }
 
+pub fn set_task_gate(id: anytype, tss_selector: cpu.Selector) void {
+    idt[get_id(id)] = InterruptDescriptor.init(
+        .{ .ptr = 0 },
+        .Task,
+        cpu.PrivilegeLevel.Supervisor,
+        tss_selector,
+    );
+}
+
 pub fn set_trap_gate(id: anytype, handler: Handler) void {
     idt[get_id(id)] = InterruptDescriptor.init(
         handler,

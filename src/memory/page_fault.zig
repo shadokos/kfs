@@ -3,6 +3,7 @@ const paging = @import("paging.zig");
 const regions = @import("regions.zig");
 const Region = regions.Region;
 const cpu = @import("../cpu.zig");
+const gdt = @import("../gdt.zig");
 const mapping = @import("mapping.zig");
 const scheduler = @import("../task/scheduler.zig");
 const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
@@ -147,4 +148,113 @@ fn panic(fault: PageFault) void {
 pub fn set_handler() void {
     const interrupts = @import("../interrupts.zig");
     interrupts.set_intr_gate(.PageFault, interrupts.Handler.create(&page_fault_handler, true));
+
+    if (@import("build_options").optimize == .Debug) {
+        const kernel_data = cpu.Selector{ .index = 2, .table = .GDT, .privilege = .Supervisor };
+        const kernel_code = cpu.Selector{ .index = 1, .table = .GDT, .privilege = .Supervisor };
+
+        gdt.double_fault_tss.esp = @intFromPtr(&gdt.double_fault_stack) + gdt.double_fault_stack.len;
+        gdt.double_fault_tss.ss = kernel_data;
+        gdt.double_fault_tss.ds = kernel_data;
+        gdt.double_fault_tss.es = kernel_data;
+        gdt.double_fault_tss.cs = kernel_code;
+        gdt.double_fault_tss.eip = @intFromPtr(&double_fault_entry);
+        gdt.double_fault_tss.eflags = @bitCast(cpu.EFlags{ .interrupt_enable = false });
+
+        // Zig debug mode passes a hidden "return address" pointer via ECX through
+        // the call chain. The hardware task switch loads ECX from df_tss.ecx (default 0).
+        // Point ECX to df_tss.eip so that *ECX is a valid code address, preventing
+        // NULL dereferences in logger/format code.
+        gdt.double_fault_tss.ecx = @intFromPtr(&gdt.double_fault_tss.eip);
+        // NOTE: cr3 is set later by update_double_fault_cr3() after the kernel virtual
+        // space is transferred, since transfer() changes CR3.
+
+        const double_fault_selector = cpu.Selector{ .index = 8, .table = .GDT, .privilege = .Supervisor };
+        @import("../interrupts.zig").set_task_gate(.DoubleFault, double_fault_selector);
+    }
+}
+
+/// Must be called after the kernel page directory is active (after transfer()).
+pub fn update_double_fault_cr3() void {
+    if (@import("build_options").optimize == .Debug) {
+        gdt.double_fault_tss.cr3 = cpu.get_cr3();
+    }
+}
+
+fn double_fault_entry() callconv(.naked) noreturn {
+    asm volatile (
+    // Clear NT flag (bit 14) so IRET doesn't reverse the task switch
+        \\ pushfd
+        \\ andl $0xffffbfff, (%%esp)
+        \\ popfd
+        \\ jmp *%[handler]
+        :
+        : [handler] "r" (&handle_double_fault),
+    );
+}
+
+/// Force-unlock all mutexes in the allocation chain used by debug backtraces.
+/// Only safe in a terminal panic context (double fault) where we never resume.
+fn force_unlock_allocator_mutexes() void {
+    const memory = @import("../memory.zig");
+    // PageFrameAllocator mutex
+    memory.pageFrameAllocator.lock.count = 0;
+    // Kernel virtual space mutex
+    memory.kernel_virtual_space.lock.count = 0;
+    // Global slab cache mutex
+    memory.globalCache.lock.count = 0;
+    memory.globalCache.cache.lock.count = 0;
+}
+
+fn handle_double_fault() noreturn {
+    // Clear the busy bit of the TSS descriptor to prevent the CPU from refusing to switch
+    gdt.clear_busy_bit(.{ .index = 8 });
+    gdt.clear_busy_bit(.{ .index = 7 });
+
+    // Restore TR to the main TSS (index 7).
+    // The scheduler sets gdt.tss.esp 0, if TR pointed to double_fault_tss,
+    // that field would never be read by the CPU on privilege transitions.
+    // Also when TR=df_tss, a subsequent double fault can't switch
+    // to df_tss (because it's the current task and busy) → triple fault.
+    cpu.load_tss(.{ .index = 7, .table = .GDT, .privilege = .Supervisor });
+
+    // The hardware task switch saved the faulting task's context into the gdt.tss.
+    const faulting_esp = gdt.tss.esp;
+    const faulting_page: paging.VirtualPagePtr = @ptrFromInt(
+        std.mem.alignBackward(usize, faulting_esp, paging.page_size),
+    );
+
+    if (!scheduler.is_initialized()) {
+        force_unlock_allocator_mutexes();
+        @panic("early boot double fault (probably stack overflow)");
+    }
+
+    scheduler.enter_critical();
+
+    const faulting_task = scheduler.get_current_task();
+    if (faulting_task.is_guard_page(faulting_page)) {
+        // terminate the faulting task
+        faulting_task.state = .Zombie;
+        faulting_task.update_status(.{
+            .transition = .Terminated,
+            .signaled = true,
+            .siginfo = .{
+                .si_signo = .{ .valid = .SIGSEGV },
+                .si_code = .SI_USER,
+                .si_pid = 0,
+                .si_addr = @ptrCast(faulting_page),
+            },
+        });
+        std.log.warn("stack overflow: task {d} (guard: 0x{x}), terminating task", .{
+            faulting_task.pid,
+            @intFromPtr(faulting_page),
+        });
+        for (@import("../task/task.zig").on_terminate_callback.items) |callback| {
+            callback(faulting_task);
+        }
+        scheduler.schedule();
+        unreachable;
+    }
+
+    @panic("double fault");
 }

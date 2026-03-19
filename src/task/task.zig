@@ -17,7 +17,7 @@ const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = std.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
-const STACK_TOTAL_PAGES = 16;
+const STACK_TOTAL_PAGES = 16 + (if (@import("build_options").optimize == .Debug) 1 else 0);
 const STACK_SIZE = STACK_TOTAL_PAGES * paging.page_size;
 
 const callback_allocator = @import("../memory.zig").smallAlloc.allocator();
@@ -81,20 +81,43 @@ pub const TaskDescriptor = struct {
     pub const Pid = i32;
     pub const Self = @This();
 
+    const is_debug = @import("build_options").optimize == .Debug;
+
     /// Allocate pages and return a pointer to the TaskDescriptor located at the end of the allocation.
     /// The stack is the memory region before self.
     pub fn alloc() !*Self {
         const page_alloc = memory.directPageAllocator.page_allocator();
         const base = try page_alloc.alloc_pages(STACK_TOTAL_PAGES);
 
+        if (is_debug) {
+            // Clear present bit on the guard page (first page) to catch stack overflow.
+            var raw: u32 = @bitCast(mapping.get_entry(base));
+            raw &= ~@as(u32, 1);
+            mapping.set_entry(base, @bitCast(raw));
+        }
+
         return @ptrFromInt(@intFromPtr(base) + STACK_SIZE - @sizeOf(Self));
     }
 
     pub fn dealloc(self: *Self) void {
         const page_alloc = memory.directPageAllocator.page_allocator();
-        const base_addr = @intFromPtr(self) - STACK_SIZE + @sizeOf(Self);
+        const base: paging.VirtualPagePtr = @ptrFromInt(@intFromPtr(self) - STACK_SIZE + @sizeOf(Self));
 
-        page_alloc.free_pages(@ptrFromInt(base_addr), STACK_TOTAL_PAGES);
+        if (is_debug) {
+            // Restore present bit on the guard page (first page) before freeing
+            var raw: u32 = @bitCast(mapping.get_entry(base));
+            raw |= 1;
+            mapping.set_entry(base, @bitCast(raw));
+        }
+
+        page_alloc.free_pages(base, STACK_TOTAL_PAGES);
+    }
+
+    /// Check if a faulting page is this task's guard page (debug only).
+    pub fn is_guard_page(self: *Self, page: paging.VirtualPagePtr) bool {
+        if (!is_debug) return false;
+        const base = @intFromPtr(self) + @sizeOf(Self) - STACK_SIZE;
+        return @intFromPtr(page) == base;
     }
 
     /// Return stack top (initial esp value). Stack grows downwards from here.
