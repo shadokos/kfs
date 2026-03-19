@@ -4,13 +4,20 @@ const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const multiboot = @import("multiboot.zig");
 const builtin = std.builtin;
 const paging = @import("memory/paging.zig");
+const mapping = @import("memory/mapping.zig");
 const log = std.log;
 
-const STACK_SIZE: u32 = 64 * 1024;
+// Stack pages + 1 guard page if debug build (to catch stack overflows during boot phase)
+const STACK_PAGES: u32 = 8 + if (@import("build_options").optimize == .Debug) 1 else 0;
+const STACK_SIZE: u32 = STACK_PAGES * paging.page_size;
 
 var stack: [STACK_SIZE]u8 align(4096) linksection(".bss") = undefined;
 
 export var stack_bottom: [*]u8 = @as([*]u8, @ptrCast(&stack)) + @sizeOf(@TypeOf(stack));
+
+// Address of the boot stack guard page (first page of the stack array).
+// Used by the double fault handler to detect stack overflow during boot phase.
+pub const boot_stack_guard_page: paging.VirtualPagePtr = @ptrCast(&stack);
 
 export var multiboot_header: multiboot.header_type align(4) linksection(".multiboot") = multiboot.get_header();
 
@@ -77,6 +84,13 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     @import("memory.zig").init();
 
     @import("debug.zig").init();
+
+    if (@import("build_options").optimize == .Debug) {
+        // Clear present bit on the first page of the boot stack to detect overflow
+        var raw: u32 = @bitCast(mapping.get_entry(boot_stack_guard_page));
+        raw &= ~@as(u32, 1);
+        mapping.set_entry(boot_stack_guard_page, @bitCast(raw));
+    }
 
     @import("drivers/tsc/tsc.zig").init();
 
