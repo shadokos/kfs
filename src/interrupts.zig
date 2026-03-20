@@ -342,12 +342,16 @@ pub fn default_handler(
     comptime t: enum { except, except_err, irq, interrupt },
 ) Handler {
     const handlers = struct {
-        pub fn exception(_: InterruptFrame) void {
+        pub fn exception(frame: InterruptFrame) void {
             const e = @as(Exceptions, @enumFromInt(id));
+            // Override the backtrace with the interrupted code's frame chain so the
+            // stack trace points at the faulting code, not at the interrupt handler.
+            @import("logger.zig").panic_trace_override = std.debug.StackIterator.init(null, frame.ebp);
             std.log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
         }
-        pub fn exception_err(_: InterruptFrame) void {
+        pub fn exception_err(frame: InterruptFrame) void {
             const e = @as(Exceptions, @enumFromInt(id));
+            @import("logger.zig").panic_trace_override = std.debug.StackIterator.init(null, frame.ebp);
             std.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), 0 });
         }
         pub fn irq(_: InterruptFrame) void {
