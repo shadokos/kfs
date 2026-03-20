@@ -220,8 +220,13 @@ fn handle_double_fault() noreturn {
 
     // The hardware task switch saved the faulting task's context into the gdt.tss.
     const faulting_esp = gdt.tss.esp;
+    // On x86, interrupt delivery pushes the frame by decrementing ESP before writing.
+    // If ESP is exactly page-aligned, the CPU decrements it into the page below before
+    // the write fails, but the saved ESP is the pre-decrement value. Subtract 1 so that
+    // alignBackward resolves to the page that was actually accessed (the guard page).
+    const fault_addr = if (faulting_esp & (paging.page_size - 1) == 0) faulting_esp - 1 else faulting_esp;
     const faulting_page: paging.VirtualPagePtr = @ptrFromInt(
-        std.mem.alignBackward(usize, faulting_esp, paging.page_size),
+        std.mem.alignBackward(usize, fault_addr, paging.page_size),
     );
 
     if (!scheduler.is_initialized()) {
@@ -233,25 +238,20 @@ fn handle_double_fault() noreturn {
 
     const faulting_task = scheduler.get_current_task();
     if (faulting_task.is_guard_page(faulting_page)) {
-        // terminate the faulting task
-        faulting_task.state = .Zombie;
-        faulting_task.update_status(.{
-            .transition = .Terminated,
-            .signaled = true,
-            .siginfo = .{
-                .si_signo = .{ .valid = .SIGSEGV },
-                .si_code = .SI_USER,
-                .si_pid = 0,
-                .si_addr = @ptrCast(faulting_page),
-            },
-        });
         std.log.warn("stack overflow: task {d} (guard: 0x{x}), terminating task", .{
             faulting_task.pid,
             @intFromPtr(faulting_page),
         });
-        for (@import("../task/task.zig").on_terminate_callback.items) |callback| {
-            callback(faulting_task);
-        }
+        faulting_task.terminate(.{
+            .transition = .Terminated,
+            .signaled = true,
+            .siginfo = .{
+                .si_signo = .{ .valid = .SIGSEGV },
+                .si_code = .SEGV_MAPERR,
+                .si_pid = 0,
+                .si_addr = @ptrCast(faulting_page),
+            },
+        });
         scheduler.schedule();
         unreachable;
     }

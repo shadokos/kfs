@@ -17,7 +17,7 @@ const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = std.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
 
-const STACK_TOTAL_PAGES = 16 + (if (@import("build_options").optimize == .Debug) 1 else 0);
+const STACK_TOTAL_PAGES = 16;
 const STACK_SIZE = STACK_TOTAL_PAGES * paging.page_size;
 
 const callback_allocator = @import("../memory.zig").smallAlloc.allocator();
@@ -90,10 +90,7 @@ pub const TaskDescriptor = struct {
         const base = try page_alloc.alloc_pages(STACK_TOTAL_PAGES);
 
         if (is_debug) {
-            // Clear present bit on the guard page (first page) to catch stack overflow.
-            var raw: u32 = @bitCast(mapping.get_entry(base));
-            raw &= ~@as(u32, 1);
-            mapping.set_entry(base, @bitCast(raw));
+            mapping.clear_present(base);
         }
 
         return @ptrFromInt(@intFromPtr(base) + STACK_SIZE - @sizeOf(Self));
@@ -104,10 +101,7 @@ pub const TaskDescriptor = struct {
         const base: paging.VirtualPagePtr = @ptrFromInt(@intFromPtr(self) - STACK_SIZE + @sizeOf(Self));
 
         if (is_debug) {
-            // Restore present bit on the guard page (first page) before freeing
-            var raw: u32 = @bitCast(mapping.get_entry(base));
-            raw |= 1;
-            mapping.set_entry(base, @bitCast(raw));
+            mapping.set_present(base);
         }
 
         page_alloc.free_pages(base, STACK_TOTAL_PAGES);
@@ -118,6 +112,17 @@ pub const TaskDescriptor = struct {
         if (!is_debug) return false;
         const base = @intFromPtr(self) + @sizeOf(Self) - STACK_SIZE;
         return @intFromPtr(page) == base;
+    }
+
+    /// Terminate this task: mark as Zombie, notify parent, and fire on_terminate callbacks.
+    /// The caller is responsible for calling scheduler.schedule() afterwards if needed.
+    pub fn terminate(self: *Self, status: @import("status_informations.zig").Status) void {
+        if (self.state == .Ready)
+            ready_queue.remove(self);
+        self.state = .Zombie;
+        self.update_status(status);
+        for (on_terminate_callback.items) |callback|
+            callback(self);
     }
 
     /// Return stack top (initial esp value). Stack grows downwards from here.
@@ -228,16 +233,11 @@ pub const TaskDescriptor = struct {
     fn handle_default_action(self: *Self, sig: signal.siginfo_t) void {
         switch (self.signalManager.get_defaultAction(sig.si_signo.unwrap())) {
             .Ignore => {},
-            .Terminate => {
-                if (self.state == .Ready)
-                    ready_queue.remove(self);
-                self.state = .Zombie;
-                self.update_status(.{
-                    .transition = .Terminated,
-                    .signaled = true,
-                    .siginfo = sig,
-                });
-            },
+            .Terminate => self.terminate(.{
+                .transition = .Terminated,
+                .signaled = true,
+                .siginfo = sig,
+            }),
             .Stop => if (self.state == .Running or self.state == .Ready) {
                 if (self.state == .Ready)
                     ready_queue.remove(self);
@@ -436,18 +436,13 @@ pub fn getpid() TaskDescriptor.Pid {
 pub fn exit(code: u8) noreturn {
     scheduler.enter_critical();
 
-    const task = scheduler.get_current_task();
-    task.state = .Zombie;
-    task.update_status(.{
+    scheduler.get_current_task().terminate(.{
         .transition = .Terminated,
         .signaled = false,
         .siginfo = .{
             .si_status = code,
         },
     });
-
-    for (on_terminate_callback.items) |callback|
-        callback(task);
 
     scheduler.schedule();
     unreachable;
