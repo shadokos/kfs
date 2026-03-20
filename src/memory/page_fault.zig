@@ -114,10 +114,16 @@ fn user_page_fault(fault: PageFault) void {
 }
 
 fn page_fault_handler(frame: InterruptFrame) void {
+    // Set the override early so any panic or default-scope log.err that
+    // propagates from the fault handling chain (kernel_page_fault, user_page_fault,
+    // local panic(), etc.) shows the faulting code's backtrace, not the handler's.
+    @import("../logger.zig").panic_trace_override = std.debug.StackIterator.init(null, frame.ebp);
+
     const fault = page_fault_from_i386(frame);
 
     if (fault.present != mapping.is_page_present(fault.entry)) {
-        @panic("page fault on a present page! (entry is not invalidated)");
+        std.log.err("page fault on a present page! (entry is not invalidated)", .{});
+        unreachable;
     }
 
     switch (fault.mode) {
@@ -143,6 +149,7 @@ fn panic(fault: PageFault) void {
             @import("../task/scheduler.zig").get_current_task().pid,
         },
     );
+    unreachable;
 }
 
 pub fn set_handler() void {
@@ -229,9 +236,16 @@ fn handle_double_fault() noreturn {
         std.mem.alignBackward(usize, fault_addr, paging.page_size),
     );
 
+    // Point the backtrace at the faulting task's context saved into gdt.tss
+    // by the CPU during the hardware task switch that delivered the double fault.
+    @import("../logger.zig").panic_trace_override = std.debug.StackIterator.init(null, gdt.tss.ebp);
+
     if (!scheduler.is_initialized()) {
         force_unlock_allocator_mutexes();
-        @panic("early boot double fault (probably stack overflow)");
+        std.log.err("early boot double fault (probably stack overflow, faulting esp: 0x{x})", .{
+            faulting_esp,
+        });
+        unreachable;
     }
 
     scheduler.enter_critical();
@@ -256,5 +270,6 @@ fn handle_double_fault() noreturn {
         unreachable;
     }
 
-    @panic("double fault");
+    std.log.err("double fault", .{});
+    unreachable;
 }

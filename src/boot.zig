@@ -147,7 +147,10 @@ fn init_tasks() noreturn {
     }
 }
 
-pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, _: ?usize) noreturn {
+pub fn panic(msg: []const u8, _: ?*builtin.StackTrace, ret_addr: ?usize) noreturn {
+    // Point the backtrace at the code that called @panic
+    const first_addr = ret_addr orelse @returnAddress();
+    @import("logger.zig").panic_trace_override = std.debug.StackIterator.init(first_addr, @frameAddress());
     log.err("{s}", .{msg});
     unreachable;
 }
