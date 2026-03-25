@@ -11,6 +11,7 @@ const fadt_module = @import("tables/fadt.zig");
 
 pub const RSDP = rsdp_module.RSDP;
 pub const FADT = fadt_module.FADT;
+pub const Namespace = @import("namespace/namespace.zig").Namespace;
 
 const log = std.log.scoped(.acpi);
 
@@ -18,6 +19,7 @@ const log = std.log.scoped(.acpi);
 var registry: Registry = .{};
 var fadt: ?*align(1) const FADT = null;
 var dsdt_data: ?[]const u8 = null;
+var namespace: ?Namespace = null;
 var initialized: bool = false;
 
 // Public API ----------------------------------------------------------------
@@ -60,6 +62,10 @@ pub fn init() void {
         @panic("ACPI: DSDT not found or invalid");
     };
 
+    // 5. Load AML namespace
+    namespace = Namespace{};
+    namespace.?.init_in_place() catch @panic("ACPI: namespace init failed");
+
     // Since we don't have an AML interpreter yet, we need to extract the S5 sleep type values
     // using pattern matching on the raw AML bytecode.
     // This is a temporary workaround until the AML interpreter is implemented
@@ -100,4 +106,12 @@ pub fn get_registry() *const Registry {
 
 pub fn get_fadt() ?*align(1) const FADT {
     return fadt;
+}
+
+pub fn print_namespace() void {
+    if (namespace) |ns| {
+        ns.dump();
+    } else {
+        log.warn("ACPI namespace not initialized", .{});
+    }
 }

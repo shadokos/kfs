@@ -475,3 +475,7 @@ pub fn blkread(shell: anytype, args: [][]u8) CmdError!void {
     const end_ptr = start_ptr + buffer.len;
     @import("../../debug.zig").memory_dump(start_ptr, end_ptr, start_ptr - (start * block_size));
 }
+
+pub fn acpi_ns(_: anytype, _: [][]u8) CmdError!void {
+    @import("../../drivers/acpi/acpi.zig").print_namespace();
+}
