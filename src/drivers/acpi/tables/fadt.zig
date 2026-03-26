@@ -1,9 +1,8 @@
 const sdt = @import("sdt.zig");
 
 /// Fixed ACPI Description Table (FADT / signature "FACP").
-///
-/// According to ACPI 6.5 spec §5.2.9
-/// https://uefi.org/specs/ACPI/6.5/05_ACPI_Software_Programming_Model.html#fixed-acpi-description-table-fadt
+/// ACPI 6.4 §5.2.9. Only the first 45 bytes (ACPI 1.0 fields) are used;
+/// ACPI 2.0+ extensions (X_FIRMWARE_CTRL, X_DSDT, etc.) are not yet supported.
 ///
 pub const FADT = extern struct {
     header: sdt.SdtHeader,

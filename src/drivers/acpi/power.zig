@@ -6,8 +6,9 @@ const sdt = @import("tables/sdt.zig");
 
 const log = std.log.scoped(.@"acpi(power)");
 
-/// PM1 Control Register (PM1a_CNT / PM1b_CNT, ACPI 6.5 spec §4.8.3.2.1)
-/// https://uefi.org/specs/ACPI/6.5/04_ACPI_Hardware_Specification.html#pm1-control-registers-2
+/// PM1 Control Register (PM1a_CNT / PM1b_CNT).
+/// Register layout: ACPI 6.4 §4.8.1.2 (PM1 Control Registers).
+/// SLP_TYP and SLP_EN fields: §4.8.3.2 (Sleeping/Wake Control).
 pub const Pm1Control = packed struct(u16) {
     sci_en: bool, // bit 0: SCI enable (read-only on HW-reduced)
     bm_rld: bool, // bit 1: bus master reload

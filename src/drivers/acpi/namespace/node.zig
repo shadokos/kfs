@@ -1,6 +1,9 @@
 const std = @import("std");
 const path_mod = @import("path.zig");
+const objects = @import("../aml/objects.zig");
 const log = std.log.scoped(.acpi_ns);
+
+pub const Object = objects.Object;
 
 pub const NameSeg = path_mod.NameSeg;
 
@@ -32,7 +35,10 @@ pub const Node = struct {
     parent: ?*Node = null,
     first_child: ?*Node = null,
     next_sibling: ?*Node = null,
-    // object: TODO union of AML objects (integer/string/buffer/method/etc)
+    /// AML data object stored at this namespace node.
+    /// Populated during DSDT/SSDT loading (DefName, DefMethod, DefField, etc.).
+    /// Initially uninitialized; type depends on the node's defining opcode.
+    object: Object = .uninitialized,
 
     /// Find a direct child by name.
     pub fn find_child(self: *const Node, name: NameSeg) ?*Node {

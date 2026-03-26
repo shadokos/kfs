@@ -3,6 +3,7 @@ const colors = @import("colors");
 const log = std.log.scoped(.@"acpi(sdth)");
 
 /// Common ACPI System Description Table header (36 bytes).
+/// Defined in ACPI 6.4 §5.2.6 (System Description Table Header).
 /// Shared by RSDT, FADT (FACP), DSDT, SSDT, MADT, HPET, MCFG, etc.
 pub const SdtHeader = extern struct {
     signature: [4]u8,

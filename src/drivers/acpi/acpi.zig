@@ -4,6 +4,7 @@ const sdt = @import("tables/sdt.zig");
 const Registry = @import("tables/registry.zig").Registry;
 const osl = @import("os_layer.zig");
 const power = @import("power.zig");
+const aml = @import("aml/aml.zig");
 
 const rsdp_module = @import("tables/rsdp.zig");
 const rsdt_module = @import("tables/rsdt.zig");
@@ -66,9 +67,25 @@ pub fn init() void {
     namespace = Namespace{};
     namespace.?.init_in_place() catch @panic("ACPI: namespace init failed");
 
-    // Since we don't have an AML interpreter yet, we need to extract the S5 sleep type values
-    // using pattern matching on the raw AML bytecode.
-    // This is a temporary workaround until the AML interpreter is implemented
+    // 6. Load DSDT AML into namespace
+    aml.load_table(&namespace.?, dsdt_data.?) catch |err| {
+        log.err("ACPI: Failed to load DSDT AML: {s}", .{@errorName(err)});
+    };
+
+    // 7. Load all SSDTs
+    for (registry.iter()) |entry| {
+        if (std.mem.eql(u8, &entry.signature, "SSDT")) {
+            const ssdt_data = Registry.map_aml_entry(&entry, "SSDT") catch |err| {
+                log.warn("ACPI: Failed to map SSDT at 0x{x}: {s}", .{ entry.physical_address, @errorName(err) });
+                continue;
+            };
+            aml.load_table(&namespace.?, ssdt_data) catch |err| {
+                log.warn("ACPI: Failed to load SSDT: {s}", .{@errorName(err)});
+            };
+        }
+    }
+
+    // S5 sleep type extraction (temporary workaround until full AML evaluation)
     power.init_s5_from_dsdt(dsdt_data.?) catch |err| {
         @panic(switch (err) {
             power.Error.s5_not_found => "ACPI: _S5 not found in DSDT",

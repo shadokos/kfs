@@ -67,6 +67,13 @@ pub fn map_object(comptime T: type, phys: u32) !*align(1) T {
 
 // Object allocation ---------------------------------------------------------
 //
+
+/// Return a general-purpose std.mem.Allocator backed by kmalloc pools.
+pub fn allocator() std.mem.Allocator {
+    const memory = @import("../../memory.zig");
+    return memory.smallAlloc.allocator();
+}
+
 pub fn kmalloc(comptime T: type, n: usize) ?[]T {
     const memory = @import("../../memory.zig");
     return memory.smallAlloc.alloc(T, n) catch return null;

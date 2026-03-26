@@ -52,12 +52,13 @@ pub const Namespace = struct {
         // \_GL: Global Lock mutex (§5.7.1)
         const gl_node = try self.alloc_node("_GL_".*, .mutex);
         errdefer self.node_cache.allocator().destroy(gl_node);
+        gl_node.object = .{ .mutex = .{ .sync_level = 0 } };
         self.root.add_child(gl_node);
 
         // \_OS: OS name string (§5.7.3)
         const os_node = try self.alloc_node("_OS_".*, .name);
         errdefer self.node_cache.allocator().destroy(os_node);
-        // TODO: os_node.object = .{ .string = "ShadokOS" };
+        os_node.object = .{ .string = "ShadokOS" };
         self.root.add_child(os_node);
 
         // \_OSI: OS interface method (§5.7.2)
@@ -71,7 +72,7 @@ pub const Namespace = struct {
         // This kernel is 32-bit, so integers are 32-bit only per §5.7.4.
         const rev_node = try self.alloc_node("_REV".*, .name);
         errdefer self.node_cache.allocator().destroy(rev_node);
-        // TODO: rev_node.object = .{ .integer = 1 };
+        rev_node.object = .{ .integer = 1 };
         self.root.add_child(rev_node);
     }
 
