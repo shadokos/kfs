@@ -3,6 +3,7 @@ const Acpi = @import("acpi.zig");
 const osl = @import("os_layer.zig");
 const FADT = @import("tables/fadt.zig").FADT;
 const sdt = @import("tables/sdt.zig");
+const Namespace = @import("namespace/namespace.zig").Namespace;
 
 const log = std.log.scoped(.@"acpi(power)");
 
@@ -81,51 +82,43 @@ pub fn enable_acpi() Error!void {
     log.debug("- Done ({d} ms)", .{time});
 }
 
-/// Initialize S5 sleep type values by parsing the \_S5_ object from the DSDT.
-/// This uses raw bytecode pattern matching as a fallback until the AML interpreter
-/// is available, at which point this will be replaced by evaluate("\_S5_").
-pub fn init_s5_from_dsdt(dsdt_data: []const u8) Error!void {
-    // Search for _S5_ NameOp pattern in DSDT bytecode:
-    //   NameOp(0x08) [RootPrefix(0x5C)] '_S5_' PackageOp(0x12)
-    for (0..dsdt_data.len -| 5) |i| {
-        if (!std.mem.eql(u8, dsdt_data[i..][0..5], "_S5_\x12")) continue;
+/// Initialize S5 sleep type values from the \_S5_ namespace object.
+///
+/// The \_S5_ object is a Package containing sleep type values (§7.4.2):
+///   Name(\_S5_, Package() { SLP_TYPa, SLP_TYPb, Reserved, Reserved })
+///
+/// Elements [0] and [1] are the SLP_TYP values for PM1a_CNT and PM1b_CNT
+/// respectively (§4.8.3.2 SLP_TYP field).
+pub fn init_s5(ns: *Namespace) Error!void {
+    const node = ns.resolve_path("\\_S5_") orelse {
+        log.err("\\_S5_: not found in namespace", .{});
+        return Error.s5_not_found;
+    };
 
-        // Verify NameOp precedes the name
-        if (i < 1) continue;
-        const has_nameop = dsdt_data[i - 1] == 0x08 or
-            (i >= 2 and dsdt_data[i - 2] == 0x08 and dsdt_data[i - 1] == 0x5C);
-        if (!has_nameop) continue;
-
-        // Parse the Package after "_S5_"
-        // Skip: PackageOp(1) + PkgLength(1) + NumElements(1) = 3 bytes
-        const pkg_start = i + 4; // points to PackageOp
-        if (pkg_start + 3 >= dsdt_data.len) continue;
-
-        // after PackageOp + PkgLength + NumElements
-        const pkg_data = dsdt_data[pkg_start + 3 ..];
-
-        // Extract SLP_TYP values: either BytePrefix(0x0A) + value, or raw
-        slp_typ_a = @truncate(extract_slp_value(pkg_data));
-        const remaining = if (pkg_data.len > 0 and pkg_data[0] == 0x0A)
-            pkg_data[2..]
-        else
-            pkg_data[1..];
-        slp_typ_b = @truncate(extract_slp_value(remaining));
-
-        s5_initialized = true;
-
-        log.debug("_S5: found: SLP_TYPa (0x{}), SLP_TYPb (0x{})", .{ slp_typ_a, slp_typ_b });
-        return;
+    switch (node.object) {
+        .package => |pkg| {
+            if (pkg.elements.len < 2) {
+                log.err("\\_S5_: package has fewer than 2 elements", .{});
+                return Error.s5_not_found;
+            }
+            slp_typ_a = @truncate(extract_int(pkg.elements[0]));
+            slp_typ_b = @truncate(extract_int(pkg.elements[1]));
+        },
+        else => {
+            log.err("\\_S5_: expected package, got {s}", .{node.object.type_name()});
+            return Error.s5_not_found;
+        },
     }
 
-    log.err("_S5: not found", .{});
-    return Error.s5_not_found;
+    s5_initialized = true;
+    log.debug("\\_S5_: SLP_TYPa={d}, SLP_TYPb={d}", .{ slp_typ_a, slp_typ_b });
 }
 
-fn extract_slp_value(data: []const u8) u16 {
-    if (data.len == 0) return 0;
-    if (data[0] == 0x0A and data.len >= 2) return data[1]; // BytePrefix encoding
-    return data[0]; // Raw byte
+fn extract_int(obj: @import("aml/objects.zig").Object) u64 {
+    return switch (obj) {
+        .integer => |v| v,
+        else => 0,
+    };
 }
 
 /// Power off the system (S5 transition).

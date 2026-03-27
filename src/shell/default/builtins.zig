@@ -476,6 +476,105 @@ pub fn blkread(shell: anytype, args: [][]u8) CmdError!void {
     @import("../../debug.zig").memory_dump(start_ptr, end_ptr, start_ptr - (start * block_size));
 }
 
-pub fn acpi_ns(_: anytype, _: [][]u8) CmdError!void {
-    @import("../../drivers/acpi/acpi.zig").print_namespace();
+/// Dump the ACPI namespace tree.
+/// Usage: acpi_ns [path]  (e.g. acpi_ns \_SB.PCI0)
+pub fn acpi_ns(shell: anytype, args: [][]u8) CmdError!void {
+    const path = if (args.len >= 2) args[1] else null;
+    @import("../../drivers/acpi/acpi.zig").print_namespace_at(path, shell.writer);
+}
+
+/// List ACPI devices with status, HID, and address.
+pub fn acpi_devices(shell: anytype, _: [][]u8) CmdError!void {
+    @import("../../drivers/acpi/acpi.zig").print_devices(shell.writer);
+}
+
+/// Evaluate an ACPI namespace path.
+/// Usage: acpi_eval <path> [arg0 arg1 ...]  (e.g. acpi_eval \\_SB.PCI0)
+pub fn acpi_eval(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 2) return CmdError.InvalidNumberOfArguments;
+
+    const acpi = @import("../../drivers/acpi/acpi.zig");
+    const Object = @import("../../drivers/acpi/aml/objects.zig").Object;
+    var eval_args: [7]Object = undefined;
+    var arg_count: usize = 0;
+
+    for (args[2..]) |arg| {
+        if (arg_count >= 7) {
+            printk("Too many arguments (max 7)\n", .{});
+            return CmdError.InvalidNumberOfArguments;
+        }
+        const val = std.fmt.parseInt(u64, arg, 0) catch {
+            printk("Invalid argument: {s} (must be integer)\n", .{arg});
+            return CmdError.InvalidParameter;
+        };
+        eval_args[arg_count] = .{ .integer = val };
+        arg_count += 1;
+    }
+
+    acpi.print_eval(args[1], eval_args[0..arg_count], shell.writer);
+}
+
+/// Print ACPI resource descriptors (_CRS) for a device.
+/// Usage: acpi_crs <path>  (e.g. acpi_crs \_SB.PCI0.LNKA)
+pub fn acpi_crs(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 2) return CmdError.InvalidNumberOfArguments;
+    @import("../../drivers/acpi/acpi.zig").print_crs(args[1], shell.writer);
+}
+
+/// Dump the AML bytecode of a method in the ACPI namespace.
+/// Usage: aml_dump <path>  (e.g. aml_dump \DBUG)
+pub fn aml_dump(_: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 2) return CmdError.InvalidNumberOfArguments;
+    const acpi = @import("../../drivers/acpi/acpi.zig");
+    const node = acpi.resolve_path(args[1]) orelse {
+        printk("Not found: {s}\n", .{args[1]});
+        return CmdError.OtherError;
+    };
+    if (node.object != .method) {
+        printk("{s} is not a method ({s})\n", .{ args[1], @tagName(node.object) });
+        return CmdError.OtherError;
+    }
+    const code = node.object.method.code;
+    printk("{s}: method, {d} args, {d} bytes of AML bytecode\n", .{
+        args[1],
+        node.object.method.arg_count,
+        code.len,
+    });
+    const ptr = @intFromPtr(code.ptr);
+    @import("../../debug.zig").memory_dump(ptr, ptr + code.len, 0);
+}
+
+/// Write arguments to the ACPI Debug object (kernel log output).
+/// Usage: acpi_dbg <value> [value ...]  (integers or strings)
+pub fn acpi_dbg(_: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 2) return CmdError.InvalidNumberOfArguments;
+    const debug_mod = @import("../../drivers/acpi/aml/eval/debug.zig");
+    for (args[1..]) |arg| {
+        if (std.fmt.parseInt(u64, arg, 0)) |val| {
+            debug_mod.log_debug_store(.{ .integer = val });
+        } else |_| {
+            debug_mod.log_debug_store(.{ .string = arg });
+        }
+    }
+}
+
+/// Write a string directly to an I/O port (bypasses AML).
+/// Usage: outb <port> <string>  (e.g. outb 0x402 hello)
+pub fn outb(_: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 3) return CmdError.InvalidNumberOfArguments;
+    const port = std.fmt.parseInt(u16, args[1], 0) catch return CmdError.InvalidParameter;
+    const cpu = @import("../../cpu.zig");
+    for (args[2..]) |arg| {
+        for (arg) |byte| {
+            cpu.outb(port, byte);
+        }
+    }
+    cpu.outb(port, '\n');
+}
+
+/// Run AML interpreter test suites (from QEMU-loaded test SSDTs).
+pub fn amltest(shell: anytype, _: [][]u8) CmdError!void {
+    const acpi = @import("../../drivers/acpi/acpi.zig");
+    const failures = acpi.run_ns_aml_tests(shell.writer);
+    if (failures > 0) return CmdError.OtherError;
 }

@@ -2,6 +2,7 @@ const std = @import("std");
 const colors = @import("colors");
 const Node = @import("node.zig").Node;
 const NodeType = @import("node.zig").NodeType;
+const Object = @import("node.zig").Object;
 const path_mod = @import("path.zig");
 const NameSeg = path_mod.NameSeg;
 const Cache = @import("../../../memory/object_allocators/slab/cache.zig").Cache;
@@ -235,6 +236,71 @@ pub const Namespace = struct {
         }
 
         return current;
+    }
+
+    /// Resolve NameString references inside Package objects (post-load fixup).
+    ///
+    /// During AML loading, NameStrings in packages are stored as `.string`
+    /// because the referenced objects may not exist yet. After all DSDT/SSDT
+    /// tables are loaded this pass resolves them to `.reference` pointers.
+    /// Analogous to ACPICA's AcpiNsResolveReferences().
+    pub fn resolve_references(self: *Namespace) void {
+        var count: usize = 0;
+        resolve_refs_walk(self, self.root, &count);
+        log.info("Resolved {d} package NameString references", .{count});
+    }
+
+    fn resolve_refs_walk(self: *Namespace, node: *Node, count: *usize) void {
+        // If this node holds a package, fix up its elements
+        if (node.object == .package) {
+            resolve_refs_in_package(self, node, node.object.package.elements, count);
+        }
+
+        var child = node.first_child;
+        while (child) |c| {
+            resolve_refs_walk(self, c, count);
+            child = c.next_sibling;
+        }
+    }
+
+    /// Resolve NameString elements within a single package (and nested packages).
+    fn resolve_refs_in_package(
+        self: *Namespace,
+        scope: *Node,
+        elements: []Object,
+        count: *usize,
+    ) void {
+        const osl = @import("../os_layer.zig");
+
+        for (elements) |*elem| {
+            switch (elem.*) {
+                .string => |s| {
+                    // Check if this string looks like an AML NameString
+                    if (s.len == 0 or s.len > 255) continue;
+                    const first = s[0];
+                    if (!path_mod.is_name_lead(first) and
+                        first != path_mod.ROOT_PREFIX and
+                        first != path_mod.PARENT_PREFIX and
+                        first != path_mod.DUAL_NAME_PREFIX and
+                        first != path_mod.MULTI_NAME_PREFIX) continue;
+
+                    // Try to parse and resolve the NameString
+                    const parsed = path_mod.parse(osl.allocator(), s) catch continue;
+                    const p = parsed orelse continue;
+                    defer p.deinit(osl.allocator());
+
+                    // Resolve relative to the node that owns the package
+                    const target = self.resolve(scope, &p) orelse continue;
+                    elem.* = .{ .reference = &target.object };
+                    count.* += 1;
+                },
+                .package => |pkg| {
+                    // Recurse into nested packages
+                    resolve_refs_in_package(self, scope, pkg.elements, count);
+                },
+                else => {},
+            }
+        }
     }
 
     /// Dump the namespace tree for debugging.

@@ -7,6 +7,8 @@ const parser = @import("parser.zig");
 const opcodes = @import("opcodes.zig");
 const objects = @import("objects.zig");
 const skip = @import("skip.zig");
+const osl = @import("../os_layer.zig");
+const path_mod = @import("../namespace/path.zig");
 
 const Stream = parser.Stream;
 const Object = objects.Object;
@@ -83,9 +85,39 @@ pub fn parse_data_object(stream: *Stream) Object {
             const pkg = parser.decode_pkg_length(stream) orelse
                 return .uninitialized;
             const end = stream.pos + pkg.body_length;
-            // Skip package contents (no allocation during loading phase)
+
+            // NumElements: ByteData for PackageOp, integer data for VarPackageOp (§20.2.5.4)
+            const num_elements: usize = if (op == opcodes.VAR_PACKAGE_OP)
+                @as(usize, @intCast(parse_integer_data(stream)))
+            else
+                stream.read_byte() orelse {
+                    stream.pos = @min(end, stream.data.len);
+                    return .uninitialized;
+                };
+
+            if (num_elements == 0 or num_elements > 255) {
+                stream.pos = @min(end, stream.data.len);
+                return .{ .package = .{ .elements = &.{} } };
+            }
+
+            const elements = osl.kmalloc(Object, num_elements) orelse {
+                stream.pos = @min(end, stream.data.len);
+                return .{ .package = .{ .elements = &.{} } };
+            };
+
+            // Parse PackageElementList (§20.2.5.4):
+            // PackageElement := DataRefObject | NameString
+            var i: usize = 0;
+            while (stream.pos < end and i < num_elements) : (i += 1) {
+                elements[i] = parse_package_element(stream);
+            }
+            // Fill remaining elements with .uninitialized
+            while (i < num_elements) : (i += 1) {
+                elements[i] = .uninitialized;
+            }
+
             stream.pos = @min(end, stream.data.len);
-            return .{ .package = .{ .elements = &.{} } };
+            return .{ .package = .{ .elements = elements } };
         },
         else => {
             // Unknown data object, skip one term arg
@@ -93,6 +125,33 @@ pub fn parse_data_object(stream: *Stream) Object {
             return .uninitialized;
         },
     }
+}
+
+/// Parse a single PackageElement (§20.2.5.4).
+/// PackageElement := DataRefObject | NameString
+///
+/// NameStrings inside packages reference other namespace objects.
+/// Stored as .string with raw AML bytes during loading; the post-load
+/// fixup pass (Namespace.resolve_references) converts them to .reference.
+fn parse_package_element(stream: *Stream) Object {
+    const b = stream.peek() orelse return .uninitialized;
+
+    // NameString starts with a lead name char, RootChar, ParentPrefixChar,
+    // DualNamePrefix, or MultiNamePrefix (§20.2.2)
+    if (path_mod.is_name_lead(b) or b == path_mod.ROOT_PREFIX or
+        b == path_mod.PARENT_PREFIX or b == path_mod.DUAL_NAME_PREFIX or
+        b == path_mod.MULTI_NAME_PREFIX)
+    {
+        const start = stream.pos;
+        skip.skip_name_path(stream);
+        const name_len = stream.pos - start;
+        if (name_len > 0 and name_len < 256) {
+            return .{ .string = stream.data[start..stream.pos] };
+        }
+        return .uninitialized;
+    }
+
+    return parse_data_object(stream);
 }
 
 /// Parse an integer from a data constant prefix (§20.2.3).
