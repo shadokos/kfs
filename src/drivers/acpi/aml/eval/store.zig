@@ -94,6 +94,19 @@ fn write_super_name(ectx: *EvalContext, value: Object) Error!void {
         }
     }
 
+    // DerefOf as target: write through reference (§20.2.2 ReferenceTypeOpcode)
+    if (b == opcodes.DEREF_OF_OP) {
+        _ = ectx.stream.read_byte();
+        const ref_obj = try @import("operand.zig").eval_operand(ectx);
+        switch (ref_obj) {
+            .reference => |ptr| {
+                ptr.* = value;
+            },
+            else => {},
+        }
+        return;
+    }
+
     // IndexOp as target: write to buffer/package element (§20.2.5.4)
     if (b == opcodes.INDEX_OP) {
         try write_index_target(ectx, value);
@@ -252,6 +265,10 @@ fn write_named_target(ectx: *EvalContext, value: Object) Error!void {
         },
         .buffer_field => |bf| {
             field_io.write_buffer_field(&bf, value);
+            return;
+        },
+        .bank_field_unit => |bfu| {
+            field_io.write_bank_field(ectx.ns, frame.scope, &bfu, value);
             return;
         },
         else => {},

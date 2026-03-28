@@ -18,6 +18,7 @@ const objects = @import("../objects.zig");
 const parser = @import("../parser.zig");
 const context_mod = @import("../context.zig");
 const field_io = @import("field_io.zig");
+const predefined = @import("predefined.zig");
 
 const Object = objects.Object;
 const Namespace = ns_mod.Namespace;
@@ -66,6 +67,11 @@ fn eval_resolved_node(ectx: *EvalContext, node: *Node) Error!Object {
                 args[i] = operand.eval_operand(ectx) catch .uninitialized;
             }
 
+            // Built-in methods have empty code (§5.7)
+            if (method.code.len == 0) {
+                return predefined.dispatch(node, args[0..method.arg_count]) orelse .uninitialized;
+            }
+
             // Push new frame (§5.5.2)
             if (ectx.ctx.depth >= context_mod.MAX_METHOD_DEPTH)
                 return Error.stack_overflow;
@@ -91,6 +97,18 @@ fn eval_resolved_node(ectx: *EvalContext, node: *Node) Error!Object {
         },
         .buffer_field => |bf| {
             return field_io.read_buffer_field(&bf);
+        },
+        .bank_field_unit => |bfu| {
+            return field_io.read_bank_field(
+                ectx.ns,
+                node.parent orelse frame.scope,
+                &bfu,
+            );
+        },
+        // For devices and other namespace objects, return a reference
+        // so the caller can access the Node (e.g., for _PRT Link Devices)
+        .device, .thermal_zone, .processor, .power_resource => {
+            return .{ .reference = &node.object };
         },
         else => return node.object,
     }

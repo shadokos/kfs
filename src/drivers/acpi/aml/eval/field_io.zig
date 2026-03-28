@@ -27,6 +27,10 @@ const Error = @import("executor.zig").Error;
 const log = std.log.scoped(.acpi_exec);
 const to_int = integer.to_int;
 
+// CMOS RTC ports (§5.5.2.4.1 SystemCMOS address space)
+const CMOS_INDEX_PORT: u16 = 0x70;
+const CMOS_DATA_PORT: u16 = 0x71;
+
 // ---------------------------------------------------------------------------
 // FieldUnit read (§5.5.2.4)
 // ---------------------------------------------------------------------------
@@ -101,15 +105,25 @@ pub fn write_field(
             fu.bit_width == 32 or fu.bit_width == 64))
         val
     else blk: {
-        // Sub-byte or misaligned: read-modify-write (§5.5.2.4)
-        const old = read_field(ns, scope, fu) catch break :blk val;
-        const old_val = to_int(old);
+        // Sub-byte or misaligned: read-modify-write (§5.5.2.4.1)
+        // UpdateRule (§19.6.47) determines what to do with bits outside the field:
+        //   Preserve     (0): keep original register value
+        //   WriteAsOnes  (1): set untouched bits to 1
+        //   WriteAsZeros (2): set untouched bits to 0
         const mask: u64 = if (fu.bit_width >= 64)
             0xFFFFFFFFFFFFFFFF
         else
             (@as(u64, 1) << @as(u6, @truncate(fu.bit_width))) - 1;
-        break :blk (old_val & ~(mask << bit_offset_in_byte)) |
-            ((val & mask) << bit_offset_in_byte);
+        const field_mask = mask << bit_offset_in_byte;
+        // Read the raw register value for Preserve: we need the full byte/word,
+        // not the extracted field bits (read_field would mask to just our field).
+        const background: u64 = switch (fu.update_rule) {
+            .preserve => read_region(region.space, region.offset + byte_start, width_bytes, region_node),
+            .write_as_ones => 0xFFFFFFFFFFFFFFFF,
+            .write_as_zeros => 0,
+            _ => read_region(region.space, region.offset + byte_start, width_bytes, region_node),
+        };
+        break :blk (background & ~field_mask) | ((val & mask) << bit_offset_in_byte);
     };
 
     write_region(region.space, region.offset + byte_start, width_bytes, write_val, region_node);
@@ -168,6 +182,69 @@ pub fn write_index_field(
     if (data_node.object == .field_unit) {
         write_field(ns, scope, &data_node.object.field_unit, value);
     }
+}
+
+// ---------------------------------------------------------------------------
+// BankField read/write (§19.6.7)
+// ---------------------------------------------------------------------------
+
+/// Read a BankField value: write bank value to bank register, then read from region.
+pub fn read_bank_field(
+    ns: *Namespace,
+    scope: *Node,
+    bfu: *const objects.BankFieldUnit,
+) Error!Object {
+    // Select the bank by writing bank_value to the bank register
+    const bank_node = resolve_cached_node(ns, scope, bfu.bank_name, bfu.bank_node) orelse {
+        log.warn("read_bank_field: bank '{s}' not found", .{
+            path_mod.format_seg(&bfu.bank_name),
+        });
+        return .{ .integer = 0 };
+    };
+    if (bank_node.object == .field_unit) {
+        write_field(ns, scope, &bank_node.object.field_unit, .{ .integer = bfu.bank_value });
+    }
+
+    // Read the field from the region (same as regular field)
+    const fu = objects.FieldUnit{
+        .region_name = bfu.region_name,
+        .bit_offset = bfu.bit_offset,
+        .bit_width = bfu.bit_width,
+        .access_type = bfu.access_type,
+        .lock_rule = bfu.lock_rule,
+        .update_rule = bfu.update_rule,
+        .region_node = bfu.region_node,
+    };
+    return read_field(ns, scope, &fu);
+}
+
+/// Write a value to a BankField: write bank value to bank register, then write to region.
+pub fn write_bank_field(
+    ns: *Namespace,
+    scope: *Node,
+    bfu: *const objects.BankFieldUnit,
+    value: Object,
+) void {
+    const bank_node = resolve_cached_node(ns, scope, bfu.bank_name, bfu.bank_node) orelse {
+        log.warn("write_bank_field: bank '{s}' not found", .{
+            path_mod.format_seg(&bfu.bank_name),
+        });
+        return;
+    };
+    if (bank_node.object == .field_unit) {
+        write_field(ns, scope, &bank_node.object.field_unit, .{ .integer = bfu.bank_value });
+    }
+
+    const fu = objects.FieldUnit{
+        .region_name = bfu.region_name,
+        .bit_offset = bfu.bit_offset,
+        .bit_width = bfu.bit_width,
+        .access_type = bfu.access_type,
+        .lock_rule = bfu.lock_rule,
+        .update_rule = bfu.update_rule,
+        .region_node = bfu.region_node,
+    };
+    write_field(ns, scope, &fu, value);
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +386,22 @@ fn read_region(space: objects.AddressSpace, addr: u64, width_bytes: u32, region_
                 else => @as(u64, pci.readConfig(u32, bdf.bus, bdf.dev, bdf.func, offset)),
             };
         },
+        // SystemCMOS (§5.5.2.4.1): index/data via ports 0x70/0x71, byte-at-a-time
+        .system_cmos => {
+            var val: u64 = 0;
+            for (0..width_bytes) |i| {
+                const index: u8 = @truncate(addr + i);
+                osl.write_io(CMOS_INDEX_PORT, 1, index);
+                val |= @as(u64, osl.read_io(CMOS_DATA_PORT, 1)) << @intCast(i * 8);
+            }
+            return val;
+        },
+        // PciBarTarget (§5.5.2.4.4): memory-mapped access relative to a PCI BAR.
+        // addr encodes BAR index in bits [55:32] and byte offset in bits [31:0].
+        .pci_bar_target => {
+            const phys_addr = resolve_bar_address(addr, region_node) orelse return 0;
+            return read_region(.system_memory, phys_addr, width_bytes, null);
+        },
         else => {
             log.warn("read_region: unsupported space {s}", .{@tagName(space)});
             return 0;
@@ -346,6 +439,17 @@ fn write_region(space: objects.AddressSpace, addr: u64, width_bytes: u32, value:
                 2 => pci.writeConfig(u16, bdf.bus, bdf.dev, bdf.func, offset, @truncate(value)),
                 else => pci.writeConfig(u32, bdf.bus, bdf.dev, bdf.func, offset, @truncate(value)),
             }
+        },
+        .system_cmos => {
+            for (0..width_bytes) |i| {
+                const index: u8 = @truncate(addr + i);
+                osl.write_io(CMOS_INDEX_PORT, 1, index);
+                osl.write_io(CMOS_DATA_PORT, 1, @truncate(value >> @intCast(i * 8)));
+            }
+        },
+        .pci_bar_target => {
+            const phys_addr = resolve_bar_address(addr, region_node) orelse return;
+            write_region(.system_memory, phys_addr, width_bytes, value, null);
         },
         else => {
             log.warn("write_region: unsupported space {s}", .{@tagName(space)});
@@ -387,6 +491,40 @@ fn resolve_pci_bdf(region_node: ?*Node) ?PciBdf {
         current = n.parent;
     }
     return null;
+}
+
+/// Resolve a PciBarTarget address to a physical memory address.
+/// The region offset encodes BAR index (bits [55:32]) and byte offset (bits [31:0]).
+/// We resolve the BDF from the namespace, look up the PCI device, read the BAR
+/// base address, and add the byte offset.
+fn resolve_bar_address(addr: u64, region_node: ?*Node) ?u64 {
+    const bdf = resolve_pci_bdf(region_node) orelse {
+        log.warn("pci_bar_target: cannot resolve BDF", .{});
+        return null;
+    };
+
+    const bar_index: u3 = @truncate(addr >> 32);
+    const offset: u32 = @truncate(addr);
+
+    const dev = pci.get_device(bdf.bus, bdf.dev, bdf.func) orelse {
+        log.warn("pci_bar_target: device {d}:{d}.{d} not found", .{ bdf.bus, bdf.dev, bdf.func });
+        return null;
+    };
+
+    if (bar_index >= dev.bars.len) {
+        log.warn("pci_bar_target: BAR{d} out of range", .{bar_index});
+        return null;
+    }
+
+    const bar_raw = dev.bars[bar_index];
+    // Mask off type bits (bit 0 = IO/Memory, bits [3:1] for memory type)
+    const bar_base: u64 = bar_raw & 0xFFFFFFF0;
+    if (bar_base == 0) {
+        log.warn("pci_bar_target: BAR{d} not configured", .{bar_index});
+        return null;
+    }
+
+    return bar_base + offset;
 }
 
 /// Walk up from a PCI device to its root bridge and read _BBN (base bus number).

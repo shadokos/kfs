@@ -36,6 +36,9 @@ pub const ObjectType = enum(u8) {
     /// Internal reference (RefOf, LocalX, ArgX, Index result).
     /// Not exposed via the AML ObjectType() operator.
     reference = 0x81,
+    /// BankField unit: not a distinct ObjectType in the spec (§19.6.96).
+    /// Reports as field_unit (5) when the AML ObjectType() operator is called.
+    bank_field_unit = 0x82,
 };
 
 pub const Object = union(ObjectType) {
@@ -62,6 +65,7 @@ pub const Object = union(ObjectType) {
     debug_object: void,
     index_field_unit: IndexFieldUnit,
     reference: *Object,
+    bank_field_unit: BankFieldUnit,
 
     pub fn to_integer(self: *const Object) ?u64 {
         return switch (self.*) {
@@ -72,10 +76,12 @@ pub const Object = union(ObjectType) {
 
     /// Return the ACPI spec ObjectType() value for this object (§19.6.96 Table 19.36).
     /// Non-spec variants are mapped to their canonical spec type.
+    /// References are followed to return the type of the pointed-to object.
     pub fn spec_type(self: *const Object) u8 {
         return switch (self.*) {
             .index_field_unit => @intFromEnum(ObjectType.field_unit),
-            .reference => @intFromEnum(ObjectType.uninitialized),
+            .bank_field_unit => @intFromEnum(ObjectType.field_unit),
+            .reference => |ptr| Object.spec_type(ptr),
             else => @intFromEnum(std.meta.activeTag(self.*)),
         };
     }
@@ -247,6 +253,27 @@ pub const Mutex = struct {
 pub const PowerResource = struct {
     system_level: u8,
     resource_order: u16,
+};
+
+/// Bank field unit: banked region within an OpRegion (§19.6.7, §5.5.2.4).
+///   ASL: BankField (RegionName, BankName, BankValue, AccessType, LockRule, UpdateRule)
+///        {FieldUnitList}
+///   AML: DefBankField := BankFieldOp PkgLength NameString NameString BankValue
+///        FieldFlags FieldList (§20.2.5.2)
+///
+/// Accessing a bank field first writes BankValue to the BankName register,
+/// then reads/writes the corresponding bit range from the OpRegion.
+pub const BankFieldUnit = struct {
+    region_name: [4]u8,
+    bank_name: [4]u8,
+    bank_value: u64,
+    bit_offset: u32,
+    bit_width: u32,
+    access_type: AccessType,
+    lock_rule: bool,
+    update_rule: UpdateRule,
+    region_node: ?*anyopaque = null,
+    bank_node: ?*anyopaque = null,
 };
 
 /// Processor description object (deprecated: §8.4, §19.2.6 ProcessorTerm).

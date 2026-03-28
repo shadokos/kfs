@@ -65,7 +65,14 @@ pub const Namespace = struct {
         // \_OSI: OS interface method (§5.7.2)
         const osi_node = try self.alloc_node("_OSI".*, .method);
         errdefer self.node_cache.allocator().destroy(osi_node);
-        // TODO: implement _OSI method logic
+        osi_node.object = .{
+            .method = .{
+                .arg_count = 1,
+                .serialized = true,
+                .sync_level = 0,
+                .code = &.{}, // empty code = built-in, dispatched by predefined.zig
+            },
+        };
         self.root.add_child(osi_node);
 
         // \_REV: ACPI revision supported (§5.7.4)

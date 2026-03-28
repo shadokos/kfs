@@ -17,6 +17,7 @@ const ns_mod = @import("../../namespace/namespace.zig");
 const node_mod = @import("../../namespace/node.zig");
 const osl = @import("../../os_layer.zig");
 const field_io = @import("field_io.zig");
+const predefined = @import("predefined.zig");
 
 pub const Object = objects.Object;
 const Namespace = ns_mod.Namespace;
@@ -58,6 +59,11 @@ pub fn evaluate(
 ) Error!Object {
     switch (node.object) {
         .method => |method| {
+            // Built-in methods have empty code (§5.7)
+            if (method.code.len == 0) {
+                return predefined.dispatch(node, args) orelse .uninitialized;
+            }
+
             var ctx = Context{};
             const frame = ctx.push_frame(
                 node.parent orelse ns.root,
@@ -75,6 +81,9 @@ pub fn evaluate(
         },
         .buffer_field => |bf| {
             return field_io.read_buffer_field(&bf);
+        },
+        .bank_field_unit => |bfu| {
+            return field_io.read_bank_field(ns, node.parent orelse ns.root, &bfu);
         },
         .integer, .string, .buffer, .package => return node.object,
         .uninitialized => return .uninitialized,

@@ -26,6 +26,9 @@ const test_suite = [_]TestCase{
     .{ .name = "hw", .main_path = "\\_SB._KFS.THW0.MAIN" },
     .{ .name = "conv", .main_path = "\\_SB._KFS.TCNV.MAIN" },
     .{ .name = "compare", .main_path = "\\_SB._KFS.TSCM.MAIN" },
+    .{ .name = "ns", .main_path = "\\_SB._KFS.TNS0.MAIN" },
+    .{ .name = "ref2", .main_path = "\\_SB._KFS.TRF2.MAIN" },
+    .{ .name = "field2", .main_path = "\\_SB._KFS.TFD2.MAIN" },
 };
 
 /// Run tests from the live ACPI namespace (loaded via QEMU -acpitable).

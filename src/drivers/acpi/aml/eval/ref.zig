@@ -15,9 +15,14 @@ const Error = @import("executor.zig").Error;
 const EvalContext = @import("executor.zig").EvalContext;
 
 /// Evaluate DefDerefOf. DerefOfOp (0x83) must already be consumed.
-/// In our simplified model, just evaluate the inner expression.
+/// If the operand is a reference, follows it and returns the pointed-to object.
+/// Otherwise returns the operand value as-is (backward compatible).
 pub fn eval_deref_of(ectx: *EvalContext) Error!Object {
-    return @import("operand.zig").eval_operand(ectx);
+    const obj = try @import("operand.zig").eval_operand(ectx);
+    return switch (obj) {
+        .reference => |ptr| ptr.*,
+        else => obj,
+    };
 }
 
 /// Evaluate DefIndex. IndexOp (0x88) must already be consumed.
@@ -50,18 +55,20 @@ pub fn eval_index(ectx: *EvalContext) Error!Object {
 /// Evaluate DefRefOf. RefOfOp (0x71) must already be consumed.
 /// SuperName := SimpleName | DebugObj | ReferenceTypeOpcode (§20.2.2)
 /// SimpleName := NameString | ArgObj | LocalObj
-/// Returns the object that the SuperName refers to.
+///
+/// For namespace objects, returns a .reference pointing to the node's object.
+/// For locals and args, returns the value directly (safe — no dangling pointers).
 pub fn eval_ref_of(ectx: *EvalContext) Error!Object {
     const b = ectx.stream.peek() orelse return .uninitialized;
     const frame = ectx.ctx.current() orelse return .uninitialized;
 
-    // LocalObj (§20.2.6.2)
+    // LocalObj (§20.2.6.2) — return value (pointer would dangle after method exit)
     if (b >= opcodes.LOCAL0 and b <= opcodes.LOCAL7) {
         _ = ectx.stream.read_byte();
         return frame.locals[b - opcodes.LOCAL0];
     }
 
-    // ArgObj (§20.2.6.1)
+    // ArgObj (§20.2.6.1) — return value
     if (b >= opcodes.ARG0 and b <= opcodes.ARG6) {
         _ = ectx.stream.read_byte();
         return frame.args[b - opcodes.ARG0];
@@ -78,7 +85,7 @@ pub fn eval_ref_of(ectx: *EvalContext) Error!Object {
         }
     }
 
-    // NameString: resolve in namespace and return the object
+    // NameString: resolve in namespace and return a reference
     if (path_mod.is_name_start(b)) {
         const parsed = path_mod.parse(
             ectx.alloc,
@@ -88,7 +95,7 @@ pub fn eval_ref_of(ectx: *EvalContext) Error!Object {
             defer p.deinit(ectx.alloc);
             ectx.stream.pos += p.bytes_consumed;
             if (ectx.ns.resolve(frame.scope, &p)) |node| {
-                return node.object;
+                return .{ .reference = &node.object };
             }
         }
         return .uninitialized;

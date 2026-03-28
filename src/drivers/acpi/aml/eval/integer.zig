@@ -21,15 +21,17 @@ pub inline fn mask32(v: u64) u64 {
 }
 
 /// Coerce an Object to an integer value (§19.3.5, Table 19.7).
-/// Integer → as-is.
-/// String  → parse as decimal or hex ("0x" prefix). Returns 0 on failure.
-/// Buffer  → interpret up to first 4 bytes as little-endian u32 (32-bit mode).
-/// Others  → 0.
+/// Integer   → as-is.
+/// String    → parse as decimal or hex ("0x" prefix). Returns 0 on failure.
+/// Buffer    → interpret up to first 4 bytes as little-endian u32 (32-bit mode).
+/// Reference → follow the pointer and coerce the target.
+/// Others    → 0.
 pub fn to_int(obj: Object) u64 {
     return switch (obj) {
         .integer => |v| v,
         .string => |s| parse_string_int(s),
         .buffer => |b| buf_to_int(b.data),
+        .reference => |ptr| to_int(ptr.*),
         else => 0,
     };
 }

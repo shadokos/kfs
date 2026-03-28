@@ -42,6 +42,7 @@ const handler_modules = .{
     @import("handlers/name.zig"),
     @import("handlers/method.zig"),
     @import("handlers/external.zig"),
+    @import("handlers/alias.zig"),
 };
 
 // -- Extended opcode handlers (EXT_PREFIX 0x5B + second byte) ---------------
@@ -51,6 +52,7 @@ const ext_handler_modules = .{
     @import("handlers/op_region.zig"),
     @import("handlers/field.zig"),
     @import("handlers/index_field.zig"),
+    @import("handlers/bank_field.zig"),
     @import("handlers/processor.zig"),
     @import("handlers/thermal_zone.zig"),
     @import("handlers/power_resource.zig"),

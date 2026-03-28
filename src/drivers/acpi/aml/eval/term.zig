@@ -99,6 +99,13 @@ pub fn eval_term(ectx: *EvalContext) Error!?Object {
             return null;
         },
 
+        // -- DefAlias during execution (§20.2.5.1): create dynamic alias --
+        opcodes.ALIAS_OP => {
+            _ = ectx.stream.read_byte();
+            try eval_runtime_alias(ectx, frame);
+            return null;
+        },
+
         // -- Structural opcodes that should be skipped during execution --
         opcodes.SCOPE_OP, opcodes.METHOD_OP => {
             _ = ectx.stream.read_byte();
@@ -154,6 +161,47 @@ fn eval_runtime_name(
         } else {
             const node = ectx.ns.alloc_node(name, .name) catch return;
             node.object = val;
+            parent.add_child(node);
+            frame.track_dynamic_node(node);
+        }
+    }
+}
+
+/// Handle DefAlias at runtime: create a dynamic alias node (§20.2.5.1).
+fn eval_runtime_alias(
+    ectx: *EvalContext,
+    frame: *@import("../context.zig").MethodFrame,
+) Error!void {
+    // Source name
+    const source_parsed = path_mod.parse(
+        ectx.alloc,
+        ectx.stream.data[ectx.stream.pos..],
+    ) catch return Error.parse_error;
+    const sp = source_parsed orelse return Error.parse_error;
+    defer sp.deinit(ectx.alloc);
+    ectx.stream.pos += sp.bytes_consumed;
+
+    // Alias name
+    const alias_parsed = path_mod.parse(
+        ectx.alloc,
+        ectx.stream.data[ectx.stream.pos..],
+    ) catch return Error.parse_error;
+    const ap = alias_parsed orelse return Error.parse_error;
+    defer ap.deinit(ectx.alloc);
+    ectx.stream.pos += ap.bytes_consumed;
+
+    // Resolve source
+    const source_node = ectx.ns.resolve(frame.scope, &sp) orelse return;
+
+    // Create alias
+    if (ap.segments.len > 0) {
+        const name = ap.segments[ap.segments.len - 1];
+        const parent = if (ap.is_absolute) ectx.ns.root else frame.scope;
+        if (parent.find_child(name)) |existing| {
+            existing.object = source_node.object;
+        } else {
+            const node = ectx.ns.alloc_node(name, source_node.node_type) catch return;
+            node.object = source_node.object;
             parent.add_child(node);
             frame.track_dynamic_node(node);
         }
