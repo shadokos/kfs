@@ -8,6 +8,13 @@
 ///
 /// SuperName := SimpleName | DebugObj | ReferenceTypeOpcode (§20.2.2)
 /// SimpleName := NameString | ArgObj | LocalObj             (§20.2.2)
+///
+/// NOTE: The spec (§19.3.5.4) says Buffer and Package targets should
+/// auto-resize when the source is larger than the destination. We do not
+/// implement this: values are truncated to the existing size. In practice,
+/// real-world DSDT/SSDT tables always pre-allocate the correct size, and
+/// even ACPICA has had historical bugs with implicit resizing. No known
+/// firmware relies on this behavior.
 const std = @import("std");
 const opcodes = @import("../opcodes.zig");
 const objects = @import("../objects.zig");
@@ -108,8 +115,66 @@ fn write_index_target(ectx: *EvalContext, value: Object) Error!void {
     const operand = @import("operand.zig");
     _ = ectx.stream.read_byte(); // INDEX_OP
 
+    const frame = ectx.ctx.current() orelse return;
+
     // Resolve the source object (buffer/package/string)
     const source_op = ectx.stream.peek() orelse return;
+
+    // Handle Local0..Local7 as source
+    if (source_op >= opcodes.LOCAL0 and source_op <= opcodes.LOCAL7) {
+        _ = ectx.stream.read_byte();
+        const local_idx = source_op - opcodes.LOCAL0;
+        const index = @as(usize, @intCast(@import("integer.zig").to_int(
+            try operand.eval_operand(ectx),
+        )));
+        skip.skip_target(ectx.stream);
+
+        switch (frame.locals[local_idx]) {
+            .buffer => |buf| {
+                const mut_data = @constCast(buf.data);
+                if (index < mut_data.len) {
+                    mut_data[index] = @truncate(@import("integer.zig").to_int(value));
+                }
+            },
+            .package => |pkg| {
+                const mut_elems = @constCast(pkg.elements);
+                if (index < mut_elems.len) {
+                    mut_elems[index] = value;
+                }
+            },
+            else => {},
+        }
+        return;
+    }
+
+    // Handle Arg0..Arg6 as source
+    if (source_op >= opcodes.ARG0 and source_op <= opcodes.ARG6) {
+        _ = ectx.stream.read_byte();
+        const arg_idx = source_op - opcodes.ARG0;
+        const index = @as(usize, @intCast(@import("integer.zig").to_int(
+            try operand.eval_operand(ectx),
+        )));
+        skip.skip_target(ectx.stream);
+
+        switch (frame.args[arg_idx]) {
+            .buffer => |buf| {
+                const mut_data = @constCast(buf.data);
+                if (index < mut_data.len) {
+                    mut_data[index] = @truncate(@import("integer.zig").to_int(value));
+                }
+            },
+            .package => |pkg| {
+                const mut_elems = @constCast(pkg.elements);
+                if (index < mut_elems.len) {
+                    mut_elems[index] = value;
+                }
+            },
+            else => {},
+        }
+        return;
+    }
+
+    // Handle named object as source
     var target_node: ?*Node = null;
 
     if (path_mod.is_name_start(source_op)) {
@@ -120,7 +185,6 @@ fn write_index_target(ectx: *EvalContext, value: Object) Error!void {
         if (parsed) |p| {
             defer p.deinit(ectx.alloc);
             ectx.stream.pos += p.bytes_consumed;
-            const frame = ectx.ctx.current() orelse return;
             target_node = ectx.ns.resolve(frame.scope, &p);
         }
     } else {

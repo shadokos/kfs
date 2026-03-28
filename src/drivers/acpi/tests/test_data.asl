@@ -147,10 +147,42 @@ DefinitionBlock ("test_data.aml", "SSDT", 2, "KFS", "TESTDATA", 1)
                 Return (0)
             }
 
+            Method (TIDX, 0, Serialized)
+            {
+                /* Index with Target: result stored into Local via Target */
+                Name (BUF1, Buffer (4) { 0xAA, 0xBB, 0xCC, 0xDD })
+
+                /* Index writes to Target (3rd argument) */
+                Index (BUF1, 2, Local0)
+                /* Local0 should receive the indexed element value */
+                If (Local0 != 0xCC) { Return (0x0501) }
+                PCNT = PCNT + 1
+
+                /* Index into Package with Target */
+                Name (PKG1, Package (3) { 11, 22, 33 })
+                Index (PKG1, 1, Local1)
+                If (Local1 != 22) { Return (0x0502) }
+                PCNT = PCNT + 1
+
+                /* Index into String with Target */
+                Name (STR1, "ABCD")
+                Index (STR1, 0, Local2)
+                /* 'A' = 0x41 */
+                If (Local2 != 0x41) { Return (0x0503) }
+                PCNT = PCNT + 1
+
+                /* Index with Target + DerefOf should both work */
+                Local3 = DerefOf (Index (BUF1, 3))
+                If (Local3 != 0xDD) { Return (0x0504) }
+                PCNT = PCNT + 1
+
+                Return (0)
+            }
+
             Method (MAIN, 0)
             {
                 PCNT = 0
-                TCNT = 17
+                TCNT = 21
 
                 Local0 = TSTR()
                 If (Local0 != 0) { Return (Local0) }
@@ -162,6 +194,9 @@ DefinitionBlock ("test_data.aml", "SSDT", 2, "KFS", "TESTDATA", 1)
                 If (Local0 != 0) { Return (Local0) }
 
                 Local0 = TNST()
+                If (Local0 != 0) { Return (Local0) }
+
+                Local0 = TIDX()
                 If (Local0 != 0) { Return (Local0) }
 
                 Return (0)

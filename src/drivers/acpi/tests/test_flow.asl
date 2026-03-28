@@ -213,10 +213,63 @@ DefinitionBlock ("test_flow.aml", "SSDT", 2, "KFS", "TESTFLOW", 1)
                 Return (0)
             }
 
+            Method (TCTN, 0)
+            {
+                /* Continue skips rest of body, restarts at predicate */
+                /* Sum even numbers 0..9: skip odds with Continue */
+                Local0 = 0  /* sum */
+                Local1 = 0  /* counter */
+                While (\_SB._KFS._OPS.LSS_ (Local1, 10))
+                {
+                    Local2 = Local1
+                    Local1 = \_SB._KFS._OPS.ADD_ (Local1, 1)
+                    /* If odd, skip the addition */
+                    If (Local2 & 1)
+                    {
+                        Continue
+                    }
+                    Local0 = \_SB._KFS._OPS.ADD_ (Local0, Local2)
+                }
+                /* 0+2+4+6+8 = 20 */
+                If (Local0 != 20) { Return (0x0701) }
+                PCNT = PCNT + 1
+
+                /* Continue on first iteration */
+                Local0 = 0
+                Local1 = 0
+                While (\_SB._KFS._OPS.LSS_ (Local1, 3))
+                {
+                    Local1 = \_SB._KFS._OPS.ADD_ (Local1, 1)
+                    If (\_SB._KFS._OPS.EQL_ (Local1, 1))
+                    {
+                        Continue
+                    }
+                    Local0 = \_SB._KFS._OPS.ADD_ (Local0, Local1)
+                }
+                /* skips 1, adds 2+3 = 5 */
+                If (Local0 != 5) { Return (0x0702) }
+                PCNT = PCNT + 1
+
+                /* Continue does NOT exit loop (unlike Break) */
+                Local0 = 0
+                Local1 = 0
+                While (\_SB._KFS._OPS.LSS_ (Local1, 5))
+                {
+                    Local1 = \_SB._KFS._OPS.ADD_ (Local1, 1)
+                    Local0 = \_SB._KFS._OPS.ADD_ (Local0, 1)
+                    Continue
+                }
+                /* Should still loop 5 times */
+                If (Local0 != 5) { Return (0x0703) }
+                PCNT = PCNT + 1
+
+                Return (0)
+            }
+
             Method (MAIN, 0, Serialized)
             {
                 PCNT = 0
-                TCNT = 13
+                TCNT = 16
 
                 Local0 = TIFF()
                 If (Local0 != 0) { Return (Local0) }
@@ -234,6 +287,9 @@ DefinitionBlock ("test_flow.aml", "SSDT", 2, "KFS", "TESTFLOW", 1)
                 If (Local0 != 0) { Return (Local0) }
 
                 Local0 = TNWH()
+                If (Local0 != 0) { Return (Local0) }
+
+                Local0 = TCTN()
                 If (Local0 != 0) { Return (Local0) }
 
                 Return (0)

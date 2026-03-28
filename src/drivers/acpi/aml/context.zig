@@ -63,6 +63,8 @@ pub const MethodFrame = struct {
     dynamic_count: u8 = 0,
     /// Set to true when a DefBreak (BreakOp 0xA5, §20.2.5.3) is pending.
     break_pending: bool = false,
+    /// Set to true when a DefContinue (ContinueOp 0x9F, §20.2.5.3) is pending.
+    continue_pending: bool = false,
 
     /// Track a dynamically created namespace node for cleanup on method exit.
     /// Implements the §5.5.2.3 requirement that method-scoped objects are

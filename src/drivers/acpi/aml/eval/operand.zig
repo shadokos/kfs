@@ -251,44 +251,34 @@ pub fn eval_operand(ectx: *EvalContext) Error!Object {
             return convert.eval_to_decimal_string(ectx);
         },
 
-        // -- Concat / ConcatRes: skip for now (§20.2.5.4) --
-        opcodes.CONCAT_OP, opcodes.CONCAT_RES_OP => {
+        // -- Concat (§20.2.5.4) --
+        opcodes.CONCAT_OP => {
             _ = ectx.stream.read_byte();
-            const a = try eval_operand(ectx);
-            _ = try eval_operand(ectx);
-            skip.skip_target(ectx.stream);
-            return a;
+            return convert.eval_concat(ectx);
         },
 
-        // -- Match: skip for now (§20.2.5.4) --
+        // -- ConcatRes (§20.2.5.4) --
+        opcodes.CONCAT_RES_OP => {
+            _ = ectx.stream.read_byte();
+            return convert.eval_concat_res(ectx);
+        },
+
+        // -- Match (§20.2.5.4) --
         opcodes.MATCH_OP => {
             _ = ectx.stream.read_byte();
-            skip.skip_term_arg(ectx.stream); // SearchPkg
-            _ = ectx.stream.read_byte(); // MatchOpcode1
-            skip.skip_term_arg(ectx.stream); // Operand1
-            _ = ectx.stream.read_byte(); // MatchOpcode2
-            skip.skip_term_arg(ectx.stream); // Operand2
-            skip.skip_term_arg(ectx.stream); // StartIndex
-            return .{ .integer = 0xFFFFFFFF }; // ONES = not found
+            return misc.eval_match(ectx);
         },
 
-        // -- Mid: skip for now (§20.2.5.4) --
+        // -- Mid (§20.2.5.4) --
         opcodes.MID_OP => {
             _ = ectx.stream.read_byte();
-            const obj = try eval_operand(ectx);
-            _ = try eval_operand(ectx); // index
-            _ = try eval_operand(ectx); // length
-            skip.skip_target(ectx.stream);
-            return obj;
+            return convert.eval_mid(ectx);
         },
 
         // -- ToString (§20.2.5.4) --
         opcodes.TO_STRING_OP => {
             _ = ectx.stream.read_byte();
-            const obj = try eval_operand(ectx);
-            _ = try eval_operand(ectx); // LengthArg
-            skip.skip_target(ectx.stream);
-            return obj;
+            return convert.eval_to_string(ectx);
         },
 
         // -- Extended prefix (§20.3 Table 20.2) --
@@ -321,11 +311,11 @@ fn eval_ext_operand(ectx: *EvalContext) Error!Object {
         // TimerOp (§20.2.5.4): simplified, return 0
         opcodes.EXT_TIMER_OP => return .{ .integer = 0 },
 
-        // DefCondRefOf (§20.2.5.4): SuperName Target -> always returns false for now
+        // DefCondRefOf (§20.2.5.4): SuperName Target
+        // Returns 0xFFFFFFFF (True) if the object exists, 0 (False) otherwise.
+        // If True, stores the object into Target.
         opcodes.EXT_COND_REF_OF_OP => {
-            skip.skip_super_name(ectx.stream);
-            skip.skip_target(ectx.stream);
-            return .{ .integer = 0 };
+            return eval_cond_ref_of(ectx);
         },
 
         // DefAcquire (§20.2.5.4): MutexObject Timeout -> always succeeds (single-threaded)
@@ -341,4 +331,74 @@ fn eval_ext_operand(ectx: *EvalContext) Error!Object {
 
         else => return .uninitialized,
     }
+}
+
+/// Evaluate DefCondRefOf (§20.2.5.4, ExtOpPrefix 0x12).
+/// CondRefOf SuperName Target
+/// Checks whether the named object exists. If it does, stores its value
+/// into Target and returns True (0xFFFFFFFF). Otherwise returns False (0).
+fn eval_cond_ref_of(ectx: *EvalContext) Error!Object {
+    const frame = ectx.ctx.current() orelse {
+        skip.skip_super_name(ectx.stream);
+        skip.skip_target(ectx.stream);
+        return .{ .integer = 0 };
+    };
+
+    const b = ectx.stream.peek() orelse {
+        skip.skip_target(ectx.stream);
+        return .{ .integer = 0 };
+    };
+
+    // LocalObj
+    if (b >= opcodes.LOCAL0 and b <= opcodes.LOCAL7) {
+        _ = ectx.stream.read_byte();
+        const idx = b - opcodes.LOCAL0;
+        const obj = frame.locals[idx];
+        if (obj != .uninitialized) {
+            try store.write_target(ectx, obj);
+            return .{ .integer = 0xFFFFFFFF };
+        }
+        skip.skip_target(ectx.stream);
+        return .{ .integer = 0 };
+    }
+
+    // ArgObj
+    if (b >= opcodes.ARG0 and b <= opcodes.ARG6) {
+        _ = ectx.stream.read_byte();
+        const idx = b - opcodes.ARG0;
+        const obj = frame.args[idx];
+        if (obj != .uninitialized) {
+            try store.write_target(ectx, obj);
+            return .{ .integer = 0xFFFFFFFF };
+        }
+        skip.skip_target(ectx.stream);
+        return .{ .integer = 0 };
+    }
+
+    // NameString: resolve in namespace
+    if (path_mod.is_name_start(b)) {
+        const parsed = path_mod.parse(
+            ectx.alloc,
+            ectx.stream.data[ectx.stream.pos..],
+        ) catch {
+            skip.skip_super_name(ectx.stream);
+            skip.skip_target(ectx.stream);
+            return .{ .integer = 0 };
+        };
+        if (parsed) |p| {
+            defer p.deinit(ectx.alloc);
+            ectx.stream.pos += p.bytes_consumed;
+            if (ectx.ns.resolve(frame.scope, &p)) |node| {
+                try store.write_target(ectx, node.object);
+                return .{ .integer = 0xFFFFFFFF };
+            }
+        }
+        skip.skip_target(ectx.stream);
+        return .{ .integer = 0 };
+    }
+
+    // Fallback: skip unknown SuperName
+    skip.skip_super_name(ectx.stream);
+    skip.skip_target(ectx.stream);
+    return .{ .integer = 0 };
 }

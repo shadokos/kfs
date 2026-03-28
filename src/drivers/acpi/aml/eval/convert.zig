@@ -172,6 +172,188 @@ pub fn eval_to_decimal_string(ectx: *EvalContext) Error!Object {
     return result;
 }
 
+/// DefConcat := ConcatOp Data1 Data2 Target (§19.6.12).
+/// Type of Data1 determines result type:
+///   Integer + any → 8-byte buffer (both as 4-byte LE).
+///   String  + any → concatenated string (Data2 converted to string).
+///   Buffer  + any → concatenated buffer (Data2 converted to buffer).
+pub fn eval_concat(ectx: *EvalContext) Error!Object {
+    const a = try eval_operand(ectx);
+    const b = try eval_operand(ectx);
+
+    const result: Object = switch (a) {
+        .integer => blk: {
+            const a_val: u32 = @truncate(integer.to_int(a));
+            const b_val: u32 = @truncate(integer.to_int(b));
+            const buf = osl.kmalloc(u8, 8) orelse return Error.out_of_nodes;
+            buf[0] = @truncate(a_val);
+            buf[1] = @truncate(a_val >> 8);
+            buf[2] = @truncate(a_val >> 16);
+            buf[3] = @truncate(a_val >> 24);
+            buf[4] = @truncate(b_val);
+            buf[5] = @truncate(b_val >> 8);
+            buf[6] = @truncate(b_val >> 16);
+            buf[7] = @truncate(b_val >> 24);
+            break :blk .{ .buffer = .{ .data = buf[0..8] } };
+        },
+        .string => |s1| blk: {
+            const s2: []const u8 = switch (b) {
+                .string => |s| s,
+                .integer => |v| i2s: {
+                    var tmp: [10]u8 = undefined;
+                    const len = fmt_u32(&tmp, @truncate(v));
+                    const heap = osl.kmalloc(u8, len) orelse break :i2s "";
+                    @memcpy(heap[0..len], tmp[0..len]);
+                    break :i2s heap[0..len];
+                },
+                .buffer => |b2| b2.data,
+                else => "",
+            };
+            const total = s1.len + s2.len;
+            if (total == 0) break :blk .{ .string = "" };
+            const buf = osl.kmalloc(u8, total) orelse return Error.out_of_nodes;
+            if (s1.len > 0) @memcpy(buf[0..s1.len], s1);
+            if (s2.len > 0) @memcpy(buf[s1.len..total], s2);
+            break :blk .{ .string = buf[0..total] };
+        },
+        .buffer => |b1| blk: {
+            const b2_data: []const u8 = switch (b) {
+                .buffer => |b2| b2.data,
+                .integer => |v| i2b: {
+                    const heap = osl.kmalloc(u8, 4) orelse break :i2b &[_]u8{};
+                    const val: u32 = @truncate(v);
+                    heap[0] = @truncate(val);
+                    heap[1] = @truncate(val >> 8);
+                    heap[2] = @truncate(val >> 16);
+                    heap[3] = @truncate(val >> 24);
+                    break :i2b heap[0..4];
+                },
+                .string => |s| s,
+                else => &[_]u8{},
+            };
+            const total = b1.data.len + b2_data.len;
+            if (total == 0) break :blk .{ .buffer = .{ .data = &.{} } };
+            const buf = osl.kmalloc(u8, total) orelse return Error.out_of_nodes;
+            if (b1.data.len > 0) @memcpy(buf[0..b1.data.len], b1.data);
+            if (b2_data.len > 0) @memcpy(buf[b1.data.len..total], b2_data);
+            break :blk .{ .buffer = .{ .data = buf[0..total] } };
+        },
+        else => a,
+    };
+    try store.write_target(ectx, result);
+    return result;
+}
+
+/// DefConcatRes := ConcatResOp BufData BufData Target (§19.6.13).
+/// Concatenates two resource template buffers, stripping the End Tag
+/// (0x79 + checksum byte) from the first before joining.
+pub fn eval_concat_res(ectx: *EvalContext) Error!Object {
+    const a = try eval_operand(ectx);
+    const b = try eval_operand(ectx);
+
+    const a_data: []const u8 = if (a == .buffer) a.buffer.data else &[_]u8{};
+    const b_data: []const u8 = if (b == .buffer) b.buffer.data else &[_]u8{};
+
+    // Strip End Tag (0x79 + 1 checksum byte) from first buffer
+    var a_len = a_data.len;
+    if (a_len >= 2 and a_data[a_len - 2] == 0x79) a_len -= 2;
+
+    const total = a_len + b_data.len;
+    if (total == 0) {
+        const result: Object = .{ .buffer = .{ .data = &.{} } };
+        try store.write_target(ectx, result);
+        return result;
+    }
+    const buf = osl.kmalloc(u8, total) orelse return Error.out_of_nodes;
+    if (a_len > 0) @memcpy(buf[0..a_len], a_data[0..a_len]);
+    if (b_data.len > 0) @memcpy(buf[a_len..total], b_data);
+
+    const result: Object = .{ .buffer = .{ .data = buf[0..total] } };
+    try store.write_target(ectx, result);
+    return result;
+}
+
+/// DefMid := MidOp MidObj TermArg TermArg Target (§19.6.85).
+/// Extracts a substring or sub-buffer starting at Index for Length bytes/chars.
+pub fn eval_mid(ectx: *EvalContext) Error!Object {
+    const source = try eval_operand(ectx);
+    const index = @as(usize, @intCast(integer.to_int(try eval_operand(ectx))));
+    const length = @as(usize, @intCast(integer.to_int(try eval_operand(ectx))));
+
+    const result: Object = switch (source) {
+        .string => |s| blk: {
+            if (index >= s.len) break :blk .{ .string = "" };
+            const actual_len = @min(length, s.len - index);
+            if (actual_len == 0) break :blk .{ .string = "" };
+            const buf = osl.kmalloc(u8, actual_len) orelse return Error.out_of_nodes;
+            @memcpy(buf[0..actual_len], s[index..][0..actual_len]);
+            break :blk .{ .string = buf[0..actual_len] };
+        },
+        .buffer => |b| blk: {
+            if (index >= b.data.len) break :blk .{ .buffer = .{ .data = &.{} } };
+            const actual_len = @min(length, b.data.len - index);
+            if (actual_len == 0) break :blk .{ .buffer = .{ .data = &.{} } };
+            const buf = osl.kmalloc(u8, actual_len) orelse return Error.out_of_nodes;
+            @memcpy(buf[0..actual_len], b.data[index..][0..actual_len]);
+            break :blk .{ .buffer = .{ .data = buf[0..actual_len] } };
+        },
+        else => source,
+    };
+    try store.write_target(ectx, result);
+    return result;
+}
+
+/// DefToString := ToStringOp TermArg LengthArg Target (§19.6.141).
+/// Converts a Buffer to a String, up to LengthArg bytes. Null bytes terminate.
+pub fn eval_to_string(ectx: *EvalContext) Error!Object {
+    const source = try eval_operand(ectx);
+    const length_arg = integer.to_int(try eval_operand(ectx));
+
+    const result: Object = switch (source) {
+        .buffer => |b| blk: {
+            const max_len: usize = if (length_arg >= 0xFFFFFFFF)
+                b.data.len
+            else
+                @min(@as(usize, @intCast(length_arg)), b.data.len);
+            // Stop at null byte
+            var actual_len: usize = 0;
+            while (actual_len < max_len and b.data[actual_len] != 0) : (actual_len += 1) {}
+            if (actual_len == 0) break :blk .{ .string = "" };
+            const buf = osl.kmalloc(u8, actual_len) orelse return Error.out_of_nodes;
+            @memcpy(buf[0..actual_len], b.data[0..actual_len]);
+            break :blk .{ .string = buf[0..actual_len] };
+        },
+        .string => source,
+        else => source,
+    };
+    try store.write_target(ectx, result);
+    return result;
+}
+
+/// Format a u32 as a decimal string into buf. Returns the number of chars written.
+fn fmt_u32(buf: *[10]u8, val: u32) usize {
+    if (val == 0) {
+        buf[0] = '0';
+        return 1;
+    }
+    var n = val;
+    var len: usize = 0;
+    while (n > 0) : (len += 1) {
+        buf[len] = @truncate('0' + (n % 10));
+        n /= 10;
+    }
+    var lo: usize = 0;
+    var hi: usize = len - 1;
+    while (lo < hi) {
+        const t = buf[lo];
+        buf[lo] = buf[hi];
+        buf[hi] = t;
+        lo += 1;
+        hi -= 1;
+    }
+    return len;
+}
+
 /// DefFromBCD (§20.2.5.4, ExtOpPrefix 0x28). BCDValue Target.
 pub fn eval_from_bcd(ectx: *EvalContext) Error!Object {
     const bcd = integer.to_int(try eval_operand(ectx));

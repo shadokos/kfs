@@ -105,14 +105,18 @@ pub fn eval_while(ectx: *EvalContext) Error!?Object {
                 return ret;
             }
             const frame = ectx.ctx.current() orelse break;
-            if (frame.break_pending) break;
+            if (frame.break_pending or frame.continue_pending) break;
         }
 
-        // Check break flag
+        // Check break/continue flags
         if (ectx.ctx.current()) |frame| {
             if (frame.break_pending) {
                 frame.break_pending = false;
                 break;
+            }
+            if (frame.continue_pending) {
+                frame.continue_pending = false;
+                // Continue: skip to next iteration (predicate re-eval)
             }
         }
     }
@@ -141,10 +145,11 @@ pub fn eval_break(ectx: *EvalContext) Error!?Object {
 }
 
 /// DefContinue := ContinueOp (§20.2.5.3, ContinueOp = 0x9F).
-/// Not commonly used; treated as a no-op break (the While loop restarts).
+/// Skips the rest of the current While body and restarts at the predicate.
 pub fn eval_continue(ectx: *EvalContext) Error!?Object {
-    // Continue just exits the current iteration; the While loop re-evaluates.
-    _ = ectx;
+    if (ectx.ctx.current()) |frame| {
+        frame.continue_pending = true;
+    }
     return null;
 }
 

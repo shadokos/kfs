@@ -15,13 +15,15 @@ AML_OUT    := zig-out/aml-tests
 ASL_SRCS   := \
 	$(AML_SRC)/ops.asl \
 	$(AML_SRC)/test_arith.asl \
+	$(AML_SRC)/test_conv.asl \
 	$(AML_SRC)/test_data.asl \
 	$(AML_SRC)/test_flow.asl \
 	$(AML_SRC)/test_hw.asl \
 	$(AML_SRC)/test_logic.asl \
 	$(AML_SRC)/test_method.asl \
 	$(AML_SRC)/test_names.asl \
-	$(AML_SRC)/test_store.asl
+	$(AML_SRC)/test_store.asl \
+	$(AML_SRC)/test_compare.asl
 
 AML_OBJS   := $(patsubst $(AML_SRC)/%.asl,$(AML_OUT)/%.aml,$(ASL_SRCS))
 
