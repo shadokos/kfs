@@ -86,9 +86,13 @@ pub fn eval_term(ectx: *EvalContext) Error!?Object {
         // -- DefNotify (§20.2.5.3): NotifyOp NotifyObject NotifyValue --
         opcodes.NOTIFY_OP => {
             _ = ectx.stream.read_byte();
-            _ = try operand.eval_operand(ectx); // NotifyObject
+            const target_node = resolve_notify_object(ectx);
             const val = integer.to_int(try operand.eval_operand(ectx));
-            log.debug("Notify: value={d}", .{val});
+            if (target_node) |node| {
+                @import("../../events.zig").dispatch_notify(ectx.ns, node, val);
+            } else {
+                log.debug("Notify: value={d} (unresolved target)", .{val});
+            }
             return null;
         },
 
@@ -476,4 +480,36 @@ fn eval_runtime_create_field(
             }
         }
     }
+}
+
+/// Resolve a NotifyObject (SuperName) to a namespace Node without
+/// evaluating it as an operand. NotifyObject := SuperName => Device |
+/// ThermalZone | Processor (§20.2.5.3).
+fn resolve_notify_object(ectx: *EvalContext) ?*@import("../../namespace/node.zig").Node {
+    const b = ectx.stream.peek() orelse return null;
+    const frame = ectx.ctx.current() orelse return null;
+
+    // LocalObj / ArgObj: evaluate operand, but we can't get a node from these
+    if ((b >= opcodes.LOCAL0 and b <= opcodes.LOCAL7) or
+        (b >= opcodes.ARG0 and b <= opcodes.ARG6))
+    {
+        _ = operand.eval_operand(ectx) catch {};
+        return null;
+    }
+
+    // NameString: resolve to a node in the namespace
+    if (path_mod.is_name_start(b)) {
+        const parsed = path_mod.parse(
+            ectx.alloc,
+            ectx.stream.data[ectx.stream.pos..],
+        ) catch return null;
+        const p = parsed orelse return null;
+        defer p.deinit(ectx.alloc);
+        ectx.stream.pos += p.bytes_consumed;
+        return ectx.ns.resolve(frame.scope, &p);
+    }
+
+    // Fallback: evaluate as operand (won't give us a node)
+    _ = operand.eval_operand(ectx) catch {};
+    return null;
 }

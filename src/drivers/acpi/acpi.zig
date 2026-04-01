@@ -7,6 +7,7 @@ const power = @import("power.zig");
 const aml = @import("aml/aml.zig");
 const executor = @import("aml/executor.zig");
 const device = @import("device.zig");
+const events = @import("events.zig");
 const aml_test = @import("aml_test.zig");
 
 const rsdp_module = @import("tables/rsdp.zig");
@@ -136,8 +137,17 @@ pub fn init() void {
     // 12. Enumerate ACPI devices
     device.enumerate(&namespace.?);
 
+    // 11. Initialize ACPI event subsystem (GPE + fixed events + SCI)
+    events.init(&namespace.?);
+
     initialized = true;
     log.info("enabled", .{});
+}
+
+/// Start the ACPI event worker task.
+/// Must be called after the scheduler and task caches are initialized.
+pub fn start_event_worker() void {
+    events.start_worker();
 }
 
 /// Shut down the system (S5).

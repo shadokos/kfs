@@ -57,18 +57,18 @@ pub fn eval_index(ectx: *EvalContext) Error!Object {
 /// SimpleName := NameString | ArgObj | LocalObj
 ///
 /// For namespace objects, returns a .reference pointing to the node's object.
-/// For locals and args, returns the value directly (safe — no dangling pointers).
+/// For locals and args, returns the value directly (safe, no dangling pointers).
 pub fn eval_ref_of(ectx: *EvalContext) Error!Object {
     const b = ectx.stream.peek() orelse return .uninitialized;
     const frame = ectx.ctx.current() orelse return .uninitialized;
 
-    // LocalObj (§20.2.6.2) — return value (pointer would dangle after method exit)
+    // LocalObj (§20.2.6.2), return value (pointer would dangle after method exit)
     if (b >= opcodes.LOCAL0 and b <= opcodes.LOCAL7) {
         _ = ectx.stream.read_byte();
         return frame.locals[b - opcodes.LOCAL0];
     }
 
-    // ArgObj (§20.2.6.1) — return value
+    // ArgObj (§20.2.6.1), return value
     if (b >= opcodes.ARG0 and b <= opcodes.ARG6) {
         _ = ectx.stream.read_byte();
         return frame.args[b - opcodes.ARG0];

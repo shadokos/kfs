@@ -26,7 +26,8 @@ ASL_SRCS   := \
 	$(AML_SRC)/test_store.asl \
 	$(AML_SRC)/test_compare.asl \
 	$(AML_SRC)/test_ref2.asl \
-	$(AML_SRC)/test_field2.asl
+	$(AML_SRC)/test_field2.asl \
+	$(AML_SRC)/test_notify.asl
 
 AML_OBJS   := $(patsubst $(AML_SRC)/%.asl,$(AML_OUT)/%.aml,$(ASL_SRCS))
 

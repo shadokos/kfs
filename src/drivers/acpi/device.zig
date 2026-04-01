@@ -74,7 +74,7 @@ pub fn enumerate(ns: *Namespace) void {
     device_count = 0;
     walk_devices(ns, ns.root);
     enumerated = true;
-    log.info("Enumerated {d} devices", .{device_count});
+    log.debug("Enumerated {d} devices", .{device_count});
 }
 
 /// Get the list of discovered devices.

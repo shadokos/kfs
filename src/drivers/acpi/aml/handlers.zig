@@ -57,6 +57,7 @@ const ext_handler_modules = .{
     @import("handlers/thermal_zone.zig"),
     @import("handlers/power_resource.zig"),
     @import("handlers/mutex.zig"),
+    @import("handlers/event.zig"),
 };
 
 /// Try to dispatch a simple (single-byte) opcode.

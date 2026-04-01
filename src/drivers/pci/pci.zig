@@ -258,6 +258,71 @@ pub fn init() !void {
     logger.info("PCI driver initialized, {} devices found", .{devices.items.len});
 }
 
+/// Rescan all PCI buses to discover newly hotplugged devices and remove ejected ones.
+pub fn rescan() !void {
+    var added: usize = 0;
+    var removed: usize = 0;
+
+    // Phase 1: Remove devices that no longer respond (ejected)
+    var i: usize = 0;
+    while (i < devices.items.len) {
+        const dev = devices.items[i];
+        const vendor_id = readConfig(u16, dev.bus, dev.device, dev.function, pci_config.OFFSET_VENDOR_ID);
+        if (vendor_id == pci_config.DEVICE_NOT_PRESENT) {
+            logger.debug("PCI device {d}:{d}.{d} removed (vendor=0x{X:0>4})", .{
+                dev.bus, dev.device, dev.function, dev.vendor_id,
+            });
+            _ = devices.orderedRemove(i);
+            removed += 1;
+            // Don't increment i, the next element shifted into this position
+        } else {
+            i += 1;
+        }
+    }
+
+    // Phase 2: Add newly appeared devices
+    for (0..pci_config.MAX_BUSES) |bus| {
+        for (0..pci_config.MAX_DEVICES_PER_BUS) |dev| {
+            const vendor_id = readConfig(u16, @intCast(bus), @intCast(dev), 0, pci_config.OFFSET_VENDOR_ID);
+            if (vendor_id == pci_config.DEVICE_NOT_PRESENT) continue;
+
+            const header_type = readConfig(u8, @intCast(bus), @intCast(dev), 0, pci_config.OFFSET_HEADER_TYPE);
+            const is_multifunction = (header_type & pci_config.MULTIFUNCTION_DEVICE_BIT) != 0;
+            const max_func: u4 = if (is_multifunction) pci_config.MAX_FUNCTIONS_PER_DEVICE else 1;
+
+            for (0..max_func) |func| {
+                const fv = readConfig(u16, @intCast(bus), @intCast(dev), @intCast(func), pci_config.OFFSET_VENDOR_ID);
+                if (fv == pci_config.DEVICE_NOT_PRESENT) continue;
+
+                // Skip if already known
+                if (get_device(@intCast(bus), @intCast(dev), @intCast(func)) != null) continue;
+
+                try scanFunction(@intCast(bus), @intCast(dev), @intCast(func));
+                added += 1;
+            }
+        }
+    }
+
+    if (added > 0 or removed > 0) {
+        logger.info("PCI rescan: +{d} added, -{d} removed", .{ added, removed });
+    } else {
+        logger.debug("PCI rescan: no changes", .{});
+    }
+}
+
+/// Remove a specific PCI device by BDF address.
+/// Returns true if the device was found and removed.
+pub fn remove_device(bus: u8, device: u5, function: u3) bool {
+    for (devices.items, 0..) |dev, idx| {
+        if (dev.bus == bus and dev.device == device and dev.function == function) {
+            logger.debug("Removing PCI device {d}:{d}.{d}", .{ bus, device, function });
+            _ = devices.orderedRemove(idx);
+            return true;
+        }
+    }
+    return false;
+}
+
 /// Clean up PCI driver resources
 pub fn deinit() void {
     devices.deinit();

@@ -5,7 +5,7 @@
 /// normal method execution and dispatched here.
 ///
 /// Currently implemented:
-///   \_OSI  — Operating System Interface query (§5.7.2)
+///   \_OSI: Operating System Interface query (§5.7.2)
 const std = @import("std");
 const objects = @import("../objects.zig");
 const node_mod = @import("../../namespace/node.zig");
