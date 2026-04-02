@@ -262,13 +262,81 @@ pub fn print_eval(path_str: []const u8, args: []const Object, writer: std.io.Any
         writer.print("Eval error: {s}\n", .{@errorName(err)}) catch {};
         return;
     };
-    switch (result) {
-        .integer => |v| writer.print("Integer: 0x{x} ({d})\n", .{ v, v }) catch {},
-        .string => |s| writer.print("String: \"{s}\"\n", .{s}) catch {},
-        .package => |p| writer.print("Package: {d} elements\n", .{p.elements.len}) catch {},
-        .buffer => |b| writer.print("Buffer: {d} bytes\n", .{b.data.len}) catch {},
-        .method => writer.print("Method (not evaluated)\n", .{}) catch {},
-        .uninitialized => writer.print("Uninitialized\n", .{}) catch {},
-        else => writer.print("{s}\n", .{@tagName(result)}) catch {},
+    print_object(result, writer, 0);
+}
+
+/// Pretty-print an AML object with indentation for nested structures.
+fn print_object(obj: Object, writer: std.io.AnyWriter, indent: usize) void {
+    const spaces = "                                ";
+    const prefix = spaces[0..@min(indent * 2, spaces.len)];
+
+    switch (obj) {
+        .integer => |v| writer.print("{s}Integer: 0x{x} ({d})\n", .{ prefix, v, v }) catch {},
+        .string => |s| writer.print("{s}String: \"{s}\"\n", .{ prefix, s }) catch {},
+        .buffer => |b| {
+            writer.print("{s}Buffer ({d} bytes):", .{ prefix, b.data.len }) catch {};
+            if (b.data.len <= 64) {
+                // Short buffer: inline hex dump
+                for (b.data) |byte| {
+                    writer.print(" {X:0>2}", .{byte}) catch {};
+                }
+                writer.print("\n", .{}) catch {};
+            } else {
+                // Long buffer: multi-line hex dump
+                writer.print("\n", .{}) catch {};
+                var i: usize = 0;
+                while (i < b.data.len) : (i += 16) {
+                    writer.print("{s}  {X:0>4}:", .{ prefix, i }) catch {};
+                    const end = @min(i + 16, b.data.len);
+                    for (b.data[i..end]) |byte| {
+                        writer.print(" {X:0>2}", .{byte}) catch {};
+                    }
+                    writer.print("\n", .{}) catch {};
+                    if (i >= 128) {
+                        writer.print("{s}  ... ({d} more bytes)\n", .{ prefix, b.data.len - i - 16 }) catch {};
+                        break;
+                    }
+                }
+            }
+        },
+        .package => |p| {
+            writer.print("{s}Package ({d} elements):\n", .{ prefix, p.elements.len }) catch {};
+            for (p.elements, 0..) |elem, i| {
+                writer.print("{s}  [{d}] ", .{ prefix, i }) catch {};
+                // Print element inline if simple, nested if complex
+                switch (elem) {
+                    .integer => |v| writer.print("Integer: 0x{x}\n", .{v}) catch {},
+                    .string => |s| writer.print("String: \"{s}\"\n", .{s}) catch {},
+                    .package => {
+                        writer.print("Package:\n", .{}) catch {};
+                        print_object(elem, writer, indent + 2);
+                    },
+                    .buffer => |b| writer.print("Buffer ({d} bytes)\n", .{b.data.len}) catch {},
+                    .uninitialized => writer.print("(uninitialized)\n", .{}) catch {},
+                    else => writer.print("{s}\n", .{@tagName(elem)}) catch {},
+                }
+                // Limit output for very large packages
+                if (i >= 31 and p.elements.len > 32) {
+                    writer.print("{s}  ... ({d} more elements)\n", .{ prefix, p.elements.len - i - 1 }) catch {};
+                    break;
+                }
+            }
+        },
+        .op_region => |r| writer.print("{s}OperationRegion: {s} offset=0x{x} len=0x{x}\n", .{
+            prefix, @tagName(r.space), r.offset, r.length,
+        }) catch {},
+        .field_unit => |f| writer.print("{s}FieldUnit: region={s} bit_offset={d} bit_width={d}\n", .{
+            prefix, &f.region_name, f.bit_offset, f.bit_width,
+        }) catch {},
+        .method => |m| writer.print("{s}Method: {d} args, {d} bytes\n", .{
+            prefix, m.arg_count, m.code.len,
+        }) catch {},
+        .device => writer.print("{s}Device\n", .{prefix}) catch {},
+        .reference => |r| {
+            writer.print("{s}Reference -> ", .{prefix}) catch {};
+            print_object(r.*, writer, 0);
+        },
+        .uninitialized => writer.print("{s}Uninitialized\n", .{prefix}) catch {},
+        else => writer.print("{s}{s}\n", .{ prefix, @tagName(obj) }) catch {},
     }
 }
