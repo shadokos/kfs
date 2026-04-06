@@ -22,6 +22,7 @@ header_type: HeaderType,
 bars: [pci_config.MAX_BARS]u32, // Base Address Registers
 irq_line: u8,
 irq_pin: u8,
+gsi: ?u32 = null,
 
 const Self = @This();
 
@@ -92,6 +93,7 @@ pub fn printInfo(self: *const Self, writer: std.io.AnyWriter) void {
     _ = std.fmt.format(writer, " - Revision: 0x{X:0>2}\n", .{self.revision}) catch {};
     _ = std.fmt.format(writer, " - IRQ Line: {}\n", .{self.irq_line}) catch {};
     _ = std.fmt.format(writer, " - IRQ Pin: {}\n", .{self.irq_pin}) catch {};
+    _ = std.fmt.format(writer, " - GSI (ACPI): {?}\n", .{self.gsi}) catch {};
     _ = std.fmt.format(writer, " - Header Type: 0x{X:0>2}\n", .{@as(u8, @bitCast(self.header_type))}) catch {};
     _ = std.fmt.format(writer, " - Multifunction: {}\n", .{self.header_type.multi_function}) catch {};
 

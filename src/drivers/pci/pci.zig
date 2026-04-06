@@ -114,7 +114,7 @@ fn scanFunction(bus: BusId, device: DeviceId, function: FunctionId) !void {
         bars[5] = header.bar5;
     }
 
-    const pci_device = PCIDevice{
+    var pci_device = PCIDevice{
         .bus = bus,
         .device = device,
         .function = function,
@@ -129,6 +129,20 @@ fn scanFunction(bus: BusId, device: DeviceId, function: FunctionId) !void {
         .irq_line = header.interrupt_line,
         .irq_pin = header.interrupt_pin,
     };
+
+    // Resolve GSI from ACPI _PRT (interrupt_pin is 1-based: 1=INTA)
+    if (header.interrupt_pin >= 1 and header.interrupt_pin <= 4) {
+        const acpi = @import("../acpi/acpi.zig");
+        if (acpi.get_pci_interrupt(bus, device, header.interrupt_pin - 1)) |gsi| {
+            pci_device.gsi = gsi;
+            // Write GSI back to interrupt_line register for legacy drivers
+            writeConfig(u8, bus, device, function, pci_config.OFFSET_INTERRUPT_LINE, @truncate(gsi));
+            pci_device.irq_line = @truncate(gsi);
+            logger.debug("PRT lookup: bus={d} dev={d} pin={d} -> gsi={d}", .{
+                bus, device, header.interrupt_pin - 1, gsi,
+            });
+        }
+    }
 
     try devices.append(allocator, pci_device);
 
