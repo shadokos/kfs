@@ -572,6 +572,11 @@ pub fn outb(_: anytype, args: [][]u8) CmdError!void {
     cpu.outb(port, '\n');
 }
 
+/// Print PCI interrupt routing table (_PRT).
+pub fn acpi_prt(shell: anytype, _: [][]u8) CmdError!void {
+    @import("../../drivers/acpi/acpi.zig").print_prt(shell.writer);
+}
+
 /// Run AML interpreter test suites (from QEMU-loaded test SSDTs).
 pub fn amltest(shell: anytype, _: [][]u8) CmdError!void {
     const acpi = @import("../../drivers/acpi/acpi.zig");

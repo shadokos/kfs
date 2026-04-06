@@ -8,6 +8,7 @@ const aml = @import("aml/aml.zig");
 const executor = @import("aml/executor.zig");
 const device = @import("device.zig");
 const events = @import("events.zig");
+const prt = @import("prt.zig");
 const aml_test = @import("aml_test.zig");
 
 const rsdp_module = @import("tables/rsdp.zig");
@@ -137,7 +138,10 @@ pub fn init() void {
     // 12. Enumerate ACPI devices
     device.enumerate(&namespace.?);
 
-    // 11. Initialize ACPI event subsystem (GPE + fixed events + SCI)
+    // 13. Parse PCI interrupt routing tables (_PRT)
+    prt.init(&namespace.?);
+
+    // 14. Initialize ACPI event subsystem (GPE + fixed events + SCI)
     events.init(&namespace.?);
 
     initialized = true;
@@ -242,6 +246,22 @@ pub fn run_ns_aml_tests(writer: std.io.AnyWriter) usize {
         return 1;
     }
     return aml_test.run_ns_tests(&namespace.?, writer);
+}
+
+/// Get the PCI interrupt (GSI) for a device from the ACPI _PRT.
+/// pin is 0-based (0=INTA, 1=INTB, 2=INTC, 3=INTD).
+pub fn get_pci_interrupt(bus: u8, dev: u8, pin: u8) ?u32 {
+    if (!namespace_initialized) return null;
+    return prt.get_interrupt(&namespace.?, bus, dev, pin);
+}
+
+/// Print PCI interrupt routing table (for shell builtin).
+pub fn print_prt(writer: std.io.AnyWriter) void {
+    if (!namespace_initialized) {
+        writer.print("ACPI namespace not initialized\n", .{}) catch {};
+        return;
+    }
+    prt.printWithNs(writer, &namespace.?);
 }
 
 /// Evaluate an AML path and print the result (for shell builtin).
