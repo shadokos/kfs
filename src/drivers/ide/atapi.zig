@@ -43,8 +43,7 @@ fn issueRead10(
     const base = channel.base;
 
     // 1. Select the ATAPI device
-    cpu.outb(base + constants.ATA.REG_DEVICE, @bitCast(types.DeviceRegister.select(position)));
-    cpu.io_wait();
+    common.selectDevice(base, types.DeviceRegister.select(position));
 
     // 2. Wait for drive readiness
     _ = try common.waitForReady(base, 1000);
@@ -104,8 +103,7 @@ fn issueRead10(
 
 /// Get ATAPI drive capacity (improved version)
 fn getCapacity(channel: *const Channel, position: Channel.DrivePosition) !Capacity {
-    cpu.outb(channel.base + constants.ATA.REG_DEVICE, @bitCast(types.DeviceRegister.select(position)));
-    cpu.io_wait();
+    common.selectDevice(channel.base, types.DeviceRegister.select(position));
 
     _ = try common.waitForReady(channel.base, 1000);
 
@@ -191,8 +189,7 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
 /// Instead, we must check for a specific "Signature" in the Cylinder/LBA registers after a soft reset.
 pub fn detectDrive(channel: *const Channel, position: Channel.DrivePosition) ?DriveInfo {
     // 1. Select drive
-    cpu.outb(channel.base + constants.ATA.REG_DEVICE, @bitCast(types.DeviceRegister.select(position)));
-    cpu.io_wait();
+    common.selectDevice(channel.base, types.DeviceRegister.select(position));
 
     // 2. Send Software Reset (bit 2 of Control Register)
     // This resets the drive logic but keeps the configuration.

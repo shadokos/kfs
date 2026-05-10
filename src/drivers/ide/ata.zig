@@ -63,7 +63,7 @@ pub fn performPolling(op: *IDEOperation) IDEError!void {
         const lba32: u32 = @intCast(chunk_lba);
 
         // 1. Select the specific drive (Master/Slave) and set the top 4 bits of LBA
-        common.selectLBADevice(.ATA, op);
+        common.selectDevice(op.channel.base, types.DeviceRegister.ataLBA28(op.position, op.lba));
 
         // 2. Wait for the BUSY bit to clear before sending command parameters
         _ = try common.waitForReady(op.channel.base, 1000);
@@ -153,7 +153,7 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
 /// Sequence: SELECT -> RESET STATUS -> SEND IDENTIFY -> WAIT -> READ DATA
 pub fn detectDrive(channel: *const Channel, position: Channel.DrivePosition) ?DriveInfo {
     // 1. Select drive
-    cpu.outb(channel.base + constants.ATA.REG_DEVICE, @bitCast(types.DeviceRegister.select(position)));
+    common.selectDevice(channel.base, types.DeviceRegister.select(position));
 
     cpu.io_wait();
 
