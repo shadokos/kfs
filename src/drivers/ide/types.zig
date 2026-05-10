@@ -51,6 +51,28 @@ pub const Status = packed struct {
     busy: bool,
 };
 
+pub const DeviceRegister = packed struct(u8) {
+    lba_high: u4 = 0, // LBA bits 24-27 (ATA only)
+    dev: enum(u1) { Master = 0, Slave = 1 } = .Master,
+    _always1: u1 = 1,
+    lba: u1 = 0, // 1 = LBA mode (ATA), 0 = unused (ATAPI)
+    _always1b: u1 = 1,
+
+    pub fn ataLBA28(position: @import("channel.zig").DrivePosition, lba: u32) DeviceRegister {
+        return .{
+            .lba_high = @truncate(lba >> 24),
+            .dev = if (position == .Master) .Master else .Slave,
+            .lba = 1,
+        };
+    }
+
+    pub fn select(position: @import("channel.zig").DrivePosition) DeviceRegister {
+        return .{
+            .dev = if (position == .Master) .Master else .Slave,
+        };
+    }
+};
+
 pub const DriveType = enum {
     ATA,
     ATAPI,

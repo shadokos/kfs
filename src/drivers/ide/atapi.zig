@@ -13,71 +13,89 @@ const Capacity = types.Capacity;
 
 const logger = std.log.scoped(.ATAPI);
 
+const max_transfer_sectors = std.math.maxInt(u16);
+
 pub fn performPolling(op: *@import("ide.zig").IDEOperation) types.IDEError!void {
-    // 1. Select the ATAPI device (similar to ATA but with different flags)
-    common.selectLBADevice(.ATAPI, op);
+    const sector_size: u32 = 2048;
+    var remaining: u32 = op.count;
+    var lba: u32 = op.lba;
+    var buffer_offset: usize = 0;
+
+    while (remaining > 0) {
+        const chunk: u16 = @intCast(@min(remaining, max_transfer_sectors));
+        const chunk_bytes = @as(usize, chunk) * sector_size;
+
+        try issueRead10(op.channel, op.position, lba, chunk, op.buffer.read[buffer_offset..][0..chunk_bytes]);
+
+        remaining -= chunk;
+        lba += chunk;
+        buffer_offset += chunk_bytes;
+    }
+}
+
+fn issueRead10(
+    channel: *const Channel,
+    position: Channel.DrivePosition,
+    lba: u32,
+    count: u16,
+    buffer: []u8,
+) IDEError!void {
+    const base = channel.base;
+
+    // 1. Select the ATAPI device
+    cpu.outb(base + constants.ATA.REG_DEVICE, @bitCast(types.DeviceRegister.select(position)));
+    cpu.io_wait();
 
     // 2. Wait for drive readiness
-    _ = try common.waitForReady(op.channel.base, 1000);
+    _ = try common.waitForReady(base, 1000);
 
-    // 3. Prepare for PACKET command
-    // ATAPI uses the host's capabilities. We set features to 0 (no DMA, PIO mode).
-    // Specifically for ATAPI, LBA Mid/High registers specify the maximum byte count allowed for the transfer.
-    // Here we set it to max (0xFFFE/0xFFFF) to avoid truncation.
-    cpu.outb(op.channel.base + constants.ATA.REG_FEATURES, 0x00);
-    cpu.outb(op.channel.base + constants.ATA.REG_LBA_MID, 0xFE);
-    cpu.outb(op.channel.base + constants.ATA.REG_LBA_HIGH, 0xFF);
+    // 3. Prepare for PACKET command (PIO mode, max byte count)
+    cpu.outb(base + constants.ATA.REG_FEATURES, 0x00);
+    cpu.outb(base + constants.ATA.REG_LBA_MID, 0xFE);
+    cpu.outb(base + constants.ATA.REG_LBA_HIGH, 0xFF);
 
-    // 4. Send the PACKET command (0xA0)
-    // This tells the drive "I'm about to send you a SCSI-like command packet structure"
-    cpu.outb(op.channel.base + constants.ATA.REG_COMMAND, constants.ATA.CMD_PACKET);
+    // 4. Send the PACKET command
+    cpu.outb(base + constants.ATA.REG_COMMAND, constants.ATA.CMD_PACKET);
 
     // 5. Wait for the drive to accept the packet (DRQ set)
-    _ = try common.waitForData(op.channel.base, 1000);
+    _ = try common.waitForData(base, 1000);
 
-    // 6. Send the SCSI Command Packet (12 bytes)
-    // We construct a SCSI READ(10) command manually.
+    // 6. Send the SCSI READ(10) Command Packet (12 bytes)
     var packet = std.mem.zeroes(constants.SCSI.Read10);
     packet.opcode = constants.ATAPI.CMD_READ10;
-    packet.lba = std.mem.nativeToBig(u32, @intCast(op.lba));
-    packet.transfer_len = std.mem.nativeToBig(u16, @intCast(op.count));
+    packet.lba = std.mem.nativeToBig(u32, lba);
+    packet.transfer_len = std.mem.nativeToBig(u16, count);
 
-    // Send the 12 bytes of the packet as 6 words (16-bit writes)
     const packet_bytes = std.mem.asBytes(&packet);
-    cpu.outsw_bytes(op.channel.base + constants.ATA.REG_DATA, packet_bytes);
+    cpu.outsw_bytes(base + constants.ATA.REG_DATA, packet_bytes);
 
     // 7. Data Transfer Phase
     var bytes_read: usize = 0;
-    const expected_bytes = @as(usize, op.count) * 2048; // CD-ROM sectors are typically 2048 bytes
+    const expected_bytes: usize = @as(usize, count) * 2048;
 
     while (bytes_read < expected_bytes) {
-        // Wait for IRQ or polling status. DRQ indicates data is ready to be read.
-        // If BUSY clears and DRQ is missing, the transfer is over.
-        const status = try common.waitForDataOrCompletion(op.channel.base, 5000);
+        const status = try common.waitForDataOrCompletion(base, 5000);
         if (!status.drq) break;
 
-        // Read the actual size of the data chunk available from LBA Mid/High registers
-        const byte_count_low = cpu.inb(op.channel.base + constants.ATA.REG_LBA_MID);
-        const byte_count_high = cpu.inb(op.channel.base + constants.ATA.REG_LBA_HIGH);
+        const byte_count_low = cpu.inb(base + constants.ATA.REG_LBA_MID);
+        const byte_count_high = cpu.inb(base + constants.ATA.REG_LBA_HIGH);
         const byte_count = (@as(u16, byte_count_high) << 8) | byte_count_low;
 
         if (byte_count == 0) break;
 
-        // Sanity check preventing buffer overflow
         const bytes_to_read = @min(byte_count, expected_bytes - bytes_read);
 
-        // Read the chunk data
         const full_words = bytes_to_read / 2;
         const has_partial = bytes_to_read % 2 != 0;
 
-        if (bytes_read + full_words * 2 <= op.buffer.read.len) {
-            const data_slice = op.buffer.read[bytes_read..][0 .. full_words * 2];
-            cpu.insw_bytes(op.channel.base + constants.ATA.REG_DATA, data_slice);
+        if (bytes_read + full_words * 2 <= buffer.len) {
+            const data_slice = buffer[bytes_read..][0 .. full_words * 2];
+            cpu.insw_bytes(base + constants.ATA.REG_DATA, data_slice);
         }
 
-        if (has_partial and bytes_read + full_words * 2 < op.buffer.read.len) {
-            const word = cpu.inw(op.channel.base + constants.ATA.REG_DATA);
-            op.buffer.read[bytes_read + full_words * 2] = @truncate(word);
+        if (has_partial and bytes_read + full_words * 2 < buffer.len) {
+            const word = cpu.inw(base + constants.ATA.REG_DATA);
+            buffer[bytes_read + full_words * 2] = @truncate(word);
         }
 
         bytes_read += bytes_to_read;
@@ -86,8 +104,7 @@ pub fn performPolling(op: *@import("ide.zig").IDEOperation) types.IDEError!void 
 
 /// Get ATAPI drive capacity (improved version)
 fn getCapacity(channel: *const Channel, position: Channel.DrivePosition) !Capacity {
-    const select: u8 = if (position == .Master) constants.ATA.SELECT_MASTER else constants.ATA.SELECT_SLAVE;
-    cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
+    cpu.outb(channel.base + constants.ATA.REG_DEVICE, @bitCast(types.DeviceRegister.select(position)));
     cpu.io_wait();
 
     _ = try common.waitForReady(channel.base, 1000);
@@ -174,8 +191,7 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
 /// Instead, we must check for a specific "Signature" in the Cylinder/LBA registers after a soft reset.
 pub fn detectDrive(channel: *const Channel, position: Channel.DrivePosition) ?DriveInfo {
     // 1. Select drive
-    const select: u8 = if (position == .Master) constants.ATA.SELECT_MASTER else constants.ATA.SELECT_SLAVE;
-    cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
+    cpu.outb(channel.base + constants.ATA.REG_DEVICE, @bitCast(types.DeviceRegister.select(position)));
     cpu.io_wait();
 
     // 2. Send Software Reset (bit 2 of Control Register)
