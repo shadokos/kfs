@@ -95,14 +95,7 @@ pub fn waitNs(ns: u32) void {
     }
 }
 
-/// Select LBA device with proper flags
-pub fn selectLBADevice(drive_type: ide.DriveType, op: *@import("ide.zig").IDEOperation) void {
-    const reg: u8 = @bitCast(switch (drive_type) {
-        .ATA => types.DeviceRegister.ataLBA28(op.position, op.lba),
-        .ATAPI => types.DeviceRegister.select(op.position),
-        .Unknown => unreachable,
-    });
-
-    cpu.outb(op.channel.base + constants.ATA.REG_DEVICE, reg);
+pub fn selectDevice(base: u16, reg: types.DeviceRegister) void {
+    cpu.outb(base + constants.ATA.REG_DEVICE, @bitCast(reg));
     cpu.io_wait();
 }
