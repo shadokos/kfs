@@ -152,9 +152,9 @@ fn parseIdentifyData(channel: *const Channel, position: Channel.DrivePosition) D
 /// Detect ATA drive presence and identify it.
 /// Sequence: SELECT -> RESET STATUS -> SEND IDENTIFY -> WAIT -> READ DATA
 pub fn detectDrive(channel: *const Channel, position: Channel.DrivePosition) ?DriveInfo {
-    // 1. Select drive (0xA0 for Master, 0xB0 for Slave)
-    const select: u8 = if (position == .Master) constants.ATA.SELECT_MASTER else constants.ATA.SELECT_SLAVE;
-    cpu.outb(channel.base + constants.ATA.REG_DEVICE, select);
+    // 1. Select drive
+    cpu.outb(channel.base + constants.ATA.REG_DEVICE, @bitCast(types.DeviceRegister.select(position)));
+
     cpu.io_wait();
 
     // 2. Clear status by reading it (dummy read)
