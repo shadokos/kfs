@@ -140,6 +140,7 @@ pub const SignalQueue = struct {
             @sizeOf(SignalNode),
             @alignOf(SignalNode),
             3,
+            .{},
         );
     }
 

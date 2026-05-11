@@ -88,6 +88,7 @@ pub const TaskDescriptor = struct {
             @sizeOf(Self),
             @alignOf(Self),
             6,
+            .{},
         );
     }
 
