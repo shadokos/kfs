@@ -84,7 +84,7 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
 
     @import("drivers/ps2/ps2.zig").init();
 
-    @import("tty/keyboard.zig").init();
+    @import("drivers/input/keyboard/keyboard.zig").init();
 
     @import("./drivers/acpi/acpi.zig").init();
 
