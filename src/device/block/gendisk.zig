@@ -12,7 +12,7 @@ const minor_t = core.minor_t;
 
 const PartitionList = std.ArrayList(*Partition);
 
-const allocator = @import("../memory.zig").bigAlloc.allocator();
+const allocator = @import("../../memory.zig").bigAlloc.allocator();
 
 const DISK_NAME_LEN = 16;
 
