@@ -29,13 +29,15 @@ pub fn kernel_log(
     if (message_level == .err and scope == .default) {
         scheduler.enter_critical();
         if (@import("build_options").ci) {
-            var com_port = @import("shell/ci/shell.zig").com_port_1;
-            var packet = @import("shell/ci/packet.zig").Packet([]u8).init(com_port.get_writer().any());
-
-            packet.err = error.KernelPanic;
-            _ = com_port.write("\n") catch {}; // Ensure starting a new packet if we panicked in the middle of one
-            packet.sendf(format, args);
-
+            const serial_tty = @import("drivers/tty/serial_tty.zig");
+            if (serial_tty.detected_count > 0) {
+                const tty_s = &@import("device/tty/tty.zig").tty_array[@import("device/tty/tty.zig").num_consoles];
+                const writer = tty_s.writer().any();
+                var packet = @import("shell/ci/packet.zig").Packet([]u8).init(writer);
+                packet.err = error.KernelPanic;
+                _ = writer.write("\n") catch {};
+                packet.sendf(format, args);
+            }
             @import("drivers/acpi/acpi.zig").power_off();
         } else if (@import("build_options").optimize != .Debug) {
             screen_of_death(format, args);
