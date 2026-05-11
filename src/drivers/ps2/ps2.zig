@@ -1,4 +1,4 @@
-const tty = @import("../../tty/tty.zig");
+const tty = @import("../../device/tty/tty.zig");
 const cpu = @import("../../cpu.zig");
 
 const ps2_logger = @import("std").log.scoped(.driver_ps2);

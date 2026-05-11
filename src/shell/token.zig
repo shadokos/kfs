@@ -1,5 +1,5 @@
 const std = @import("std");
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 
 pub const max_tokens = 32;
 

@@ -1,4 +1,5 @@
-const tty = @import("../../../tty/tty.zig");
+const tty = @import("../../../device/tty/tty.zig");
+const vt_console = @import("../../tty/vt_console.zig");
 const ps2 = @import("../../ps2/ps2.zig");
 const pic = @import("../../pic/pic.zig");
 const keymap = @import("keymap.zig");
@@ -46,9 +47,7 @@ pub var locks: KeyLocks = .{};
 var scan_mode: ScanMode = .Normal;
 
 pub fn send_to_tty(data: []const u8) void {
-    const current: *tty.Tty = &tty.tty_array[tty.current_tty];
-
-    current.input(data);
+    tty.get_tty().input(data);
 }
 
 fn send_to_buffer(scan_code: u16) void {
@@ -101,19 +100,20 @@ fn make_break(scancode: u16) ?u16 {
         },
         keymap.PGUP, keymap.PGDN => if (make) {
             if (!@import("build_options").posix) {
+                const con = &vt_console.consoles[tty.current_tty];
                 if (keyState.shift) {
-                    tty.get_tty().scroll(if (c == keymap.PGUP) tty.height else -tty.height);
+                    con.scroll(if (c == keymap.PGUP) vt_console.height else -vt_console.height);
                 } else {
-                    tty.get_tty().scroll(if (c == keymap.PGUP) 1 else -1);
+                    con.scroll(if (c == keymap.PGUP) 1 else -1);
                 }
             } else return c;
         },
-        keymap.AF1...keymap.AF10 => if (keyState.ctrl and !make) {
-            tty.set_tty(@intCast(c - keymap.AF1)) catch unreachable;
+        keymap.AF1...keymap.AF10 => if (!make) {
+            tty.set_tty(@intCast(c - keymap.AF1)) catch {};
         },
         else => if (make and c != 0) {
             if (!@import("build_options").posix) {
-                tty.get_tty().reset_scroll();
+                vt_console.consoles[tty.current_tty].reset_scroll();
             }
             return c;
         },

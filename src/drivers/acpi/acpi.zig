@@ -1,5 +1,5 @@
 const std = @import("std");
-const tty = @import("../../tty/tty.zig");
+const tty = @import("../../device/tty/tty.zig");
 const multiboot = @import("../../multiboot.zig");
 const multiboot2_h = @import("../../c_headers.zig").multiboot2_h;
 const cpu = @import("../../cpu.zig");

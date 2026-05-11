@@ -1,6 +1,6 @@
 const std = @import("std");
 const paging = @import("paging.zig");
-const printk = @import("../tty/tty.zig").printk;
+const printk = @import("../device/tty/tty.zig").printk;
 
 pub fn Fuzzer(comptime bag_size: comptime_int) type {
     return struct {

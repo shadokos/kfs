@@ -1,5 +1,5 @@
 const std = @import("std");
-const tty = @import("../tty/tty.zig");
+const tty = @import("../device/tty/tty.zig");
 const get_time_since_boot = &@import("../timer.zig").get_time_since_boot;
 
 const allocator = @import("../memory.zig").smallAlloc.allocator();
