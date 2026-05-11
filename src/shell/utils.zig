@@ -15,16 +15,16 @@ pub fn ensure_newline(writer: std.io.AnyWriter) void {
 }
 
 pub fn print_error(shell: anytype, comptime msg: []const u8, args: anytype) void {
-    ensure_newline(shell.writer);
-    shell.writer.print(c.red ++ "Error" ++ c.reset ++ ": " ++ msg ++ "\n", args) catch {};
+    ensure_newline(shell.writer());
+    shell.writer().print(c.red ++ "Error" ++ c.reset ++ ": " ++ msg ++ "\n", args) catch {};
 }
 
 pub fn print_prompt(shell: anytype) void {
-    ensure_newline(shell.writer);
+    ensure_newline(shell.writer());
 
     // print the prompt:
     // prompt collor depending on the last command status
-    shell.writer.print("{s}{s}" ++ c.reset ++ " ", .{
+    shell.writer().print("{s}{s}" ++ c.reset ++ " ", .{
         if (shell.execution_context.err != null) c.red else c.cyan,
         prompt,
     }) catch {};
