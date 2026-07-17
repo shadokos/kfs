@@ -1,4 +1,4 @@
-const keymap = @import("keyboard/keymap.zig");
+const keymap = @import("../drivers/input/keyboard/keymap.zig");
 
 pub const NCCS = 11;
 
