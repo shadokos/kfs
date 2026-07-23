@@ -146,6 +146,12 @@ pub fn print_elf() void {
     }
 }
 
+pub fn print_cmd() void {
+    if (multiboot.get_tag(multiboot2_h.MULTIBOOT_TAG_TYPE_CMDLINE)) |t| {
+        tty.printk("{s}\n", .{@as([*:0]u8, @ptrCast(&t.str))});
+    } else tty.printk("no cmd tag present\n", .{});
+}
+
 const multiboot = @import("../multiboot.zig");
 const multiboot2_h = @import("../c_headers.zig").multiboot2_h;
 

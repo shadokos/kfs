@@ -31,7 +31,7 @@ pub fn compare(a: *core.Partition, b: *core.Partition) std.math.Order {
     return std.math.order(a.devt.toInt(), b.devt.toInt());
 }
 
-var partitions = Treap{};
+pub var partitions = Treap{};
 
 pub fn register_block_dev(major: major_t, name: []const u8) !void {
     if (majors[major]) |_| return Errno.EBUSY;
@@ -162,7 +162,7 @@ pub fn show_lsblk(writer: std.io.AnyWriter, filter: ?[]const u8) void {
             const boot_str: []const u8 = if (p.bootable) "*" else "";
 
             _ = writer.print(
-                "{s: <12} {s: <4} {d: >10} {d: >10} {d: >10} {s: >6} {X:0>2} {s}\n",
+                "{s: <12} {s: <4} {d: >10} {d: >10} {d: >10} {s: >6} {X:0>2} {s} dev_t: {}/{}\n",
                 .{
                     std.mem.sliceTo(&p.name, 0),
                     boot_str,
@@ -172,6 +172,8 @@ pub fn show_lsblk(writer: std.io.AnyWriter, filter: ?[]const u8) void {
                     size_str,
                     @intFromEnum(p.partition_type),
                     p.partition_type.displayName(),
+                    p.devt.major,
+                    p.devt.minor,
                 },
             ) catch {};
         }

@@ -16,6 +16,12 @@ const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = std.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
+const vfs = @import("../fs/vfs.zig");
+const TNode = @import("../fs/tnode.zig");
+const INode = @import("../fs/inode.zig");
+const File = @import("../fs/file.zig");
+const regions = @import("../memory/regions.zig");
+const RegionSet = @import("../memory/region_set.zig").RegionSet;
 
 const callback_allocator = @import("../memory.zig").smallAlloc.allocator();
 const Callback = *const fn (*TaskDescriptor) void;
@@ -39,10 +45,15 @@ pub fn remove_on_terminate_callback(callback: *const fn (*TaskDescriptor) void) 
 pub const TaskDescriptor = struct {
     // todo: define the appropriate size for a kernelspace stack or get this value from config
     stack: [64 * 1024]u8 align(4096) = undefined,
+
+    files: [1024]?*File = [1]?*File{null} ** 1024,
+
     pid: Pid,
     pgid: Pid,
 
     owner: u32 = 0,
+    cwd: *TNode,
+    root: *TNode,
 
     state: State,
 
@@ -77,6 +88,7 @@ pub const TaskDescriptor = struct {
         Zombie,
     };
     pub const Pid = i32;
+    pub const Fd = i32;
     pub const Self = @This();
 
     pub var cache: *Cache = undefined;
@@ -119,11 +131,14 @@ pub const TaskDescriptor = struct {
             }
         }
 
-        if (self.vm) |vm| {
-            vm.deinit();
-            VirtualSpace.cache.allocator().destroy(vm);
-            self.vm = null;
+        for (self.files[0..]) |*opt_file| {
+            if (opt_file.*) |file| {
+                file.close() catch {};
+                opt_file.* = null;
+            }
         }
+
+        self.deinit_vm();
 
         // todo: process group status_stack
         // todo: this is unbounded recursivity
@@ -143,17 +158,33 @@ pub const TaskDescriptor = struct {
         } else @panic("todo");
     }
 
-    pub fn init_vm(self: *Self) !void {
-        if (self.vm != null) {
-            @panic("task already has a vm");
+    fn deinit_vm(self: *Self) void {
+        if (self.vm) |vm| {
+            destroy_vm(vm);
+            self.vm = null;
         }
+    }
+
+    fn destroy_vm(vm: *VirtualSpace) void {
+        vm.deinit();
+        VirtualSpace.cache.allocator().destroy(vm);
+    }
+
+    fn create_vm() !*VirtualSpace {
         const vm = try VirtualSpace.cache.allocator().create(VirtualSpace);
         try vm.init();
         try vm.add_space(0, paging.high_half / paging.page_size);
         try vm.add_space((paging.page_tables) / paging.page_size, 768);
         vm.transfer();
         try vm.fill_page_tables(paging.page_tables / paging.page_size, 768, false);
-        self.vm = vm;
+        return vm;
+    }
+
+    pub fn init_vm(self: *Self) !void {
+        if (self.vm != null) {
+            @panic("task already has a vm");
+        }
+        self.vm = try create_vm();
     }
 
     pub fn clone_vm(self: *Self, other: *Self) !void {
@@ -213,6 +244,7 @@ pub const TaskDescriptor = struct {
                     .signaled = true,
                     .siginfo = sig,
                 });
+                scheduler.schedule(); // todo
             },
             .Continue => if (self.state == .Stopped) {
                 self.update_status(.{
@@ -337,6 +369,98 @@ pub const TaskDescriptor = struct {
         gdt.flush();
         scheduler.exit_critical();
         exit(function(data));
+    }
+
+    pub fn chdir(self: *Self, new_dir: *TNode) void {
+        if (new_dir.inode.mode.type != .Directory) {
+            @panic("todo");
+        }
+        self.cwd.release();
+        self.cwd = new_dir.get_ref();
+    }
+
+    pub fn get_file(self: *Self, fd: Fd) ?*File {
+        if (fd < 0 or fd >= self.files.len) {
+            return null;
+        }
+        return self.files[@intCast(fd)];
+    }
+
+    pub fn add_file(self: *Self, file: *File) ?Fd {
+        // todo: remove minimum 3 when we have tty char devices
+        for (self.files[3..], 3..) |*f, fd| {
+            if (f.* == null) {
+                f.* = file;
+                return @intCast(fd);
+            }
+        }
+        return null;
+    }
+
+    pub fn remove_file(self: *Self, fd: Fd) void {
+        self.files[@intCast(fd)] = null;
+    }
+
+    fn map_ph(inode: *INode, vm: *VirtualSpace, ph: std.elf.Phdr) Errno!void {
+        const begin = std.math.divTrunc(usize, ph.p_vaddr, paging.page_size) catch unreachable;
+        const end = std.math.divCeil(usize, ph.p_vaddr + ph.p_memsz, paging.page_size) catch unreachable;
+        const npages = end - begin;
+
+        const region = RegionSet.create_region() catch return Errno.ENOMEM;
+        errdefer RegionSet.destroy_region(region) catch unreachable;
+
+        region.flags.may_read = true;
+        region.flags.may_write = true;
+
+        region.flags.read = (ph.p_flags & std.elf.PF_R) != 0;
+        region.flags.write = (ph.p_flags & std.elf.PF_W) != 0;
+
+        regions.VirtuallyContiguousRegion.init(region, .{
+            .private = true,
+        });
+
+        std.log.debug("mapping ph: {}", .{ph});
+        vm.add_region_at(region, begin, npages, true) catch unreachable;
+        region.map_now() catch @panic("todo");
+
+        const mem: []u8 = @as([*]u8, @ptrFromInt(ph.p_vaddr))[0..ph.p_memsz];
+        if (try inode.pread(ph.p_offset, mem[0..ph.p_filesz]) != ph.p_filesz) {
+            return Errno.EINVAL;
+        }
+    }
+
+    pub fn exec(self: *Self, inode: *INode, _: []const []const u8, _: []const []const u8) Errno!void {
+        const new_vm = create_vm() catch return Errno.ENOMEM;
+        errdefer destroy_vm(new_vm);
+
+        var magic: [2]u8 = undefined;
+        if (try inode.pread(0, magic[0..]) != magic.len) {
+            return Errno.EINVAL;
+        }
+        if (std.mem.eql(u8, magic[0..], "#!")) {
+            @panic("Must implement shebang");
+        }
+
+        var elf_header: std.elf.Ehdr = undefined;
+        if (try inode.pread(0, std.mem.asBytes(&elf_header)) != @sizeOf(std.elf.Ehdr))
+            return Errno.EINVAL;
+        if (!std.mem.eql(u8, elf_header.e_ident[0..std.elf.MAGIC.len], std.elf.MAGIC[0..]))
+            return Errno.EINVAL;
+        for (0..elf_header.e_phnum) |ph_idx| {
+            var ph: std.elf.Phdr = undefined;
+            const pos = elf_header.e_phoff +| ph_idx *| elf_header.e_phentsize;
+            if (try inode.pread(pos, std.mem.asBytes(&ph)) != @sizeOf(std.elf.Phdr))
+                return Errno.EINVAL;
+            try map_ph(inode, new_vm, ph);
+        }
+        self.deinit_vm();
+        self.vm = new_vm;
+        std.log.debug("trying to spawn", .{});
+
+        self.spawn(
+            &@import("userspace.zig").call_userspace,
+            elf_header.e_entry,
+        ) catch @panic("Failed to spawn new_task");
     }
 };
 
