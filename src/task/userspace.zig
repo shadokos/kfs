@@ -63,11 +63,11 @@ fn create_stack(vm: *VirtualSpace, size: usize) paging.VirtualPagePtr {
 
 pub fn clone(entrypoint: usize) noreturn {
     const task = scheduler.get_current_task();
-    task.init_vm() catch @panic("todo Failed to initialize userspace");
+    // task.init_vm() catch @panic("todo Failed to initialize userspace");
 
     const vm = task.vm.?;
 
-    map_userspace(vm);
+    // map_userspace(vm);
 
     const stack_size: usize = 8; // todo: get this from config (static or dynamic)
     const stack = create_stack(vm, stack_size);

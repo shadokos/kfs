@@ -389,6 +389,21 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
     }
 }
 
+pub fn exec(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer file_tnode.release();
+
+    const new_task = @import("../../task/task_set.zig").create_task() catch
+        @panic("Failed to create new_task");
+    try translate_errno(shell, new_task.exec(file_tnode.inode, &.{}, &.{}));
+    utils.waitpid(shell, new_task.pid);
+}
+
 pub fn pci(shell: anytype, args: [][]u8) CmdError!void {
     const _pci = @import("../../drivers/pci/pci.zig");
 
