@@ -22,11 +22,17 @@ const INode = @import("../fs/inode.zig");
 const File = @import("../fs/file.zig");
 const regions = @import("../memory/regions.zig");
 const RegionSet = @import("../memory/region_set.zig").RegionSet;
+const elf = @import("elf.zig");
+const sysv = @import("sysv.zig");
+const userspace = @import("userspace.zig");
 
 const STACK_TOTAL_PAGES = 16;
 const STACK_SIZE = STACK_TOTAL_PAGES * paging.page_size;
 
-const callback_allocator = @import("../memory.zig").smallAlloc.allocator();
+const heapAlloc = memory.bigAlloc.allocator();
+const smallAlloc = memory.smallAlloc.allocator();
+
+const callback_allocator = smallAlloc;
 const Callback = *const fn (*TaskDescriptor) void;
 const Callbacks = std.ArrayList(Callback);
 
@@ -462,10 +468,27 @@ pub const TaskDescriptor = struct {
         }
     }
 
-    pub fn exec(self: *Self, inode: *INode, _: []const []const u8, _: []const []const u8) Errno!void {
-        const new_vm = create_vm() catch return Errno.ENOMEM;
-        errdefer destroy_vm(new_vm);
+    /// Copy each string in `strings` into a freshly kmalloc'd, null-terminated
+    /// buffer. Used to pull argv/envp out of memory that may not outlive the
+    /// call (a caller's userspace, or a to-be-torn-down address space).
+    fn dupe_strings_z(strings: []const []const u8) Errno![]const [:0]const u8 {
+        const out = smallAlloc.alloc([:0]const u8, strings.len) catch return Errno.ENOMEM;
+        errdefer smallAlloc.free(out);
+        var filled: usize = 0;
+        errdefer for (out[0..filled]) |s| smallAlloc.free(s);
+        for (strings, 0..) |s, i| {
+            out[i] = smallAlloc.dupeZ(u8, s) catch return Errno.ENOMEM;
+            filled += 1;
+        }
+        return out;
+    }
 
+    fn free_strings_z(strings: []const [:0]const u8) void {
+        for (strings) |s| smallAlloc.free(s);
+        smallAlloc.free(strings);
+    }
+
+    pub fn exec(self: *Self, inode: *INode, argv: []const []const u8, envp: []const []const u8) Errno!void {
         var magic: [2]u8 = undefined;
         if (try inode.pread(0, magic[0..]) != magic.len) {
             return Errno.EINVAL;
@@ -474,38 +497,79 @@ pub const TaskDescriptor = struct {
             @panic("Must implement shebang");
         }
 
-        var elf_header: std.elf.Ehdr = undefined;
-        if (try inode.pread(0, std.mem.asBytes(&elf_header)) != @sizeOf(std.elf.Ehdr))
-            return Errno.EINVAL;
-        if (!std.mem.eql(u8, elf_header.e_ident[0..std.elf.MAGIC.len], std.elf.MAGIC[0..]))
-            return Errno.EINVAL;
-        for (0..elf_header.e_phnum) |ph_idx| {
-            var ph: std.elf.Phdr = undefined;
-            const pos = elf_header.e_phoff +| ph_idx *| elf_header.e_phentsize;
-            if (try inode.pread(pos, std.mem.asBytes(&ph)) != @sizeOf(std.elf.Phdr))
-                return Errno.EINVAL;
-            try map_ph(inode, new_vm, ph);
-        }
+        const data = heapAlloc.alloc(u8, std.math.cast(usize, inode.size) orelse return Errno.E2BIG) catch
+            return Errno.ENOMEM;
+        errdefer heapAlloc.free(data);
+        if (try inode.pread(0, data) != data.len)
+            return Errno.EIO;
+        elf.validate(data) catch |e| return switch (e) {
+            error.InvalidElf, error.UnsupportedElf => Errno.ENOEXEC,
+            error.LoadFailed => unreachable, // validate do not map anything
+        };
+
+        var count: usize = 0;
+        for (argv) |arg| count += arg.len + 1;
+        for (envp) |env| count += env.len + 1;
+        if (count > sysv.arg_max) return Errno.E2BIG;
+
+        const argv_z = try dupe_strings_z(argv);
+        errdefer free_strings_z(argv_z);
+        const envp_z = try dupe_strings_z(envp);
+        errdefer free_strings_z(envp_z);
+
+        // create_vm() (in exec_entry) switches CR3, and must not do so before spawn()'s checkpoint has captured
+        // the caller's own context
+        const req = smallAlloc.create(ExecRequest) catch return Errno.ENOMEM;
+        req.* = .{ .data = data, .argv = argv_z, .envp = envp_z };
+        self.spawn(&exec_entry, @intFromPtr(req)) catch @panic("Failed to spawn new_task");
+    }
+
+    const ExecRequest = struct {
+        data: []const u8,
+        argv: []const [:0]const u8,
+        envp: []const [:0]const u8,
+    };
+
+    fn prepare_exec(
+        file_data: []const u8,
+        argv_z: []const [:0]const u8,
+        envp_z: []const [:0]const u8,
+    ) !userspace.PreparedEntry {
+        // load() copies every PT_LOAD into the new vm, and build_sysv_stack copies
+        // the strings onto the user stack: none of these outlive this function.
+        defer heapAlloc.free(file_data);
+        defer free_strings_z(argv_z);
+        defer free_strings_z(envp_z);
+
+        const self = scheduler.get_current_task();
+
+        const new_vm = try create_vm();
+        errdefer destroy_vm(new_vm);
+
+        const image = try elf.load(new_vm, file_data);
+
+        userspace.map_userspace(new_vm);
+        const entry = userspace.prepare_entry(new_vm, image, argv_z, envp_z);
+
         self.deinit_vm();
         self.vm = new_vm;
-        std.log.debug("trying to spawn", .{});
+        return entry;
+    }
 
-        self.spawn(&enter_image, elf_header.e_entry) catch @panic("Failed to spawn new_task");
+    fn exec_entry(data: usize) u8 {
+        const request: *ExecRequest = @ptrFromInt(data);
+        const file_data = request.data;
+        const argv_z = request.argv;
+        const envp_z = request.envp;
+        smallAlloc.destroy(request);
+
+        // Everything fallible lives in a function that actually returns, so its
+        // defer/errdefer run, only the ring-3 jump below is noreturn, and by then
+        // there is nothing left to release.
+        const entry = prepare_exec(file_data, argv_z, envp_z) catch exit(1);
+        userspace.iret_to(entry);
     }
 };
-
-/// Spawn trampoline for exec. The address space is already populated at this point.
-/// TODO: argv/envp are dropped, and phdr_vaddr is 0 so no AT_PHDR is emitted. Both need
-/// the loader to move onto elf.zig, which already returns a proper elf.Image.
-fn enter_image(entrypoint: usize) u8 {
-    const task = scheduler.get_current_task();
-    @import("userspace.zig").enter_userspace(task.vm.?, .{
-        .entry = entrypoint,
-        .phdr_vaddr = 0,
-        .phentsize = 0,
-        .phnum = 0,
-    }, &[_][:0]const u8{"userspace"}, &.{});
-}
 
 pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     asm volatile (
