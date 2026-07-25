@@ -130,17 +130,27 @@ fn init_tasks() noreturn {
     const idle_task = task_set.create_task() catch @panic("Failed to create idle task");
     scheduler.init(idle_task);
 
-    // Switch to the idle task's own stack. After this point the boot stack is dead.
+    // Switch to the idle task's own stack and hand over to idle_entry. The boot stack is
+    // dead past this point, so control must never come back to this frame: reloading esp
+    // and ebp invalidates everything the compiler holds relative to them, and any value it
+    // spilled before the switch would be read back from the wrong stack.
     gdt.tss.esp0 = idle_task.stack_top();
     gdt.flush();
     asm volatile (
         \\ mov %[esp], %%esp
         \\ mov %[esp], %%ebp
+        \\ call *%[entry]
         :
         : [esp] "r" (idle_task.stack_top()),
-    );
+          [entry] "r" (&idle_entry),
+        : .{ .memory = true });
+    unreachable;
+}
 
-    const kernel_task = task_set.create_task() catch @panic("Failed to create kernel task");
+/// Runs on the idle task's stack. Spawns the kernel main task, then becomes the idle loop.
+fn idle_entry() callconv(.c) noreturn {
+    const kernel_task = @import("task/task_set.zig").create_task() catch
+        @panic("Failed to create kernel task");
     const main = if (!@import("build_options").ci) kernel.main else @import("ci.zig").main;
     kernel_task.spawn(main, undefined) catch @panic("Failed to spawn kernel main task");
 
