@@ -490,12 +490,22 @@ pub const TaskDescriptor = struct {
         self.vm = new_vm;
         std.log.debug("trying to spawn", .{});
 
-        self.spawn(
-            &@import("userspace.zig").call_userspace,
-            elf_header.e_entry,
-        ) catch @panic("Failed to spawn new_task");
+        self.spawn(&enter_image, elf_header.e_entry) catch @panic("Failed to spawn new_task");
     }
 };
+
+/// Spawn trampoline for exec. The address space is already populated at this point.
+/// TODO: argv/envp are dropped, and phdr_vaddr is 0 so no AT_PHDR is emitted. Both need
+/// the loader to move onto elf.zig, which already returns a proper elf.Image.
+fn enter_image(entrypoint: usize) u8 {
+    const task = scheduler.get_current_task();
+    @import("userspace.zig").enter_userspace(task.vm.?, .{
+        .entry = entrypoint,
+        .phdr_vaddr = 0,
+        .phentsize = 0,
+        .phnum = 0,
+    }, &[_][:0]const u8{"userspace"}, &.{});
+}
 
 pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     asm volatile (

@@ -378,7 +378,7 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
             const new_task = @import("../../task/task_set.zig").create_task() catch
                 @panic("Failed to create new_task");
             new_task.spawn(
-                &@import("../../task/userspace.zig").call_userspace,
+                &@import("../../userspace.poc.zig").enter_demo,
                 @intFromPtr(@extern(?*fn () void, .{ .name = "userland_" ++ name }).?),
             ) catch @panic("Failed to spawn new_task");
             utils.waitpid(shell, new_task.pid);
