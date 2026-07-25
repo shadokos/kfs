@@ -905,8 +905,13 @@ pub fn mknod(shell: anytype, args: [][]u8) CmdError!void {
     };
 
     const inode = try translate_errno(shell, switch (args[2][0]) {
-        'b' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Block }, .{ .Block = .{ .major = major, .minor = minor } }),
-        'c' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Character }, .{ .Character = .{ .major = major, .minor = minor } }),
+        'b' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Block }, .{
+            .Block = .{ .major = major, .minor = minor },
+        }),
+        'c' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Character }, .{ .Character = .{
+            .major = major,
+            .minor = minor,
+        } }),
         else => {
             utils.print_error(shell, "Invalid node type", .{});
             return CmdError.OtherError;
@@ -915,4 +920,28 @@ pub fn mknod(shell: anytype, args: [][]u8) CmdError!void {
     defer inode.release();
 
     try translate_errno(shell, dir_tnode.inode.link(filename, inode));
+}
+
+pub fn test_elf(shell: anytype, args: [][]u8) CmdError!void {
+    const Elf = @import("../../task/elf.zig");
+    if (args.len < 2) return CmdError.InvalidNumberOfArguments;
+
+    const tnode = vfs.resolve(args[1]) catch return CmdError.OtherError;
+    const heapAlloc = @import("../../memory.zig").bigAlloc.allocator();
+    const data = heapAlloc.alloc(
+        u8,
+        std.math.cast(usize, tnode.inode.size) orelse return CmdError.OtherError,
+    ) catch return CmdError.OtherError;
+    defer heapAlloc.free(data);
+
+    if ((tnode.inode.pread(0, data) catch return CmdError.OtherError) != data.len) {
+        return CmdError.OtherError;
+    }
+
+    Elf.validate(data) catch |e| {
+        utils.print_error(shell, "Invalid ELF file: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+
+    shell.writer.print("ELF file {s} is valid\n", .{args[1]}) catch {};
 }
