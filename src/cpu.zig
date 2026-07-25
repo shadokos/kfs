@@ -110,6 +110,14 @@ pub inline fn reload_cr3() void {
     );
 }
 
+/// Invalidate a single TLB entry for the page containing the given address.
+pub inline fn invlpg(addr: usize) void {
+    asm volatile ("invlpg (%[addr])"
+        :
+        : [addr] "r" (addr),
+        : .{ .memory = true });
+}
+
 pub inline fn set_flag(flag: Cr0Flag) void {
     asm volatile (
         \\ mov %cr0, %eax

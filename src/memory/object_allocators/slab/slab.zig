@@ -1,138 +1,149 @@
-const printk = @import("../../../tty/tty.zig").printk;
-const Cache = @import("cache.zig").Cache;
-const BitMap = @import("../../../misc/bitmap.zig").BitMap;
-const Bit = @import("../../../misc/bitmap.zig").Bit;
 const std = @import("std");
+const paging = @import("../../paging.zig");
+const mapping = @import("../../mapping.zig");
 
-pub const SlabState = enum {
-    Empty,
-    Partial,
-    Full,
+const Cache = @import("cache.zig").Cache;
+const pfd_t = paging.page_frame_descriptor;
+const Slab = @This();
+
+pub const SlabState = enum { Empty, Partial, Full };
+pub const Error = error{ InvalidArgument, SlabFull, SlabCorrupted, DoubleFree };
+
+pub const REDZONE_SIZE: usize = @sizeOf(usize);
+pub const REDZONE_MAGIC: u8 = 0xBB;
+pub const POISON_FREE: u8 = 0x6B;
+pub const POISON_ALLOC: u8 = 0xA5;
+
+pub const DebugFlags = packed struct(u8) {
+    /// Fill freed objects with POISON_FREE; on next alloc verify they weren't
+    /// written to (use-after-free detection). Fill allocated objects with
+    /// POISON_ALLOC so uninitialised-read is obvious.
+    poison: bool = false,
+    /// Insert REDZONE_SIZE guard bytes before and after each object. Checked
+    /// on every alloc and free to catch buffer overflows/underflows.
+    redzone: bool = false,
+    /// Walk the entire freelist on every alloc/free: count, bounds-check each
+    /// entry, and abort on cycle (count > obj_per_slab).
+    sanity: bool = false,
+
+    _: u5 = 0,
 };
 
-pub const SlabHeader = struct {
-    cache: *Cache = undefined,
-    next: ?*Slab = null,
-    prev: ?*Slab = null,
-    in_use: usize = 0,
-    next_free: ?u16 = 0,
-};
+var secret: usize = 0;
 
-pub const Slab = struct {
-    const Self = @This();
+pub fn init_secret(s: usize) void {
+    secret = s;
+}
 
-    pub const Error = error{ InvalidArgument, SlabFull, SlabCorrupted, DoubleFree };
+pub fn encode_ptr(own_addr: usize, next_addr: usize) usize {
+    return own_addr ^ next_addr ^ secret;
+}
 
-    header: SlabHeader = SlabHeader{},
+pub fn decode_ptr(own_addr: usize, stored: usize) usize {
+    return own_addr ^ stored ^ secret;
+}
 
-    bitmap: BitMap = BitMap{},
-    data: []?u16 = undefined,
+pfd: *pfd_t,
 
-    pub fn init(cache: *Cache, page: *usize) Slab {
-        var new = Slab{ .header = .{ .cache = cache } };
+pub fn from_pfd(pfd: *pfd_t) Slab {
+    return Slab{ .pfd = pfd };
+}
 
-        const mem: [*]usize = @ptrFromInt(@intFromPtr(page) + @sizeOf(Slab));
-        new.bitmap = BitMap.init(mem, cache.obj_per_slab);
+pub fn from_page(ptr: paging.VirtualPagePtr) !Slab {
+    return Slab{ .pfd = Slab.get_pfd(ptr) };
+}
 
-        const start = std.mem.alignForward(
-            usize,
-            @intFromPtr(page) + @sizeOf(Slab) + new.bitmap.get_size(),
-            cache.align_obj,
-        );
-        new.data = @as([*]?u16, @ptrFromInt(start))[0 .. cache.obj_per_slab * (cache.size_obj / @sizeOf(usize))];
+pub fn resolve_head(ptr: paging.VirtualPtr) !Slab {
+    const pfd = mapping.get_page_frame_descriptor(
+        @ptrFromInt((std.mem.alignBackward(usize, @intFromPtr(ptr), paging.page_size))),
+    ) catch return error.InvalidArgument;
+    switch (pfd.state) {
+        .slab_head => return Slab{ .pfd = pfd },
+        .slab_tail => return Slab{ .pfd = pfd.state.slab_tail.head },
+        else => return error.InvalidArgument,
+    }
+}
 
-        for (0..cache.obj_per_slab) |i| {
-            new.data[i * (cache.size_obj / @sizeOf(usize))] =
-                if (i + 1 < cache.obj_per_slab) @truncate(i + 1) else null;
-        }
-        return new;
+// page frame descriptor lifecycle ---------------------------------------------
+
+/// Setup head and tail PFDs for a newly allocated slab.
+pub fn init_pfds(page_ptr: paging.VirtualPagePtr, c: *Cache) Slab {
+    const head_pfd: *pfd_t = Slab.get_pfd(page_ptr) catch unreachable;
+    head_pfd.state = .{
+        .slab_head = .{ .cache = c, .in_use = 0, .next_free = 0, .page = page_ptr },
+    };
+
+    for (1..c.pages_per_slab) |i| {
+        const page_addr: paging.VirtualPagePtr = @ptrFromInt(@intFromPtr(page_ptr) + (i * paging.page_size));
+        const tail_pfd = Slab.get_pfd(page_addr) catch unreachable;
+        tail_pfd.state = .{ .slab_tail = .{ .head = head_pfd } };
     }
 
-    pub fn alloc_object(self: *Self) Error!*usize {
-        const next = self.header.next_free orelse return Error.SlabFull;
-        self.bitmap.set(next, Bit.Taken) catch return Error.SlabCorrupted;
+    return Slab{ .pfd = head_pfd };
+}
 
-        const index = next * (self.header.cache.size_obj / @sizeOf(usize));
-        switch (self.get_state()) {
-            .Empty => self.header.cache.unsafe_move_slab(self, .Partial),
-            .Partial => if (self.data[index] == null) self.header.cache.unsafe_move_slab(self, .Full),
-            .Full => unreachable,
-        }
-        self.header.next_free = self.data[index];
-        self.header.in_use += 1;
-        return @ptrCast(@alignCast(&self.data[index]));
+/// Reset all PFDs of this slab back to free state.
+pub fn reset_pfds(self: Slab, pages_per_slab: usize) void {
+    const base = self.base_addr();
+    for (0..pages_per_slab) |i| {
+        const page_addr: paging.VirtualPagePtr = @ptrFromInt(base + (i * paging.page_size));
+        const pfd = Slab.get_pfd(page_addr) catch unreachable;
+        pfd.state = .{ .other = 0 };
     }
+}
 
-    pub fn is_obj_in_slab(self: *Self, obj: *usize) bool {
-        const obj_addr = @intFromPtr(obj);
+// State management ------------------------------------------------------------
 
-        if (obj_addr < @intFromPtr(&self.data[0]) or obj_addr > @intFromPtr(&self.data[self.data.len - 1]))
-            return false;
-        if ((obj_addr - @intFromPtr(&self.data[0])) % self.header.cache.size_obj != 0)
-            return false;
-        return true;
-    }
+pub fn get_state(self: Slab) SlabState {
+    if (self.pfd.state.slab_head.in_use == 0) return SlabState.Empty;
+    if (self.pfd.state.slab_head.next_free == 0) return SlabState.Full;
+    return SlabState.Partial;
+}
 
-    pub fn free_object(self: *Self, obj: *usize) (Error || BitMap.Error)!void {
-        const obj_addr = @intFromPtr(obj);
+pub fn in_use(self: Slab) u16 {
+    return self.pfd.state.slab_head.in_use;
+}
 
-        if (!self.is_obj_in_slab(obj))
-            return Error.InvalidArgument;
+pub fn set_in_use(self: Slab, value: u16) void {
+    self.pfd.state.slab_head.in_use = value;
+}
 
-        const index: u16 = @truncate((obj_addr - @intFromPtr(&self.data[0])) / self.header.cache.size_obj);
-        if (self.bitmap.get(index) catch unreachable == .Free) return Error.DoubleFree;
-        self.bitmap.set(index, Bit.Free) catch unreachable;
-        switch (self.get_state()) {
-            .Empty => unreachable,
-            .Partial => if (self.header.in_use == 1) self.header.cache.unsafe_move_slab(self, .Empty),
-            .Full => self.header.cache.unsafe_move_slab(self, .Partial),
-        }
-        self.header.in_use -= 1;
-        self.data[index * (self.header.cache.size_obj / @sizeOf(usize))] = self.header.next_free;
-        self.header.next_free = index;
-    }
+pub fn base_addr(self: Slab) usize {
+    return @intFromPtr(self.pfd.state.slab_head.page);
+}
 
-    pub fn get_state(self: *Self) SlabState {
-        if (self.header.next_free == null) return .Full;
-        if (self.header.in_use == 0) return .Empty;
-        return .Partial;
-    }
+pub fn cache(self: Slab) *Cache {
+    return self.pfd.state.slab_head.cache;
+}
 
-    // TODO: Remove this method, for debugging purpose only...
-    pub fn debug(self: *Self) void {
-        printk("self: 0x{x}\n", .{@intFromPtr(self)});
-        printk("Slab Header:\n", .{});
-        inline for (@typeInfo(SlabHeader).Struct.fields) |field|
-            printk("  header.{s}: 0x{x} ({d} bytes)\n", .{
-                field.name,
-                @intFromPtr(&@field(self.header, field.name)),
-                @sizeOf(field.type),
-            });
+pub fn next_free(self: Slab) usize {
+    return self.pfd.state.slab_head.next_free;
+}
 
-        printk("Bitmap:\n", .{});
-        inline for (@typeInfo(BitMap).Struct.fields) |field|
-            printk("  bitmap.{s}: 0x{x} ({d} bytes)\n", .{
-                field.name,
-                @intFromPtr(&@field(self.bitmap, field.name)),
-                @sizeOf(field.type),
-            });
+pub fn set_next_free(self: Slab, value: usize) void {
+    self.pfd.state.slab_head.next_free = value;
+}
 
-        printk("Data:\n", .{});
-        printk("  data: 0x{x} ({d} bytes)\n", .{ @intFromPtr(&self.data[0]), @sizeOf(@TypeOf(self.data)) });
+// Linked list management ------------------------------------------------------
 
-        printk("Values:\n", .{});
-        if (self.header.next_free) |next_free| printk("  next_free: {d}\n", .{
-            next_free,
-        }) else printk("  next_free: null\n", .{});
-        printk("  cache: 0x{x}\n", .{@intFromPtr(self.header.cache)});
-        if (self.header.next) |next| printk("  next: 0x{x}\n", .{
-            @intFromPtr(next),
-        }) else printk("  next: null\n", .{});
-        if (self.header.prev) |prev| printk("  prev: 0x{x}\n", .{
-            @intFromPtr(prev),
-        }) else printk("  prev: null\n", .{});
-        printk("  in_use: {d}\n", .{self.header.in_use});
-        printk("  state: {d}\n", .{self.get_state()});
-        printk("\n", .{});
-    }
-};
+pub fn next(self: Slab) ?Slab {
+    if (self.pfd.state.slab_head.next) |next_pfd| return Slab{ .pfd = next_pfd };
+    return null;
+}
+
+pub fn prev(self: Slab) ?Slab {
+    if (self.pfd.state.slab_head.prev) |prev_pfd| return Slab{ .pfd = prev_pfd };
+    return null;
+}
+
+pub fn set_next(self: Slab, slab: ?Slab) void {
+    self.pfd.state.slab_head.next = if (slab) |s| s.pfd else null;
+}
+
+pub fn set_prev(self: Slab, slab: ?Slab) void {
+    self.pfd.state.slab_head.prev = if (slab) |s| s.pfd else null;
+}
+
+pub fn get_pfd(ptr: paging.VirtualPagePtr) !*pfd_t {
+    return mapping.get_page_frame_descriptor(ptr) catch error.InvalidArgument;
+}

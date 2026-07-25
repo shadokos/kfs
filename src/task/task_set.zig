@@ -14,7 +14,7 @@ pub fn create_task() !*TaskDescriptor {
     defer scheduler.exit_critical();
 
     const pid = next_pid() orelse return error.TooMuchProcesses;
-    const new_task = try TaskDescriptor.cache.allocator().create(TaskDescriptor);
+    const new_task = try TaskDescriptor.alloc();
     const parent = scheduler.get_current_task();
     if (pid == 0) {
         const root = &vfs.root_dentry;
@@ -71,5 +71,5 @@ pub fn destroy_task(pid: TaskDescriptor.Pid) !void {
     descriptor.deinit();
     list[index] = null;
     count -= 1;
-    TaskDescriptor.cache.allocator().destroy(descriptor);
+    descriptor.dealloc();
 }

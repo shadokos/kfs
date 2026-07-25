@@ -1,8 +1,13 @@
-const log = @import("std").log;
+const std = @import("std");
+const log = std.log;
 const tty = @import("tty/tty.zig");
 const colors = @import("colors");
 const screen_of_death = @import("screen_of_death.zig").screen_of_death;
 const scheduler = @import("task/scheduler.zig");
+
+/// Set this before triggering a panic to override the backtrace with
+/// the faulting code's stack instead of the panic/interrupt handler's own stack.
+pub var panic_trace_override: ?std.debug.StackIterator = null;
 
 pub fn kernel_log(
     comptime message_level: log.Level,
@@ -51,7 +56,12 @@ pub fn kernel_log(
             tty.get_tty().config.c_lflag.ECHO = false;
             tty.get_tty().config.c_lflag.ECHONL = false;
 
-            @import("debug.zig").dump_current_stack_trace() catch {};
+            if (panic_trace_override) |override| {
+                panic_trace_override = null;
+                @import("debug.zig").dump_stack_trace(override) catch {};
+            } else {
+                @import("debug.zig").dump_current_stack_trace() catch {};
+            }
 
             while (true) {
                 @import("cpu.zig").halt();

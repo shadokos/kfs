@@ -7,17 +7,53 @@ pub const idx_t = usize;
 /// order type (for buddy allocation)
 pub const order_t = std.meta.Int(.unsigned, std.math.log2(@typeInfo(idx_t).int.bits));
 
+/// buddy block descriptor
+pub const buddy_metadata = struct {
+    next: ?*page_frame_descriptor = null,
+    prev: ?*page_frame_descriptor = null,
+};
+
+pub const slab_tail_metadata = struct {
+    /// if a slab needs more than one page,
+    /// the first page frame descriptor is the slab head and contains metadata about the slab,
+    /// while the others points to the head
+    head: *page_frame_descriptor = undefined,
+};
+
+pub const slab_head_metadata = struct {
+    const Cache = @import("object_allocators/slab/cache.zig").Cache;
+
+    /// pointer to the cache this slab belongs to
+    cache: *@import("object_allocators/slab/cache.zig").Cache = undefined,
+
+    /// virtual address of the slab's first page (needed to compute object addresses)
+    page: VirtualPagePtr = undefined,
+
+    /// previous slab head's page frame descriptor in empty/partial/full list of a given cache
+    prev: ?*page_frame_descriptor = null,
+    next: ?*page_frame_descriptor = null,
+
+    /// number of objects currently allocated in this slab
+    in_use: u16 = 0,
+
+    /// address of the first free object in this slab, or 0 if none is free (Slab full)
+    next_free: usize = 0,
+};
+
 /// flags of a page frame
 pub const page_flags = packed struct {
     available: bool = false,
-    slab: bool = false,
 };
 
 /// page frame descriptor
 pub const page_frame_descriptor = struct {
     flags: page_flags,
-    next: ?*page_frame_descriptor = null,
-    prev: ?*page_frame_descriptor = null,
+    state: union(enum) {
+        buddy: buddy_metadata,
+        slab_head: slab_head_metadata,
+        slab_tail: slab_tail_metadata,
+        other: u0,
+    } = .other,
 };
 
 pub const page_table_size = 1024;

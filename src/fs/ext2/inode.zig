@@ -26,6 +26,7 @@ pub fn init_cache() !void {
         @sizeOf(Self),
         @alignOf(Self),
         6,
+        .{},
     );
 }
 

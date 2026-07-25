@@ -83,10 +83,13 @@ fn init_medium(medium_begin: paging.PhysicalPtr, medium_size: paging.PhysicalUsi
 
 fn init_physical_memory() void {
     logger.debug("\tInitializing physical memory allocator...", .{});
-    directMemory = MultipoolAllocator.init("dma_kmalloc", directPageAllocator.page_allocator()) catch {
+    directMemory = MultipoolAllocator.init("dma_kmalloc", directPageAllocator.page_allocator(), .{}) catch {
         @panic("cannot cache_init MultipoolAllocator");
     };
-    smallAlloc = MultipoolAllocator.init("kmalloc", virtually_contiguous_page_allocator.page_allocator()) catch {
+    smallAlloc = MultipoolAllocator.init("kmalloc", virtually_contiguous_page_allocator.page_allocator(), .{
+        .sanity = @import("build_options").optimize == .Debug,
+        .poison = @import("build_options").optimize == .Debug,
+    }) catch {
         @panic("cannot cache_init MultipoolAllocator");
     };
     logger.debug("\tPhysical memory allocator initialized", .{});
@@ -115,6 +118,7 @@ fn init_kernel_vm() void {
 
     logger.debug("\tActivating kernel virtual space...", .{});
     kernel_virtual_space.transfer();
+    @import("memory/page_fault.zig").update_double_fault_cr3();
     kernel_virtual_space.fill_page_tables(paging.kernel_page_tables / paging.page_size, 256, true) catch {
         @panic("not enough space to boot");
     };
@@ -154,6 +158,9 @@ pub fn init() void {
 
     logger.debug("\tInitializing direct page allocator...", .{});
     directPageAllocator = DirectPageAllocator.init(paging.high_half);
+
+    const tsc = @import("cpu.zig").read_tsc();
+    @import("memory/object_allocators/slab/slab.zig").init_secret(@truncate(tsc ^ (tsc >> 32)));
 
     logger.debug("\tInitializing slab allocator's global cache...", .{});
     const GlobalCache = @import("memory/object_allocators/slab/cache.zig").GlobalCache;
