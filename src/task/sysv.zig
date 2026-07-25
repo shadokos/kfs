@@ -61,15 +61,18 @@ pub const SysvLayout = struct {
     }
 };
 
-/// Two cursors moving towards each other inside the entry block: `words` fills the
-/// argc/argv/envp/auxv array upwards from the bottom, `str_top` copies the strings
-/// downwards from the top. SysvLayout.size() guarantees they never meet.
+/// The pointer table fills upwards from the bottom of the entry block, and the
+/// strings fill upwards from the base of the string area packed against
+/// stack_top. Both grow in push order, so argv[0] lands at the lowest string
+/// address following the classic Unix layout some programs expect.
+/// SysvLayout.size() guarantees the two areas never overlap.
 const Builder = struct {
     const Self = @This();
 
     words: [*]usize,
     count: usize = 0,
-    str_top: usize,
+    /// Next free byte in the string area.
+    str_next: usize,
 
     fn push_word(self: *Self, value: usize) void {
         self.words[self.count] = value;
@@ -79,13 +82,12 @@ const Builder = struct {
     /// Copy str (NUL terminator included) into the string area, then push its address.
     fn push_str(self: *Self, str: [:0]const u8) void {
         const len = str.len + 1;
-        self.str_top -= len;
-        const dst: [*]u8 = @ptrFromInt(self.str_top);
+        const dst: [*]u8 = @ptrFromInt(self.str_next);
         @memcpy(dst[0..len], str.ptr[0..len]);
-        self.push_word(self.str_top);
+        self.push_word(self.str_next);
+        self.str_next += len;
     }
 
-    /// Push a NULL-terminated vector of string pointers.
     fn push_vector(self: *Self, strs: []const [:0]const u8) void {
         for (strs) |str| self.push_str(str);
         self.push_word(0);
@@ -102,16 +104,18 @@ pub fn build_sysv_stack(
 ) usize {
     const layout = SysvLayout.init(argv, envp, image);
     const stack_ptr = std.mem.alignBackward(usize, stack_top - layout.size(), 16);
+    const strs_base = stack_top - layout.strs_len;
 
-    var builder: Builder = .{ .words = @ptrFromInt(stack_ptr), .str_top = stack_top };
+    var builder: Builder = .{ .words = @ptrFromInt(stack_ptr), .str_next = strs_base };
     builder.push_word(argv.len); // argc
     builder.push_vector(argv);
     builder.push_vector(envp);
     std.debug.assert(builder.count == layout.n_words);
+    std.debug.assert(builder.str_next == stack_top);
 
     const auxv = layout.auxv_bytes();
     const auxv_at = stack_ptr + builder.count * @sizeOf(usize);
-    std.debug.assert(auxv_at + auxv.len <= builder.str_top);
+    std.debug.assert(auxv_at + auxv.len <= strs_base);
 
     const dst: [*]u8 = @ptrFromInt(auxv_at);
     @memcpy(dst[0..auxv.len], auxv);
