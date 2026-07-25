@@ -3,6 +3,7 @@ const paging = @import("paging.zig");
 const regions = @import("regions.zig");
 const Region = regions.Region;
 const cpu = @import("../cpu.zig");
+const gdt = @import("../gdt.zig");
 const mapping = @import("mapping.zig");
 const scheduler = @import("../task/scheduler.zig");
 const InterruptFrame = @import("../interrupts.zig").InterruptFrame;
@@ -113,10 +114,16 @@ fn user_page_fault(fault: PageFault) void {
 }
 
 fn page_fault_handler(frame: InterruptFrame) void {
+    // Set the override early so any panic or default-scope log.err that
+    // propagates from the fault handling chain (kernel_page_fault, user_page_fault,
+    // local panic(), etc.) shows the faulting code's backtrace, not the handler's.
+    @import("../logger.zig").panic_trace_override = std.debug.StackIterator.init(null, frame.ebp);
+
     const fault = page_fault_from_i386(frame);
 
     if (fault.present != mapping.is_page_present(fault.entry)) {
-        @panic("page fault on a present page! (entry is not invalidated)");
+        std.log.err("page fault on a present page! (entry is not invalidated)", .{});
+        unreachable;
     }
 
     switch (fault.mode) {
@@ -142,9 +149,127 @@ fn panic(fault: PageFault) void {
             @import("../task/scheduler.zig").get_current_task().pid,
         },
     );
+    unreachable;
 }
 
 pub fn set_handler() void {
     const interrupts = @import("../interrupts.zig");
     interrupts.set_intr_gate(.PageFault, interrupts.Handler.create(&page_fault_handler, true));
+
+    if (@import("build_options").optimize == .Debug) {
+        const kernel_data = cpu.Selector{ .index = 2, .table = .GDT, .privilege = .Supervisor };
+        const kernel_code = cpu.Selector{ .index = 1, .table = .GDT, .privilege = .Supervisor };
+
+        gdt.double_fault_tss.esp = @intFromPtr(&gdt.double_fault_stack) + gdt.double_fault_stack.len;
+        gdt.double_fault_tss.ss = kernel_data;
+        gdt.double_fault_tss.ds = kernel_data;
+        gdt.double_fault_tss.es = kernel_data;
+        gdt.double_fault_tss.cs = kernel_code;
+        gdt.double_fault_tss.eip = @intFromPtr(&double_fault_entry);
+        gdt.double_fault_tss.eflags = @bitCast(cpu.EFlags{ .interrupt_enable = false });
+
+        // Zig debug mode passes a hidden "return address" pointer via ECX through
+        // the call chain. The hardware task switch loads ECX from df_tss.ecx (default 0).
+        // Point ECX to df_tss.eip so that *ECX is a valid code address, preventing
+        // NULL dereferences in logger/format code.
+        gdt.double_fault_tss.ecx = @intFromPtr(&gdt.double_fault_tss.eip);
+        // NOTE: cr3 is set later by update_double_fault_cr3() after the kernel virtual
+        // space is transferred, since transfer() changes CR3.
+
+        const double_fault_selector = cpu.Selector{ .index = 8, .table = .GDT, .privilege = .Supervisor };
+        @import("../interrupts.zig").set_task_gate(.DoubleFault, double_fault_selector);
+    }
+}
+
+/// Must be called after the kernel page directory is active (after transfer()).
+pub fn update_double_fault_cr3() void {
+    if (@import("build_options").optimize == .Debug) {
+        gdt.double_fault_tss.cr3 = cpu.get_cr3();
+    }
+}
+
+fn double_fault_entry() callconv(.naked) noreturn {
+    asm volatile (
+    // Clear NT flag (bit 14) so IRET doesn't reverse the task switch
+        \\ pushfd
+        \\ andl $0xffffbfff, (%%esp)
+        \\ popfd
+        \\ jmp *%[handler]
+        :
+        : [handler] "r" (&handle_double_fault),
+    );
+}
+
+/// Force-unlock all mutexes in the allocation chain used by debug backtraces.
+/// Only safe in a terminal panic context (double fault) where we never resume.
+fn force_unlock_allocator_mutexes() void {
+    const memory = @import("../memory.zig");
+    // PageFrameAllocator mutex
+    memory.pageFrameAllocator.lock.count = 0;
+    // Kernel virtual space mutex
+    memory.kernel_virtual_space.lock.count = 0;
+    // Global slab cache mutex
+    memory.globalCache.lock.count = 0;
+    memory.globalCache.cache.lock.count = 0;
+}
+
+fn handle_double_fault() noreturn {
+    // Clear the busy bit of the TSS descriptor to prevent the CPU from refusing to switch
+    gdt.clear_busy_bit(.{ .index = 8 });
+    gdt.clear_busy_bit(.{ .index = 7 });
+
+    // Restore TR to the main TSS (index 7).
+    // The scheduler sets gdt.tss.esp 0, if TR pointed to double_fault_tss,
+    // that field would never be read by the CPU on privilege transitions.
+    // Also when TR=df_tss, a subsequent double fault can't switch
+    // to df_tss (because it's the current task and busy) → triple fault.
+    cpu.load_tss(.{ .index = 7, .table = .GDT, .privilege = .Supervisor });
+
+    // The hardware task switch saved the faulting task's context into the gdt.tss.
+    const faulting_esp = gdt.tss.esp;
+    // On x86, interrupt delivery pushes the frame by decrementing ESP before writing.
+    // If ESP is exactly page-aligned, the CPU decrements it into the page below before
+    // the write fails, but the saved ESP is the pre-decrement value. Subtract 1 so that
+    // alignBackward resolves to the page that was actually accessed (the guard page).
+    const fault_addr = if (faulting_esp & (paging.page_size - 1) == 0) faulting_esp - 1 else faulting_esp;
+    const faulting_page: paging.VirtualPagePtr = @ptrFromInt(
+        std.mem.alignBackward(usize, fault_addr, paging.page_size),
+    );
+
+    // Point the backtrace at the faulting task's context saved into gdt.tss
+    // by the CPU during the hardware task switch that delivered the double fault.
+    @import("../logger.zig").panic_trace_override = std.debug.StackIterator.init(null, gdt.tss.ebp);
+
+    if (!scheduler.is_initialized()) {
+        force_unlock_allocator_mutexes();
+        std.log.err("early boot double fault (probably stack overflow, faulting esp: 0x{x})", .{
+            faulting_esp,
+        });
+        unreachable;
+    }
+
+    scheduler.enter_critical();
+
+    const faulting_task = scheduler.get_current_task();
+    if (faulting_task.is_guard_page(faulting_page)) {
+        std.log.warn("stack overflow: task {d} (guard: 0x{x}), terminating task", .{
+            faulting_task.pid,
+            @intFromPtr(faulting_page),
+        });
+        faulting_task.terminate(.{
+            .transition = .Terminated,
+            .signaled = true,
+            .siginfo = .{
+                .si_signo = .{ .valid = .SIGSEGV },
+                .si_code = .SEGV_MAPERR,
+                .si_pid = 0,
+                .si_addr = @ptrCast(faulting_page),
+            },
+        });
+        scheduler.schedule();
+        unreachable;
+    }
+
+    std.log.err("double fault", .{});
+    unreachable;
 }

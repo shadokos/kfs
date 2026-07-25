@@ -22,15 +22,15 @@ const access_byte_type = packed struct(u8) {
 const gdt_entry = struct {
     limit: u20,
     base: u32,
-    flags: u4,
-    access_byte: u8,
+    flags: flag_type,
+    access_byte: access_byte_type,
 };
 
 fn encode_gdt(entry: gdt_entry) u64 {
     return (((@as(u64, entry.base) >> 24) << 56) |
-        (@as(u64, entry.flags) << 52) |
+        (@as(u64, @intCast(@as(u4, @bitCast(entry.flags)))) << 52) |
         ((@as(u64, entry.limit) >> 16) << 48) |
-        (@as(u64, entry.access_byte) << 40) |
+        (@as(u64, @intCast(@as(u8, @bitCast(entry.access_byte)))) << 40) |
         ((@as(u64, entry.base) & 0xffffff) << 16) |
         (@as(u64, entry.limit) & 0xffff));
 }
@@ -130,6 +130,7 @@ var GDT = [_]u64{
         }),
     }),
     0, // TSS entry
+    0, // Double fault TSS entry
 };
 
 pub const GDTR = packed struct(u48) {
@@ -162,6 +163,17 @@ pub fn init() void {
         .flags = @bitCast(flag_type{ .size = true }),
     });
 
+    GDT[8] = encode_gdt(.{
+        .base = @intFromPtr(&double_fault_tss),
+        .limit = @sizeOf(@TypeOf(double_fault_tss)) - 1,
+        .access_byte = @bitCast(access_byte_type{
+            .present = true,
+            .executable = true,
+            .Accessed = true,
+        }),
+        .flags = @bitCast(flag_type{ .size = true }),
+    });
+
     // Initialize TSS
     tss.ss0 = .{ .index = 3, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor };
     tss.cs = .{ .index = 4, .table = .GDT, .privilege = cpu.PrivilegeLevel.User };
@@ -177,6 +189,18 @@ pub fn init() void {
     cpu.load_tss(.{ .index = 7, .table = .GDT, .privilege = cpu.PrivilegeLevel.Supervisor });
 
     logger.info("Gdt initialized", .{});
+}
+
+pub fn clear_busy_bit(selector: cpu.Selector) void {
+    const index = selector.index;
+    if (index >= GDT.len) {
+        logger.warn("Attempted to clear busy bit of selector with index {d}, but GDT only has {d} entries", .{
+            index, GDT.len,
+        });
+        return;
+    }
+
+    GDT[index] &= ~(@as(u64, 1) << 41); // Clear the Accessed bit, which is used as the busy bit for TSS descriptors
 }
 
 pub const Tss = extern struct {
@@ -220,3 +244,5 @@ pub const Tss = extern struct {
 };
 
 pub var tss: Tss align(4096) = .{};
+pub var double_fault_tss: Tss align(4096) = .{};
+pub var double_fault_stack: [4096 * 4]u8 align(4096) = undefined;

@@ -118,6 +118,7 @@ fn init_kernel_vm() void {
 
     logger.debug("\tActivating kernel virtual space...", .{});
     kernel_virtual_space.transfer();
+    @import("memory/page_fault.zig").update_double_fault_cr3();
     kernel_virtual_space.fill_page_tables(paging.kernel_page_tables / paging.page_size, 256, true) catch {
         @panic("not enough space to boot");
     };

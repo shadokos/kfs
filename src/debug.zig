@@ -152,8 +152,8 @@ fn dump_stack_trace_internal(writer: *std.io.Writer, stack_it: std.debug.StackIt
                 writer.print("file: {s}:{d}:{d}\n\n", .{ loc.file_name, loc.line, loc.column }) catch {};
             } else {
                 writer.print(
-                    "{s}:{d}:{d} \x1b[34m{s}\x1b[0m\n",
-                    .{ loc.file_name, loc.line, loc.column, sym.name },
+                    "{s}:{d}:{d}\n\x1b[1m0x{x}\x1b[0m - \x1b[34m{s}\x1b[0m\n\n",
+                    .{ loc.file_name, loc.line, loc.column, _addr, sym.name },
                 ) catch {};
             }
         } else {

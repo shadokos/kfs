@@ -64,6 +64,26 @@ pub fn get_entry(virtual: paging.VirtualPagePtr) paging.TableEntry {
     return table[virtualStruct.table_index];
 }
 
+/// Clear the present bit of a page table entry (e.g. to set up a guard page).
+pub fn clear_present(virtual: paging.VirtualPagePtr) void {
+    const virtualStruct: paging.VirtualPtrStruct = @bitCast(@intFromPtr(virtual));
+    const table = get_table_ptr(virtualStruct.dir_index);
+    var raw: u32 = @bitCast(table[virtualStruct.table_index]);
+    raw &= ~@as(u32, 1);
+    table[virtualStruct.table_index] = @bitCast(raw);
+    cpu.invlpg(@intFromPtr(virtual));
+}
+
+/// Restore the present bit of a page table entry (e.g. before freeing a guard page).
+pub fn set_present(virtual: paging.VirtualPagePtr) void {
+    const virtualStruct: paging.VirtualPtrStruct = @bitCast(@intFromPtr(virtual));
+    const table = get_table_ptr(virtualStruct.dir_index);
+    var raw: u32 = @bitCast(table[virtualStruct.table_index]);
+    raw |= 1;
+    table[virtualStruct.table_index] = @bitCast(raw);
+    cpu.invlpg(@intFromPtr(virtual));
+}
+
 pub fn transfer(new: *align(4096) Directory) void {
     cpu.set_cr3(get_physical_ptr(@ptrCast(new)) catch unreachable);
 }
