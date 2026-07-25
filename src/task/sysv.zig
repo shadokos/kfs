@@ -37,18 +37,21 @@ pub const SysvLayout = struct {
 
     fn build_auxv(image: elf.Image, buf: *[max_auxv]std.elf.Auxv) []std.elf.Auxv {
         var len: usize = 0;
+
         // refering to the sysv i386 ABI:
-        // If the AT_PHDR entry is present, entries of types AT_PHENT, AT_PHNUM, and AT_ENTRY must also be present
+        // - If the AT_PHDR entry is present, entries of types AT_PHENT, AT_PHNUM, and AT_ENTRY must also be present.
+        // Note: That is an implication, not an equivalence: AT_ENTRY alone would be legal, and still informative for
+        // an image with no program header table.
         if (image.phdr_vaddr != 0) {
-            buf[0] = std.elf.Auxv{ .a_type = std.elf.AT_PHDR, .a_un = .{ .a_val = image.phdr_vaddr } };
-            buf[1] = std.elf.Auxv{ .a_type = std.elf.AT_PHENT, .a_un = .{ .a_val = image.phentsize } };
-            buf[2] = std.elf.Auxv{ .a_type = std.elf.AT_PHNUM, .a_un = .{ .a_val = image.phnum } };
-            buf[3] = std.elf.Auxv{ .a_type = std.elf.AT_ENTRY, .a_un = .{ .a_val = image.entry } };
-            len += 4;
+            buf[0] = .{ .a_type = std.elf.AT_PHDR, .a_un = .{ .a_val = image.phdr_vaddr } };
+            buf[1] = .{ .a_type = std.elf.AT_PHENT, .a_un = .{ .a_val = image.phentsize } };
+            buf[2] = .{ .a_type = std.elf.AT_PHNUM, .a_un = .{ .a_val = image.phnum } };
+            len += 3;
         }
-        buf[len] = std.elf.Auxv{ .a_type = std.elf.AT_PAGESZ, .a_un = .{ .a_val = paging.page_size } };
-        buf[len + 1] = std.elf.Auxv{ .a_type = std.elf.AT_NULL, .a_un = .{ .a_val = 0 } };
-        return buf[0 .. len + 2];
+        buf[len] = .{ .a_type = std.elf.AT_ENTRY, .a_un = .{ .a_val = image.entry } };
+        buf[len + 1] = .{ .a_type = std.elf.AT_PAGESZ, .a_un = .{ .a_val = paging.page_size } };
+        buf[len + 2] = .{ .a_type = std.elf.AT_NULL, .a_un = .{ .a_val = 0 } };
+        return buf[0 .. len + 3];
     }
 
     /// Upper bound on the bytes the entry block occupies below `stack_top`. The trailing
