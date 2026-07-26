@@ -58,24 +58,91 @@ pub const Id = enum(u32) {
     SIGXFSZ = 31,
 };
 
-pub const Code = enum(u32) {
-    SI_USER,
-    SEGV_ACCERR,
-    SEGV_MAPERR,
-    /// Raised by the kernel rather than by a process: a terminal generating a
-    /// signal from a control character has no sender to name.
-    SI_KERNEL,
+// si_code is read relative to si_signo: 1 means SEGV_MAPERR under SIGSEGV and
+// ILL_ILLOPC under SIGILL, hence one enum per signal.
+//
+// The values are userspace ABI and must match what mlibc's abi-bits declares.
+// Names drop the signal prefix, which the type already carries: Segv.MAPERR is
+// SEGV_MAPERR.
+//
+pub const Ill = enum(i32) {
+    ILLOPC = 1,
+    ILLOPN = 2,
+    ILLADR = 3,
+    ILLTRP = 4,
+    PRVOPC = 5,
+    PRVREG = 6,
+    COPROC = 7,
+    BADSTK = 8,
+};
+
+pub const Fpe = enum(i32) {
+    INTDIV = 1,
+    INTOVF = 2,
+    FLTDIV = 3,
+    FLTOVF = 4,
+    FLTUND = 5,
+    FLTRES = 6,
+    FLTINV = 7,
+    FLTSUB = 8,
+};
+
+pub const Segv = enum(i32) { MAPERR = 1, ACCERR = 2 };
+pub const Bus = enum(i32) { ADRALN = 1, ADRERR = 2, OBJERR = 3 };
+pub const Trap = enum(i32) { BRKPT = 1, TRACE = 2 };
+
+/// What raised a signal. Carries the signal and its si_code as one value, so a
+/// code can never end up paired with a signal it does not belong to.
+pub const Cause = union(enum) {
+    /// SI_USER: sent by kill() and friends. Valid whatever the signal.
+    user: Id,
+    /// SI_KERNEL: raised by the kernel with no more precise code. Not POSIX,
+    /// but POSIX leaves #GP and its neighbours without one.
+    kernel: Id,
+    ill: Ill,
+    fpe: Fpe,
+    segv: Segv,
+    bus: Bus,
+    trap: Trap,
+
+    pub fn signo(self: Cause) Id {
+        return switch (self) {
+            .user, .kernel => |id| id,
+            .ill => .SIGILL,
+            .fpe => .SIGFPE,
+            .segv => .SIGSEGV,
+            .bus => .SIGBUS,
+            .trap => .SIGTRAP,
+        };
+    }
+
+    pub fn code(self: Cause) i32 {
+        return switch (self) {
+            .user => 0,
+            .kernel => 0x80,
+            inline .ill, .fpe, .segv, .bus, .trap => |c| @intFromEnum(c),
+        };
+    }
 };
 
 pub const siginfo_t = extern struct {
     si_signo: Signo = Signo.invalid,
-    si_code: Code = undefined,
+    si_code: i32 = undefined,
     si_errno: u32 = undefined,
     si_pid: TaskDescriptor.Pid = undefined, // todo pid type
     // si_uid
     si_addr: paging.VirtualPtr = undefined,
     si_status: u32 = undefined,
     // si_value : sigval
+
+    /// Fill in the two fields a Cause determines. The caller sets the rest.
+    pub fn init(cause: Cause) siginfo_t {
+        return .{
+            .si_signo = Signo.make(cause.signo()),
+            .si_code = cause.code(),
+        };
+    }
+
     pub const Signo = packed union {
         valid: Id,
         null: Monostate(u32, 0),
