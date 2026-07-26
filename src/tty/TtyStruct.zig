@@ -4,6 +4,7 @@
 const std = @import("std");
 
 const termios = @import("termios.zig");
+const signal = @import("../task/signal.zig");
 const TtyDriver = @import("TtyDriver.zig");
 const InputBuffer = @import("InputBuffer.zig");
 const Pid = @import("../task/task.zig").TaskDescriptor.Pid;
@@ -186,11 +187,7 @@ pub fn hangup(self: *Self) void {
 
     if (self.session) |session| {
         if (@import("../task/task_set.zig").get_task_descriptor(session.sid)) |leader| {
-            leader.send_signal(.{
-                .si_signo = .{ .valid = .SIGHUP },
-                .si_code = .SI_KERNEL,
-                .si_pid = 0,
-            });
+            leader.send_signal(signal.siginfo_t.init(.{ .kernel = .SIGHUP }));
         }
     }
 

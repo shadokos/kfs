@@ -19,11 +19,7 @@ fn would_be_lost(task: *TaskDescriptor, id: signal.Id) bool {
 }
 
 fn raise(task: *TaskDescriptor, id: signal.Id) void {
-    _ = task_set.send_signal_to_group(task.pgid, .{
-        .si_signo = .{ .valid = id },
-        .si_code = .SI_KERNEL,
-        .si_pid = 0,
-    });
+    _ = task_set.send_signal_to_group(task.pgid, signal.siginfo_t.init(.{ .kernel = id }));
 }
 
 /// Whether this terminal governs the caller at all, and whether the caller is
