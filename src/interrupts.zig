@@ -254,7 +254,12 @@ comptime {
 pub fn setup_iret_frame(frame: *InterruptFrame) callconv(.c) void {
     if (!scheduler.is_initialized())
         return;
-    scheduler.get_current_task().handle_signal();
+    const current = scheduler.get_current_task();
+    current.handle_signal();
+    // A signal may have just terminated or stopped the current task:
+    // don't iret back into it, hand the CPU over instead.
+    while (current.state == .Zombie or current.state == .Stopped)
+        scheduler.schedule();
     _ = frame;
 }
 
@@ -337,12 +342,60 @@ pub const Handler = extern union {
     }
 };
 
+/// What a CPU exception reports to userspace. Exceptions POSIX has no code for,
+/// #GP and its neighbours, fall back to SI_KERNEL.
+fn exception_to_cause(e: Exceptions) signal.Cause {
+    return switch (e) {
+        .DivisionError => .{ .fpe = .INTDIV },
+        // No FPU state is inspected, so the precise Fpe.FLT* stays out of reach.
+        .x87FloatingPointException,
+        .SIMDFloatingPointException,
+        .DeviceNotAvailable,
+        => .{ .kernel = .SIGFPE },
+        .Debug => .{ .trap = .TRACE },
+        .Breakpoint => .{ .trap = .BRKPT },
+        .InvalidOpcode => .{ .ill = .ILLOPN },
+        .AlignmentCheck => .{ .bus = .ADRALN },
+        .Overflow,
+        .BoundRangeExceeded,
+        .InvalidTSS,
+        .SegmentNotPresent,
+        .StackSegmentFault,
+        .GeneralProtectionFault,
+        .PageFault,
+        => .{ .kernel = .SIGSEGV },
+        else => .{ .kernel = .SIGILL },
+    };
+}
+
+/// A faulting userspace task gets the matching signal (default action:
+/// terminate) instead of taking the kernel down; the signal is delivered
+/// on the way back to ring 3. Returning without this would iret straight
+/// onto the faulting instruction and fault forever.
+fn user_exception(comptime id: u8, frame: InterruptFrame) bool {
+    if (frame.iret.cs.privilege != .User or !scheduler.is_initialized())
+        return false;
+
+    const e = @as(Exceptions, @enumFromInt(id));
+    const cause = exception_to_cause(e);
+    const task = scheduler.get_current_task();
+    std.log.warn("task {d}: exception {d} ({s}) at 0x{x:0>8}, sending {s}", .{
+        task.pid, id, @tagName(e), frame.iret.ip, @tagName(cause.signo()),
+    });
+    var info = signal.siginfo_t.init(cause);
+    info.si_pid = 0;
+    info.si_addr = @ptrFromInt(frame.iret.ip);
+    task.send_signal(info);
+    return true;
+}
+
 pub fn default_handler(
     comptime id: u8,
     comptime t: enum { except, except_err, irq, interrupt },
 ) Handler {
     const handlers = struct {
         pub fn exception(frame: InterruptFrame) void {
+            if (user_exception(id, frame)) return;
             const e = @as(Exceptions, @enumFromInt(id));
             // Override the backtrace with the interrupted code's frame chain so the
             // stack trace points at the faulting code, not at the interrupt handler.
@@ -350,9 +403,10 @@ pub fn default_handler(
             std.log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
         }
         pub fn exception_err(frame: InterruptFrame) void {
+            if (user_exception(id, frame)) return;
             const e = @as(Exceptions, @enumFromInt(id));
             @import("logger.zig").panic_trace_override = std.debug.StackIterator.init(null, frame.ebp);
-            std.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), 0 });
+            std.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), frame.code });
         }
         pub fn irq(_: InterruptFrame) void {
             const _id = pic.get_irq_from_interrupt_id(id);

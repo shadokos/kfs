@@ -255,15 +255,13 @@ fn handle_double_fault() noreturn {
             faulting_task.pid,
             @intFromPtr(faulting_page),
         });
+        var info = signal.siginfo_t.init(.{ .segv = .MAPERR });
+        info.si_pid = 0;
+        info.si_addr = @ptrCast(faulting_page);
         faulting_task.terminate(.{
             .transition = .Terminated,
             .signaled = true,
-            .siginfo = .{
-                .si_signo = .{ .valid = .SIGSEGV },
-                .si_code = .SEGV_MAPERR,
-                .si_pid = 0,
-                .si_addr = @ptrCast(faulting_page),
-            },
+            .siginfo = info,
         });
         scheduler.schedule();
         unreachable;
