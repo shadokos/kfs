@@ -1,0 +1,2 @@
+#!/bin/sh
+exec zig cc -target x86-freestanding-none -march=i686 "$@"

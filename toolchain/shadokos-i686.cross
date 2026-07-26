@@ -1,0 +1,17 @@
+[host_machine]
+system = 'shadokos'
+cpu_family = 'x86'
+cpu = 'i686'
+endian = 'little'
+
+[binaries]
+c = 'i686-shadokos-cc'
+cpp = 'i686-shadokos-c++'
+ar = 'i686-shadokos-ar'
+strip = 'strip'
+
+[built-in options]
+cpp_args = ['-D_GNU_SOURCE']
+
+[properties]
+needs_exe_wrapper = true
