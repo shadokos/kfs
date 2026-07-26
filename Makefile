@@ -19,6 +19,7 @@ all: build
 -include build/Makefiles/Themes.mk
 -include build/Makefiles/CI.mk
 -include build/Makefiles/Limine.mk
+-include build/Makefiles/Mlibc.mk
 
 .PHONY: run
 run: build

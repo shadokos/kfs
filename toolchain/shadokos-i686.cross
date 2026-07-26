@@ -1,0 +1,24 @@
+# Meson cross file for building mlibc (and userland) for ShadokOS (i686).
+# The i686-shadokos-* wrappers (zig cc/c++/ar) must be in PATH; the make
+# targets take care of that.
+
+[host_machine]
+system = 'shadokos'
+cpu_family = 'x86'
+cpu = 'i686'
+endian = 'little'
+
+[binaries]
+c = 'i686-shadokos-cc'
+cpp = 'i686-shadokos-c++'
+ar = 'i686-shadokos-ar'
+strip = 'strip'
+
+[built-in options]
+# g++ predefines _GNU_SOURCE for C++ (libstdc++ requires it) and mlibc's
+# own sources rely on that; clang/zig targeting *-freestanding-none does
+# not, so define it explicitly.
+cpp_args = ['-D_GNU_SOURCE']
+
+[properties]
+needs_exe_wrapper = true
