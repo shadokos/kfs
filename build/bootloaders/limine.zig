@@ -98,12 +98,18 @@ pub fn build_disk_image(context: *BuildContext, install_kernel: *Step.InstallArt
         "-efi-boot-part",
         "--efi-boot-image",
         "--protective-msdos-label",
-        "-append_partition", "2", "0x83", "fs.iso",
+        // Keep the isohybrid MBR layout: without this, the appended partition
+        // pushes the image past 4 GPT entries and limine's bios-install finds
+        // neither an MBR to convert nor a BIOS boot partition.
+        "-part_like_isohybrid",
+        "-append_partition",
+        "2",
+        "0x83",
+        "fs.iso",
         "-o",
     });
     const iso_file = xorriso.addOutputFileArg("kfs.iso");
     _ = xorriso.addDirectoryArg(.{ .cwd_relative = install_iso_path });
-
 
     const directory_step = addDirectoryDependency(
         xorriso,
