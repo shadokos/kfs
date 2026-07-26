@@ -398,9 +398,14 @@ pub fn exec(shell: anytype, args: [][]u8) CmdError!void {
     };
     defer file_tnode.release();
 
+    // Prepare first: no point creating a task we would have to tear down if the image
+    // turns out to be unloadable.
+    const TaskDescriptor = @import("../../task/task.zig").TaskDescriptor;
+    const req = try translate_errno(shell, TaskDescriptor.prepare_exec(file_tnode.inode, args[1..], &.{}));
+
     const new_task = @import("../../task/task_set.zig").create_task() catch
         @panic("Failed to create new_task");
-    try translate_errno(shell, new_task.exec(file_tnode.inode, args[1..], &.{}));
+    new_task.commit_exec(req);
     utils.waitpid(shell, new_task.pid);
 }
 

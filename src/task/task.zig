@@ -488,7 +488,21 @@ pub const TaskDescriptor = struct {
         smallAlloc.free(strings);
     }
 
-    pub fn exec(self: *Self, inode: *INode, argv: []const []const u8, envp: []const []const u8) Errno!void {
+    pub const ExecRequest = struct {
+        data: []const u8,
+        argv: []const [:0]const u8,
+        envp: []const [:0]const u8,
+    };
+
+    /// Everything about an exec that can fail: read the image, validate it, and copy
+    /// argv/envp into kernel memory. Touches no task, so on error nothing is committed
+    /// and the caller's own resources are still safe to release.
+    /// The returned request is owned by the matching commit_exec.
+    pub fn prepare_exec(
+        inode: *INode,
+        argv: []const []const u8,
+        envp: []const []const u8,
+    ) Errno!*ExecRequest {
         var magic: [2]u8 = undefined;
         if (try inode.pread(0, magic[0..]) != magic.len) {
             return Errno.EINVAL;
@@ -517,20 +531,25 @@ pub const TaskDescriptor = struct {
         const envp_z = try dupe_strings_z(envp);
         errdefer free_strings_z(envp_z);
 
-        // create_vm() (in exec_entry) switches CR3, and must not do so before spawn()'s checkpoint has captured
-        // the caller's own context
         const req = smallAlloc.create(ExecRequest) catch return Errno.ENOMEM;
         req.* = .{ .data = data, .argv = argv_z, .envp = envp_z };
-        self.spawn(&exec_entry, @intFromPtr(req)) catch @panic("Failed to spawn new_task");
+        return req;
     }
 
-    const ExecRequest = struct {
-        data: []const u8,
-        argv: []const [:0]const u8,
-        envp: []const [:0]const u8,
-    };
+    /// Point of no return. Restarts 'self' on exec_entry, which swaps the address space
+    /// and drops to ring 3.
+    ///
+    /// When 'self' is the current task this does not come back: spawn() resets esp to
+    /// self.stack_top(), abandoning the caller's frame on that very stack. Release
+    /// anything the caller still owns before calling this.
+    ///
+    /// create_vm() (in exec_entry) switches CR3, and must not do so before spawn()'s
+    /// checkpoint has captured the caller's own context, hence the split.
+    pub fn commit_exec(self: *Self, req: *ExecRequest) void {
+        self.spawn(&exec_entry, @intFromPtr(req)) catch @panic("Failed to spawn exec task");
+    }
 
-    fn prepare_exec(
+    fn load_image(
         file_data: []const u8,
         argv_z: []const [:0]const u8,
         envp_z: []const [:0]const u8,
@@ -566,7 +585,7 @@ pub const TaskDescriptor = struct {
         // Everything fallible lives in a function that actually returns, so its
         // defer/errdefer run, only the ring-3 jump below is noreturn, and by then
         // there is nothing left to release.
-        const entry = prepare_exec(file_data, argv_z, envp_z) catch exit(1);
+        const entry = load_image(file_data, argv_z, envp_z) catch exit(1);
         userspace.iret_to(entry);
     }
 };
