@@ -19,3 +19,17 @@ $(MLIBC_BUILD)/headers/build.ninja:
 .PHONY: libc-headers
 libc-headers: $(MLIBC_BUILD)/headers/build.ninja
 	DESTDIR=$(SYSROOT) $(NINJA) -C $(MLIBC_BUILD)/headers install
+
+$(MLIBC_BUILD)/libc/build.ninja:
+	PATH="$(MLIBC_PATH)" $(MESON) setup \
+		--cross-file $(MLIBC_CROSS_FILE) \
+		--prefix=/usr \
+		-Ddefault_library=static \
+		-Dno_headers=true \
+		-Dlibgcc_dependency=false \
+		$(MLIBC_BUILD)/libc $(MLIBC_SRC)
+
+.PHONY: libc
+libc: libc-headers $(MLIBC_BUILD)/libc/build.ninja
+	PATH="$(MLIBC_PATH)" $(NINJA) -C $(MLIBC_BUILD)/libc
+	DESTDIR=$(SYSROOT) $(NINJA) -C $(MLIBC_BUILD)/libc install
