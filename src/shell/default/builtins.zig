@@ -371,9 +371,10 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         "io",
         "ctty",
         "jobctl",
+        "execve",
     };
 
-    if (args.len != 2) {
+    if (args.len < 2) {
         shell.print("Available routines:\n", .{});
         for (array) |f| {
             shell.print("- {s}\n", .{f});
@@ -381,8 +382,16 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         return CmdError.InvalidNumberOfArguments;
     }
 
+    const poc = @import("../../userspace.poc.zig");
+
     inline for (array) |name| {
         if (std.mem.eql(u8, name, args[1])) {
+            // Lives on our frame, which outlives the call: spawn() runs the demo before
+            // we resume, and it copies argv onto the user stack straight away.
+            var req = poc.DemoRequest{
+                .entry = @intFromPtr(@extern(?*fn () void, .{ .name = "userland_" ++ name }).?),
+                .argv = args[1..],
+            };
             const new_task = @import("../../task/task_set.zig").create_task() catch
                 @panic("Failed to create new_task");
             // A job of its own, so that the terminal can signal it without
@@ -394,10 +403,8 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
             const previous = utils.foreground(new_task);
             defer utils.restore_foreground(previous);
 
-            new_task.spawn(
-                &@import("../../userspace.poc.zig").enter_demo,
-                @intFromPtr(@extern(?*fn () void, .{ .name = "userland_" ++ name }).?),
-            ) catch @panic("Failed to spawn new_task");
+            new_task.spawn(&poc.enter_demo, @intFromPtr(&req)) catch
+                @panic("Failed to spawn new_task");
             utils.waitpid(shell, new_task.pid);
             return;
         }
