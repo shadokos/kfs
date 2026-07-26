@@ -131,7 +131,31 @@ var GDT = [_]u64{
     }),
     0, // TSS entry
     0, // Double fault TSS entry
+    0, // user TLS entry, set per task via set_tls()
 };
+
+pub const tls_index = 9;
+
+/// Point the user TLS segment (%gs) at `base`. The caller must reload %gs
+/// afterwards: the segment register caches the descriptor, so an in-place
+/// GDT update alone does not take effect.
+pub fn set_tls(base: u32) void {
+    GDT[tls_index] = encode_gdt(.{
+        .base = base,
+        .limit = 0x000FFFFF,
+        .flags = @bitCast(flag_type{
+            .long_mode = false,
+            .size = true,
+            .granularity = true,
+        }),
+        .access_byte = @bitCast(access_byte_type{
+            .type = true,
+            .present = true,
+            .privilege = cpu.PrivilegeLevel.User,
+            .readable_writable = true,
+        }),
+    });
+}
 
 pub const GDTR = packed struct(u48) {
     size: u16,

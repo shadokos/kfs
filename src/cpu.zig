@@ -263,6 +263,14 @@ pub inline fn load_segments(comptime code: Selector, data: Selector, stack: Sele
     );
 }
 
+pub inline fn load_gs(selector: Selector) void {
+    asm volatile (
+        \\ movw %[selector], %gs
+        :
+        : [selector] "{ax}" (selector),
+    );
+}
+
 pub inline fn halt() void {
     asm volatile ("hlt");
 }
