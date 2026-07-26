@@ -471,7 +471,7 @@ pub const TaskDescriptor = struct {
     /// Copy each string in `strings` into a freshly kmalloc'd, null-terminated
     /// buffer. Used to pull argv/envp out of memory that may not outlive the
     /// call (a caller's userspace, or a to-be-torn-down address space).
-    fn dupe_strings_z(strings: []const []const u8) Errno![]const [:0]const u8 {
+    pub fn dupe_strings_z(strings: []const []const u8) Errno![]const [:0]const u8 {
         const out = smallAlloc.alloc([:0]const u8, strings.len) catch return Errno.ENOMEM;
         errdefer smallAlloc.free(out);
         var filled: usize = 0;
@@ -483,7 +483,7 @@ pub const TaskDescriptor = struct {
         return out;
     }
 
-    fn free_strings_z(strings: []const [:0]const u8) void {
+    pub fn free_strings_z(strings: []const [:0]const u8) void {
         for (strings) |s| smallAlloc.free(s);
         smallAlloc.free(strings);
     }
