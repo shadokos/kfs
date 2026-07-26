@@ -81,6 +81,8 @@ pub const TaskDescriptor = struct {
 
     esp: u32 = undefined,
 
+    tls_base: ?u32 = null,
+
     ucontext: ucontext.ucontext_t = .{},
 
     // scheduling
@@ -543,6 +545,7 @@ pub const TaskDescriptor = struct {
         scheduler.set_current_task(self);
         gdt.tss.esp0 = @as(usize, @intFromPtr(&self.stack)) + self.stack.len;
         gdt.flush();
+        apply_tls(self);
         scheduler.exit_critical();
         exit(function(data));
     }
@@ -555,6 +558,13 @@ pub const TaskDescriptor = struct {
         self.cwd = new_dir.get_ref();
     }
 };
+
+pub fn apply_tls(t: *TaskDescriptor) void {
+    if (t.tls_base) |base| {
+        gdt.set_tls(base);
+        cpu.load_gs(.{ .index = gdt.tls_index, .table = .GDT, .privilege = .User });
+    }
+}
 
 pub noinline fn switch_to_task_opts(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     asm volatile (
@@ -593,6 +603,7 @@ pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
 
     gdt.tss.esp0 = @as(usize, @intFromPtr(&next.stack)) + next.stack.len;
     gdt.flush();
+    apply_tls(next);
 
     return switch_to_task_opts(prev, next);
 }

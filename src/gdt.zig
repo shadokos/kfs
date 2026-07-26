@@ -130,7 +130,29 @@ var GDT = [_]u64{
         }),
     }),
     0, // TSS entry
+    0, // reserved: double fault TSS, from the stack overflow branch
+    0, // user TLS entry, set per task via set_tls()
 };
+
+pub const tls_index = 9;
+
+pub fn set_tls(base: u32) void {
+    GDT[tls_index] = encode_gdt(.{
+        .base = base,
+        .limit = 0x000FFFFF,
+        .flags = @bitCast(flag_type{
+            .long_mode = false,
+            .size = true,
+            .granularity = true,
+        }),
+        .access_byte = @bitCast(access_byte_type{
+            .type = true,
+            .present = true,
+            .privilege = cpu.PrivilegeLevel.User,
+            .readable_writable = true,
+        }),
+    });
+}
 
 pub const GDTR = packed struct(u48) {
     size: u16,
