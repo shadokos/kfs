@@ -123,7 +123,12 @@ fn call_syscall(comptime code: Code) void {
                 current_task.ucontext.uc_mcontext.ebx = 0;
             } else |e| if (errno.is_in_set(e, errno.Errno)) {
                 current_task.ucontext.uc_mcontext.ebx = errno.error_num(e);
-            } else syscall_logger.err("unhandled error: {s}", .{@errorName(e)});
+            } else {
+                // ebx still holds the first parameter here, so userspace would read it as
+                // an errno. Report something meaningful rather than leaking an argument.
+                syscall_logger.err("unhandled error: {s}", .{@errorName(e)});
+                current_task.ucontext.uc_mcontext.ebx = errno.error_num(errno.Errno.EINVAL);
+            }
         },
         .do_raw => @call(.auto, sys_struct.do_raw, .{}),
     }
