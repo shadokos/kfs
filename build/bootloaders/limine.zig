@@ -111,6 +111,10 @@ pub fn build_disk_image(context: *BuildContext, install_kernel: *Step.InstallArt
     const iso_file = xorriso.addOutputFileArg("kfs.iso");
     _ = xorriso.addDirectoryArg(.{ .cwd_relative = install_iso_path });
 
+    // The appended partition is a plain argument, so nothing would tell the
+    // cache that a rebuilt fs.iso invalidates the image.
+    xorriso.addFileInput(.{ .cwd_relative = "fs.iso" });
+
     const directory_step = addDirectoryDependency(
         xorriso,
         .{ .cwd_relative = install_iso_path },
