@@ -1,0 +1,82 @@
+#ifndef _SYS_PROCFS_H
+#define _SYS_PROCFS_H
+
+#include <abi-bits/pid_t.h>
+#include <abi-bits/signal.h>
+#include <sys/time.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef unsigned long elf_greg_t;
+
+#if defined(__x86_64__) || defined(__i386__) || defined(__loongarch64) || defined(__m68k__)
+#	include <sys/user.h>
+
+#	define ELF_NGREG (sizeof (struct user_regs_struct) / sizeof (elf_greg_t))
+#elif defined(__aarch64__) || defined(__riscv)
+#	define ELF_NGREG NGREG
+#endif
+
+typedef elf_greg_t elf_gregset_t[ELF_NGREG];
+
+typedef struct user_fpregs_struct elf_fpregset_t;
+typedef elf_gregset_t prgregset_t;
+typedef struct user_fpregs_struct prfpregset_t;
+
+#define ELF_PRARGSZ 80
+
+struct elf_siginfo {
+	int si_signo;
+	int si_code;
+	int si_errno;
+};
+
+struct elf_prstatus {
+	struct elf_siginfo pr_info;
+	short int pr_cursig;
+	unsigned long int pr_sigpend;
+	unsigned long int pr_sighold;
+	pid_t pr_pid;
+	pid_t pr_ppid;
+	pid_t pr_pgrp;
+	pid_t pr_sid;
+	struct timeval pr_utime;
+	struct timeval pr_stime;
+	struct timeval pr_cutime;
+	struct timeval pr_cstime;
+	elf_gregset_t pr_reg;
+	int pr_fpvalid;
+};
+
+struct elf_prpsinfo {
+	char pr_state;
+	char pr_sname;
+	char pr_zomb;
+	char pr_nice;
+	unsigned long pr_flag;
+#if __INTPTR_WIDTH__ == 32
+	unsigned short int pr_uid;
+	unsigned short int pr_gid;
+#else
+	unsigned int pr_uid;
+	unsigned int pr_gid;
+#endif
+	int pr_pid;
+	int pr_ppid;
+	int pr_pgrp;
+	int pr_sid;
+	char pr_fname[16];
+	char pr_psargs[ELF_PRARGSZ];
+};
+
+typedef pid_t lwpid_t;
+typedef void *psaddr_t;
+typedef struct elf_prstatus prstatus_t;
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

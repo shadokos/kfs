@@ -1,0 +1,216 @@
+name: Continuous Integration
+
+on: [pull_request, merge_group]
+
+jobs:
+    build-mlibc:
+        strategy:
+            fail-fast: false
+            matrix:
+                arch: [x86_64, riscv64, aarch64, x86, m68k, loongarch64]
+                builds: [mlibc, mlibc-static, mlibc-shared, mlibc-ansi-only, mlibc-headers-only]
+                compiler: [gcc, clang]
+                exclude:
+                  - compiler: clang
+                include:
+                  - arch: x86_64
+                    builds: mlibc
+                    compiler: clang
+        name: Build mlibc
+        runs-on: ubuntu-latest
+        container:
+            image: debian:trixie
+            options: --security-opt seccomp=unconfined --privileged
+        steps:
+          - name: Setup
+            run: |
+                case "${{matrix.arch}}" in
+                  x86)
+                    DEBIAN_ARCH=i386
+                    DEBIAN_MULTILIB=i686
+                    ;;
+                  x86_64)
+                    DEBIAN_ARCH=amd64
+                    DEBIAN_MULTILIB=x86_64
+                    ;;
+                  aarch64)
+                    DEBIAN_ARCH=arm64
+                    DEBIAN_MULTILIB=aarch64
+                    ;;
+                  loongarch64)
+                    DEBIAN_ARCH=loong64
+                    DEBIAN_MULTILIB=loongarch64
+                    ;;
+                  *)
+                    DEBIAN_ARCH=${{matrix.arch}}
+                    DEBIAN_MULTILIB=${{matrix.arch}}
+                    ;;
+                esac
+                echo "DEBIAN_ARCH=$DEBIAN_ARCH" >> "$GITHUB_ENV"
+                echo "DEBIAN_MULTILIB=$DEBIAN_MULTILIB" >> "$GITHUB_ENV"
+          - name: Install prerequisites
+            run: |
+                apt-get update
+                apt-get install -y meson ninja-build qemu-user \
+                                python3-setuptools python3-jsonschema \
+                                python3-pexpect python3-pip netbase clang lld \
+                                git rsync wget patchelf libc6-dev-$DEBIAN_ARCH-cross
+                case "${{matrix.arch}}" in \
+                  x86) \
+                    apt-get install -y gcc-i686-linux-gnu g++-i686-linux-gnu;; \
+                  x86_64) \
+                    apt-get install -y gcc g++;; \
+                  *) \
+                    apt-get install -y gcc-${{matrix.arch}}-linux-gnu g++-${{matrix.arch}}-linux-gnu;; \
+                esac
+                pip install --break-system-packages -U xbstrap pyexpect
+          - name: Prepare directories
+            run: |
+                mkdir src/
+                mkdir src/mlibc/
+                mkdir build/
+          - name: Get libgcc-binaries
+            run: |
+                set -e
+                case "${{matrix.arch}}" in \
+                  x86) \
+                    wget -O /tmp/libgcc-${{matrix.arch}}.a https://github.com/osdev0/libgcc-binaries/releases/latest/download/libgcc-i686.a;; \
+                  *) \
+                    wget -O /tmp/libgcc-${{matrix.arch}}.a https://github.com/osdev0/libgcc-binaries/releases/latest/download/libgcc-${{matrix.arch}}.a;; \
+                esac
+          - name: Checkout
+            uses: actions/checkout@v2
+            with:
+              path: src/mlibc/
+          - name: Prepare src/
+            run: |
+                cp mlibc/ci/bootstrap.yml .
+                touch mlibc/checkedout.xbstrap
+            working-directory: src/
+          - name: Prepare build/
+            run: |
+              cat > bootstrap-site.yml << EOF
+              define_options:
+                arch: ${{matrix.arch}}
+                compiler: ${{matrix.compiler}}
+                multilib-path: "/usr/$DEBIAN_MULTILIB-linux-gnu"
+              EOF
+              xbstrap init ../src
+            working-directory: build/
+          - name: Build mlibc
+            run: 'xbstrap install ${{matrix.builds}}'
+            working-directory: build/
+          - name: Check public headers conform to ISO standards with pedantic warnings
+            if: ${{matrix.builds == 'mlibc-headers-only'}}
+            working-directory: build/
+            shell: bash
+            run: |
+                shopt -s globstar
+                GCC_ARCH="${{matrix.arch}}"
+                case "$GCC_ARCH" in
+                  "x86")
+                    GCC_ARCH="i686"
+                    ;;
+                esac
+                ALL_INCLUDES="-- -include\0%s\0 packages/${{matrix.builds}}/usr/include/**/*.h"
+                GCC_ARGS="-S /dev/null -o /dev/null -I packages/${{matrix.builds}}/usr/include -I packages/linux-headers/usr/include -nostdlib -Werror -Wpedantic -Wsystem-headers"
+                GCC_C_ARGS="$GCC_ARCH-linux-gnu-gcc -x c $GCC_ARGS"
+                GCC_CXX_ARGS="$GCC_ARCH-linux-gnu-g++ -x c++ $GCC_ARGS"
+
+                # For C89, exclude complex.h. We also exclude -Wlong-long because fixing it mostly involves adding
+                # __extension__ to a bunch of places (and musl doesn't even bother).
+                printf $ALL_INCLUDES | sed 's/complex.h/stdio.h/' | xargs -0 $GCC_C_ARGS -std=c89 -Wno-long-long
+                printf $ALL_INCLUDES | xargs -0 $GCC_C_ARGS -std=c99
+                printf $ALL_INCLUDES | xargs -0 $GCC_C_ARGS -std=c11
+                printf $ALL_INCLUDES | xargs -0 $GCC_CXX_ARGS -std=c++98 -Wno-long-long
+                printf $ALL_INCLUDES | xargs -0 $GCC_CXX_ARGS -std=c++11
+                printf $ALL_INCLUDES | xargs -0 $GCC_CXX_ARGS -std=c++14
+                printf $ALL_INCLUDES | xargs -0 $GCC_CXX_ARGS -std=c++17
+          - name: Test mlibc
+            run: 'meson test -v -C pkg-builds/${{matrix.builds}}'
+            working-directory: build/
+            env:
+              LANG: "en_US.utf8"
+
+    compile-sysdeps:
+        strategy:
+            fail-fast: false
+            matrix:
+                sysdeps: [ironclad, keyronex, managarm, astral, zinnia, demo, obos, ethereal]
+        name: Compile sysdeps
+        runs-on: ubuntu-latest
+        container: debian:trixie
+        steps:
+          - name: Install prerequisites
+            run: |
+                apt-get update
+                apt-get install -y meson ninja-build qemu-user \
+                                python3-setuptools python3-jsonschema \
+                                python3-pip git rsync wget
+                pip install --break-system-packages -U xbstrap
+                if [ "${{matrix.sysdeps}}" = "demo" ]; then
+                  apt-get install -y gcc-riscv64-linux-gnu g++-riscv64-linux-gnu
+                fi
+          - if: ${{ matrix.sysdeps == 'managarm' }}
+            name: Checkout bootstrap-managarm
+            uses: actions/checkout@v2
+            with:
+              repository: 'managarm/bootstrap-managarm'
+              path: src/
+          - name: Checkout
+            uses: actions/checkout@v2
+            with:
+              path: src/mlibc/
+          - if: ${{ matrix.sysdeps == 'managarm' }}
+            name: Clone managarm/managarm
+            uses: actions/checkout@v4
+            with:
+              repository: 'managarm/managarm'
+              path: 'src/mlibc/subprojects/managarm'
+          - if: ${{ matrix.sysdeps == 'managarm' }}
+            name: Clone managarm/bragi
+            uses: actions/checkout@v4
+            with:
+              repository: 'managarm/bragi'
+              path: 'src/mlibc/subprojects/bragi'
+          - if: ${{ matrix.sysdeps == 'managarm' }}
+            name: Install bragi
+            run: |
+                pip install --break-system-packages -U bragi
+          - name: Set up linux kernel headers
+            run: |
+                mkdir -p build/mlibc/
+                cp src/mlibc/ci/bootstrap.yml src/
+                (
+                  cd build
+                  xbstrap init ../src
+                  xbstrap install linux-headers
+                )
+          - if: ${{ matrix.sysdeps == 'managarm' }}
+            name: Set up drm headers
+            run: |
+                xbstrap install libdrm-headers
+                ln -sv $(pwd)/packages/libdrm-headers/usr/src/libdrm-headers ../src/mlibc/subprojects/
+            working-directory: build/
+          - name: Get libgcc-binaries
+            run: |
+                set -e
+                if [ "${{matrix.sysdeps}}" = "demo" ]; then
+                  wget -O /tmp/libgcc.a https://github.com/osdev0/libgcc-binaries/releases/latest/download/libgcc-riscv64.a
+                else
+                  wget -O /tmp/libgcc.a https://github.com/osdev0/libgcc-binaries/releases/latest/download/libgcc-x86_64.a
+                fi
+          - name: Compile sysdeps
+            run: |
+                LDFLAGS="-Wl,/tmp/libgcc.a" meson setup \
+                    "-Dc_args=['-fno-stack-protector', '-U__linux__', '-Wno-error=maybe-uninitialized', '-D__${{matrix.sysdeps}}__']" \
+                    "-Dcpp_args=['-fno-stack-protector', '-U__linux__', '-Wno-error=maybe-uninitialized', '-D__${{matrix.sysdeps}}__']" \
+                    "-Dlibgcc_dependency=false" \
+                    "-Duse_freestnd_hdrs=enabled" \
+                    "-Dbuild_tests=true" \
+                    "-Db_sanitize=undefined" \
+                    "-Dlinux_kernel_headers=$(pwd)/packages/linux-headers/usr/include" \
+                    --cross-file ../src/mlibc/ci/${{matrix.sysdeps}}.cross-file compile-${{matrix.sysdeps}} \
+                    "../src/mlibc/"
+                ninja -C compile-${{matrix.sysdeps}}
+            working-directory: build/

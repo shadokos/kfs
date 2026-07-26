@@ -1,0 +1,535 @@
+#ifndef MLIBC_POSIX_PIPE
+#define MLIBC_POSIX_PIPE
+
+#include <cstddef>
+#include <string.h>
+
+#include <hel-syscalls.h>
+#include <hel.h>
+
+#include <bits/ensure.h>
+#include <frg/array.hpp>
+#include <frg/optional.hpp>
+#include <frg/span.hpp>
+#include <mlibc/debug.hpp>
+#include <mlibc/sysdeps-allocator.hpp>
+#include <protocols/posix/data.hpp>
+#include <protocols/posix/supercalls.hpp>
+
+void resetCancellationRequested();
+bool cancellationRequested();
+void setQueueHandle(HelHandle queue);
+
+struct SCOPED_CAPABILITY SignalGuard {
+	SignalGuard() CAP_ACQUIRE(sysdepAllocatorCapability);
+
+	SignalGuard(const SignalGuard &) = delete;
+
+	~SignalGuard() CAP_RELEASE(sysdepAllocatorCapability);
+
+	SignalGuard &operator=(const SignalGuard &) = delete;
+};
+
+struct Queue;
+
+struct ElementHandle {
+	friend void swap(ElementHandle &u, ElementHandle &v) {
+		using std::swap;
+		swap(u._queue, v._queue);
+		swap(u._n, v._n);
+		swap(u._data, v._data);
+		swap(u._context, v._context);
+	}
+
+	ElementHandle() : _queue{nullptr}, _n{-1}, _data{nullptr}, _context{0} {}
+
+	ElementHandle(Queue *queue, int n, void *data, uintptr_t context)
+	: _queue{queue}, _n{n}, _data{data}, _context{context} {}
+
+	ElementHandle(const ElementHandle &other);
+
+	ElementHandle(ElementHandle &&other) : ElementHandle{} { swap(*this, other); }
+
+	~ElementHandle();
+
+	ElementHandle &operator=(ElementHandle other) {
+		swap(*this, other);
+		return *this;
+	}
+
+	void *data() { return _data; }
+
+	// Context that was passed at submission time.
+	uintptr_t context() { return _context; }
+
+	void advance(size_t size) { _data = reinterpret_cast<char *>(_data) + size; }
+
+private:
+	Queue *_queue;
+	int _n;
+	void *_data;
+	uintptr_t _context;
+};
+
+struct Queue {
+	Queue() : _handle{kHelNullHandle}, _numSqChunks{2} {
+		// We do not need to protect those allocations against signals as this constructor
+		// is only called during library initialization.
+		_chunks[0] =
+		    reinterpret_cast<HelChunk *>(getSysdepsAllocator().allocate(sizeof(HelChunk) + 4096));
+		_chunks[1] =
+		    reinterpret_cast<HelChunk *>(getSysdepsAllocator().allocate(sizeof(HelChunk) + 4096));
+
+		recreateQueue();
+	}
+
+	Queue(const Queue &) = delete;
+
+	Queue &operator=(const Queue &) = delete;
+
+	void recreateQueue() {
+		// Reset the internal queue state.
+		_retrieveChunk = 0;
+		_tailChunk = 0;
+		_lastProgress = 0;
+		_pendingNotify = 0;
+
+		// Setup the queue header.
+		HelQueueParameters params{.flags = 0, .numChunks = 2, .chunkSize = 4096, .numSqChunks = _numSqChunks};
+		HEL_CHECK(helCreateQueue(&params, &_handle));
+		setQueueHandle(_handle);
+
+		auto totalChunks = params.numChunks + params.numSqChunks;
+		auto chunksOffset = (sizeof(HelQueue) + 63) & ~size_t(63);
+		auto reservedPerChunk = (sizeof(HelChunk) + params.chunkSize + 63) & ~size_t(63);
+		auto overallSize = chunksOffset + totalChunks * reservedPerChunk;
+
+		void *mapping;
+		HEL_CHECK(helMapMemory(
+		    _handle,
+		    kHelNullHandle,
+		    nullptr,
+		    0,
+		    (overallSize + 0xFFF) & ~size_t(0xFFF),
+		    kHelMapProtRead | kHelMapProtWrite,
+		    &mapping
+		));
+
+		_queue = reinterpret_cast<HelQueue *>(mapping);
+		auto chunksPtr = reinterpret_cast<std::byte *>(mapping) + chunksOffset;
+		for (unsigned int i = 0; i < 2; ++i)
+			_chunks[i] = reinterpret_cast<HelChunk *>(chunksPtr + i * reservedPerChunk);
+
+		// Reset all CQ chunks.
+		for (unsigned int i = 0; i < 2; ++i) {
+			_chunks[i]->next = 0;
+			_chunks[i]->progressFutex = 0;
+			_refCount[i] = 1;
+		}
+
+		// Set cqFirst to the initial chunk.
+		__atomic_store_n(&_queue->cqFirst, 0 | kHelNextPresent, __ATOMIC_RELEASE);
+
+		// Supply the remaining CQ chunks.
+		_tailChunk = 0;
+		for (unsigned int i = 1; i < 2; ++i) {
+			__atomic_store_n(&_chunks[_tailChunk]->next, i | kHelNextPresent, __ATOMIC_RELEASE);
+			_tailChunk = i;
+		}
+		_wakeHeadFutex();
+
+		// Initialize SQ state if we have SQ chunks.
+		if (_numSqChunks > 0) {
+			// Store pointers to SQ chunks.
+			for (unsigned int i = 0; i < _numSqChunks; ++i) {
+				_sqChunks[i] = reinterpret_cast<HelChunk *>(
+				    chunksPtr + (2 + i) * reservedPerChunk);
+			}
+
+			// SQ is initialized by the kernel. Read sqFirst to get the first SQ chunk.
+			auto sqFirst = __atomic_load_n(&_queue->sqFirst, __ATOMIC_ACQUIRE);
+			_sqCurrentChunk = sqFirst & ~kHelNextPresent;
+			_sqProgress = 0;
+			_chunkSize = params.chunkSize;
+		}
+	}
+
+	HelHandle getQueue() { return _handle; }
+
+	void trim() {}
+
+	// Push an element to the submission queue using a gather list.
+	void pushSq(uint32_t opcode, uintptr_t context,
+			frg::span<const frg::span<const std::byte>> segments) {
+		__ensure(_numSqChunks > 0);
+
+		size_t dataLength = 0;
+		for (auto seg : segments)
+			dataLength += seg.size();
+
+		auto elementSize = sizeof(HelElement) + dataLength;
+
+		// Check if we need to move to the next SQ chunk.
+		if (_sqProgress + elementSize > _chunkSize) {
+			// Wait for next chunk to become available.
+			int nextWord;
+			while (true) {
+				nextWord = __atomic_load_n(&_sqChunks[_sqCurrentChunk - 2]->next, __ATOMIC_ACQUIRE);
+				if (nextWord & kHelNextPresent)
+					break;
+				auto notify = __atomic_load_n(&_queue->userNotify, __ATOMIC_RELAXED);
+				if (!(notify & kHelUserNotifySupplySqChunks)) {
+					HEL_CHECK(helDriveQueue(_handle, 0, 0));
+				} else {
+					__atomic_fetch_and(&_queue->userNotify, ~kHelUserNotifySupplySqChunks, __ATOMIC_ACQUIRE);
+				}
+			}
+
+			// Mark current chunk as done.
+			__atomic_store_n(&_sqChunks[_sqCurrentChunk - 2]->progressFutex,
+			                 _sqProgress | kHelProgressDone, __ATOMIC_RELEASE);
+
+			// Signal the kernel.
+			// Note: We do not call helDriveQueue() here; instead this is done at the next dequeue.
+			__atomic_fetch_or(&_queue->kernelNotify, kHelKernelNotifySqProgress, __ATOMIC_RELEASE);
+
+			_sqCurrentChunk = nextWord & ~kHelNextPresent;
+			_sqProgress = 0;
+		}
+
+		// Write the element to the SQ chunk.
+		auto ptr = reinterpret_cast<char *>(_sqChunks[_sqCurrentChunk - 2]) +
+		           sizeof(HelChunk) + _sqProgress;
+		auto element = reinterpret_cast<HelElement *>(ptr);
+		element->length = dataLength;
+		element->opcode = opcode;
+		element->context = reinterpret_cast<void *>(context);
+
+		// Copy each segment.
+		size_t offset = 0;
+		for (auto seg : segments) {
+			memcpy(ptr + sizeof(HelElement) + offset, seg.data(), seg.size());
+			offset += seg.size();
+		}
+
+		_sqProgress += elementSize;
+
+		// Update the progress futex.
+		__atomic_store_n(&_sqChunks[_sqCurrentChunk - 2]->progressFutex, _sqProgress, __ATOMIC_RELEASE);
+
+		// Signal the kernel.
+		// Note: We do not call helDriveQueue() here; instead this is done at the next dequeue.
+		__atomic_fetch_or(&_queue->kernelNotify, kHelKernelNotifySqProgress, __ATOMIC_RELEASE);
+	}
+
+	frg::optional<ElementHandle> dequeueSingleUnlessCancelled() {
+		while (true) {
+			auto progress = _waitProgressFutex();
+
+			auto n = _retrieveChunk;
+			__ensure(_refCount[n]);
+
+			if (progress == FutexProgress::DONE) {
+				auto next = __atomic_load_n(&_chunks[n]->next, __ATOMIC_ACQUIRE);
+				retire(n);
+
+				_lastProgress = 0;
+				// Otherwise, the kernel would not have set the done bit.
+				__ensure(next & kHelNextPresent);
+				_retrieveChunk = next & ~kHelNextPresent;
+				continue;
+			}
+
+			if (progress == FutexProgress::CANCELLED)
+				return frg::null_opt;
+
+			// Dequeue the next element.
+			auto ptr = (char *)_chunks[n] + sizeof(HelChunk) + _lastProgress;
+			auto element = reinterpret_cast<HelElement *>(ptr);
+			_lastProgress += sizeof(HelElement) + element->length;
+			_refCount[n]++;
+			return ElementHandle{this, n, ptr + sizeof(HelElement),
+					reinterpret_cast<uintptr_t>(element->context)};
+		}
+	}
+
+	ElementHandle dequeueSingle() {
+		while (true) {
+			auto result = dequeueSingleUnlessCancelled();
+			if (result)
+				return *result;
+			else
+				resetCancellationRequested();
+		}
+	}
+
+	void retire(int n) {
+		__ensure(_refCount[n]);
+		if (_refCount[n]-- > 1)
+			return;
+
+		// Reset and supply the chunk again.
+		_chunks[n]->next = 0;
+		_chunks[n]->progressFutex = 0;
+		_refCount[n] = 1;
+
+		__atomic_store_n(&_chunks[_tailChunk]->next, n | kHelNextPresent, __ATOMIC_RELEASE);
+		_tailChunk = n;
+		_wakeHeadFutex();
+	}
+
+	void reference(int n) { _refCount[n]++; }
+
+private:
+	void _wakeHeadFutex() {
+		auto futex =
+		    __atomic_fetch_or(&_queue->kernelNotify, kHelKernelNotifySupplyCqChunks, __ATOMIC_RELEASE);
+		if (!(futex & kHelKernelNotifySupplyCqChunks))
+			HEL_CHECK(helDriveQueue(_handle, 0, 0));
+	}
+
+	enum class FutexProgress {
+		NONE,
+		DONE,
+		PROGRESS,
+		CANCELLED,
+	};
+
+	// Postcondition: return value != FutexProgress::NONE.
+	FutexProgress _waitProgressFutex() {
+		// userNotify bits checked by this function (these MUST be checked in the loop below!).
+		const auto relevantNotify = kHelUserNotifyCqProgress | kHelUserNotifyAlert;
+		// userNotify bits ignored by this function.
+		const auto maskedNotify = kHelUserNotifySupplySqChunks;
+
+		// Relaxed is enough here: if a relevant bit in notify is set, we will always go through
+		// the load-acquire on the fetch_and() code path and re-check a notification afterwards
+		// before we conclude that there is truly nothing pending anymore.
+		auto notify = __atomic_load_n(&_queue->userNotify, __ATOMIC_RELAXED);
+		while(true) {
+			// Note: notify is reloaded at the end of each iteration below.
+			_pendingNotify |= notify;
+
+			if (_pendingNotify & kHelUserNotifyCqProgress) {
+				auto progress = __atomic_load_n(&_chunks[_retrieveChunk]->progressFutex, __ATOMIC_ACQUIRE);
+				__ensure(!(progress & ~(kHelProgressMask | kHelProgressFull | kHelProgressDone)));
+				if (progress & kHelProgressFull)
+					__ensure(_retrieveChunk != _tailChunk);
+				if (_lastProgress != (progress & kHelProgressMask))
+					return FutexProgress::PROGRESS;
+				else if (progress & kHelProgressDone) {
+					__ensure(progress & kHelProgressFull);
+					return FutexProgress::DONE;
+				}
+			}
+
+			// If we get here, no relevant notifications are pending.
+			// Clear all relevant bits or wait in the kernel if all of them are already clear.
+			auto notifyToClear = notify & relevantNotify;
+			_pendingNotify &= ~relevantNotify;
+			if (!notifyToClear) {
+				__ensure(!(_pendingNotify & ~maskedNotify));
+
+				if (cancellationRequested())
+					return FutexProgress::CANCELLED;
+				int err = helDriveQueue(_handle, kHelDriveWait, maskedNotify);
+				if (err != kHelErrCancelled)
+					HEL_CHECK(err);
+				// Relaxed is enough (same reasoning as for the initial load).
+				notify = __atomic_load_n(&_queue->userNotify, __ATOMIC_RELAXED);
+			} else {
+				// Note that we will check all cleared notifications again in the next iteration.
+				// This RMW happens before the next progressFutex wait due to the load-acquire here.
+				notify = __atomic_fetch_and(&_queue->userNotify, ~notifyToClear, __ATOMIC_ACQUIRE);
+			}
+		}
+	}
+
+private:
+	HelHandle _handle;
+	HelQueue *_queue;
+	HelChunk *_chunks[2];
+
+	// Chunk that we are currently retrieving from.
+	int _retrieveChunk;
+	// Tail of the chunk list (where we append new chunks).
+	int _tailChunk;
+
+	// Progress into the current chunk.
+	int _lastProgress;
+
+	// Accumulated pending notify bits.
+	int _pendingNotify{0};
+
+	// Number of ElementHandle objects alive.
+	int _refCount[2];
+
+	// Number of SQ chunks configured.
+	unsigned int _numSqChunks;
+
+	// SQ state (only used if _numSqChunks > 0).
+	HelChunk *_sqChunks[2];  // Max 2 SQ chunks for now.
+	int _sqCurrentChunk;
+	int _sqProgress;
+	size_t _chunkSize;
+};
+
+inline ElementHandle::~ElementHandle() {
+	if (_queue)
+		_queue->retire(_n);
+}
+
+inline ElementHandle::ElementHandle(const ElementHandle &other) {
+	_queue = other._queue;
+	_n = other._n;
+	_data = other._data;
+	_context = other._context;
+
+	_queue->reference(_n);
+}
+
+inline HelSimpleResult *parseSimple(ElementHandle &element) {
+	auto result = reinterpret_cast<HelSimpleResult *>(element.data());
+	element.advance(sizeof(HelSimpleResult));
+	return result;
+}
+
+inline HelInlineResult *parseInline(ElementHandle &element) {
+	auto result = reinterpret_cast<HelInlineResult *>(element.data());
+	element.advance(sizeof(HelInlineResult) + ((result->length + 7) & ~size_t(7)));
+	return result;
+}
+
+inline HelLengthResult *parseLength(ElementHandle &element) {
+	auto result = reinterpret_cast<HelLengthResult *>(element.data());
+	element.advance(sizeof(HelLengthResult));
+	return result;
+}
+
+inline HelHandleResult *parseHandle(ElementHandle &element) {
+	auto result = reinterpret_cast<HelHandleResult *>(element.data());
+	element.advance(sizeof(HelHandleResult));
+	return result;
+}
+
+HelHandle getPosixLane();
+HelHandle *cacheFileTable();
+HelHandle getHandleForFd(int fd);
+void resetCancellationId();
+void setCancellationId(uint64_t event, HelHandle handle, int fd);
+void clearCachedInfos();
+uint64_t allocateCancellationId();
+
+extern thread_local Queue globalQueue;
+
+// This include is here because it needs ElementHandle to be declared
+#include <helix/ipc-structs.hpp>
+
+inline void pushExchangeMsgsToSq(HelHandle lane, uintptr_t context,
+		const HelAction *actions, size_t count) {
+	HelSqExchangeMsgs header;
+	header.lane = lane;
+	header.count = count;
+	header.flags = 0;
+
+	frg::array<frg::span<const std::byte>, 2> segments{
+		frg::span<const std::byte>{reinterpret_cast<const std::byte *>(&header), sizeof(header)},
+		frg::span<const std::byte>{reinterpret_cast<const std::byte *>(actions),
+		                           count * sizeof(HelAction)}
+	};
+	globalQueue.pushSq(kHelSubmitExchangeMsgs, context, segments);
+}
+
+template <typename... Args>
+auto exchangeMsgsSync(HelHandle descriptor, Args &&...args) {
+	auto results = helix_ng::createResultsTuple(args...);
+	auto actions = helix_ng::chainActionArrays(args...);
+
+	pushExchangeMsgsToSq(descriptor, 0, actions.data(), actions.size());
+
+	auto element = globalQueue.dequeueSingle();
+	void *ptr = element.data();
+
+	[&]<size_t... p>(std::index_sequence<p...>) {
+		(results.template get<p>().parse(ptr, element), ...);
+	}(std::make_index_sequence<std::tuple_size_v<decltype(results)>>{});
+
+	return results;
+}
+
+template <typename... Args>
+auto exchangeMsgsSyncCancellable(HelHandle descriptor, uint64_t cancelId, int fd, Args &&...args) {
+	auto results = helix_ng::createResultsTuple(args...);
+	auto actions = helix_ng::chainActionArrays(args...);
+
+	pushExchangeMsgsToSq(descriptor, 0, actions.data(), actions.size());
+
+	frg::optional<ElementHandle> element{};
+
+	do {
+		element = globalQueue.dequeueSingleUnlessCancelled();
+		if (!element) {
+			HEL_CHECK(helSyscall2(
+				kHelCallSuper + posix::superCancel,
+				cancelId,
+				fd
+			));
+			resetCancellationRequested();
+		}
+	} while (!element);
+
+	void *ptr = element->data();
+
+	[&]<size_t... p>(std::index_sequence<p...>) {
+		(results.template get<p>().parse(ptr, *element), ...);
+	}(std::make_index_sequence<std::tuple_size_v<decltype(results)>>{});
+
+	return results;
+}
+
+// Like exchangeMsgsSync(), but allows sending a cancellation on the same lane.
+// Sending cancellation messages on the same lane guarantees ordering w.r.t. the initial request.
+template <typename MakeCancel, typename... Args>
+auto exchangeMsgsSyncCancelViaLane(HelHandle descriptor, MakeCancel &&makeCancel, Args &&...args) {
+	// Contexts that tell the request and the cancellation exchange apart on the queue.
+	constexpr uintptr_t reqContext = 1;
+	constexpr uintptr_t cancelContext = 2;
+
+	auto results = helix_ng::createResultsTuple(args...);
+	auto reqActions = helix_ng::chainActionArrays(args...);
+	pushExchangeMsgsToSq(descriptor, reqContext, reqActions.data(), reqActions.size());
+
+	// Wait for the request to complete or until cancellation is requested.
+	frg::optional<ElementHandle> reqElement = globalQueue.dequeueSingleUnlessCancelled();
+
+	// Handle cancellation if it occurred, then wait for request completion.
+	if (!reqElement) {
+		// Submit the cancellation on the same lane to guarantee ordering.
+		// Then wait for both request + cancellation to complete.
+		auto cancelExchange = makeCancel();
+		auto cancelActions = helix_ng::chainActionArrays(cancelExchange);
+		pushExchangeMsgsToSq(descriptor, cancelContext, cancelActions.data(), cancelActions.size());
+		resetCancellationRequested();
+
+		bool cancelDone = false;
+		while (!reqElement || !cancelDone) {
+			auto element = globalQueue.dequeueSingle();
+			if (element.context() == reqContext) {
+				reqElement = std::move(element);
+			} else {
+				__ensure(element.context() == cancelContext);
+				cancelDone = true;
+			}
+		}
+	}
+
+	void *ptr = reqElement->data();
+
+	[&]<size_t... p>(std::index_sequence<p...>) {
+		(results.template get<p>().parse(ptr, *reqElement), ...);
+	}(std::make_index_sequence<std::tuple_size_v<decltype(results)>>{});
+
+	return results;
+}
+
+#endif // MLIBC_POSIX_PIPE
