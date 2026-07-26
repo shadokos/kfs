@@ -13,3 +13,5 @@ src/syscall_table.zig
 sysroot/
 mlibc-build/
 fs.iso
+userland/.objs/
+userland/build/
