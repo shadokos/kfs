@@ -1,24 +1,15 @@
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#include <unistd.h>
+#define MSG(msg) write(1, msg, sizeof(msg) - 1)
+
+__attribute__((constructor(101))) void _c101(void) { MSG("constructor(101)\n"); }
+__attribute__((constructor))      void _c(void)    { MSG("constructor\n"); }
+__attribute__((destructor(101))) void _d101() { MSG("destructor(101)\n"); }
+__attribute__((destructor)) void _d() { MSG("destructor\n"); }
 
 int main(int argc, char *argv[])
 {
-	char name[64];
-
-	printf("Hello from mlibc! (argc=%d)\n", argc);
-	for (int i = 0; i < argc; i++)
-		printf("argv[%d] = \"%s\"\n", i, argv[i]);
-
-	void *p = malloc(1);
-	printf("malloc: %p\n", p);
-	free(p);
-
-	printf("What's your name? ");
-	fflush(stdout);
-	if (fgets(name, sizeof(name), stdin)) {
-		name[strcspn(name, "\n")] = 0;
-		printf("Nice to meet you, %s!\n", name);
-	}
+	printf("Hello from mlibc!\n");
 	return 0;
 }
+
