@@ -10,12 +10,10 @@ pub fn do(pid: task.TaskDescriptor.Pid, id: signal.Id) !void {
     if (pid > 0) {
         const descriptor = task_set.get_task_descriptor(pid) orelse return Errno.ESRCH;
         // todo permisssion
-        descriptor.send_signal(.{
-            .si_signo = .{ .valid = id },
-            .si_code = .SI_USER,
-            .si_pid = scheduler.get_current_task().pid,
-            // todo set more fields of siginfo
-        });
+        var info = signal.siginfo_t.init(.{ .user = id });
+        info.si_pid = scheduler.get_current_task().pid;
+        // todo set more fields of siginfo
+        descriptor.send_signal(info);
     } else if (pid == 0) {
         // todo: process group
     } else if (pid == -1) {
