@@ -1,0 +1,5 @@
+#!/bin/sh
+# C cross-compiler for ShadokOS userland: zig cc targeting 32-bit x86 freestanding.
+# -march=i686: the kernel does not enable SSE (no CR4.OSFXSR), so userland
+# code must not use xmm registers or it dies on #UD.
+exec zig cc -target x86-freestanding-none -march=i686 "$@"
