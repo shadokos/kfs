@@ -11,6 +11,8 @@ const task_set = @import("../../task/task_set.zig");
 const Pid = @import("../../task/task.zig").TaskDescriptor.Pid;
 const wait_queue = @import("../../task/wait_queue.zig");
 const scheduler = @import("../../task/scheduler.zig");
+const timer = @import("../../timer.zig");
+const TaskDescriptor = @import("../../task/task.zig").TaskDescriptor;
 
 const MAX_INPUT: usize = 4096;
 
@@ -39,6 +41,9 @@ foreground_pgid: ?Pid = null,
 
 /// Readers waiting for the line discipline to publish something.
 read_queue: wait_queue.WaitQueue(.{ .predicate = input_ready }) = .{},
+
+/// Set when the VTIME timer fires, cleared when a read starts.
+read_timed_out: bool = false,
 
 /// Input ring buffer.
 input_buffer: [MAX_INPUT]u8 = undefined,
@@ -232,7 +237,29 @@ pub const Reader = std.io.GenericReader(*Self, ReadError, read);
 /// is available. In raw mode, blocks until at least one byte is ready.
 fn input_ready(_: *void, data: ?*void) bool {
     const self: *Self = @ptrCast(@alignCast(data.?));
-    return self.has_input();
+    return self.read_timed_out or self.has_input();
+}
+
+fn read_timeout(_: *TaskDescriptor, data: *usize) void {
+    const self: *Self = @ptrCast(@alignCast(data));
+    self.read_timed_out = true;
+    self.read_queue.try_unblock();
+}
+
+/// VTIME, expressed in microseconds. 0 when no timer applies.
+fn read_timeout_us(self: *const Self) u64 {
+    if (self.config.c_lflag.ICANON) return 0;
+    const deciseconds = self.config.c_cc[@intFromEnum(termios.cc_index.VTIME)];
+    return @as(u64, deciseconds) * 100_000;
+}
+
+fn arm_read_timer(self: *Self, us: u64) ?u64 {
+    return timer.schedule_event(.{
+        .timestamp = timer.get_utime_since_boot() + us,
+        .callback = read_timeout,
+        .task = scheduler.get_current_task(),
+        .data = @ptrCast(@alignCast(self)),
+    }) catch null;
 }
 
 /// Whether anything is readable. Canonical mode only publishes complete lines,
@@ -249,18 +276,30 @@ fn has_input(self: *const Self) bool {
 /// Otherwise VMIN says how many, and 0 means return with whatever is there.
 fn read_min(self: *const Self) usize {
     if (self.config.c_lflag.ICANON) return 1;
-    return self.config.c_cc[@intFromEnum(termios.cc_index.VMIN)];
+    const vmin = self.config.c_cc[@intFromEnum(termios.cc_index.VMIN)];
+    // VMIN 0 with VTIME set is a timed read: wait for one byte, but no longer
+    // than the timer.
+    if (vmin == 0 and self.config.c_cc[@intFromEnum(termios.cc_index.VTIME)] != 0) return 1;
+    return vmin;
 }
 
 pub fn read(self: *Self, s: []u8) ReadError!usize {
     // The read returns once `min` bytes have accumulated, one condition for
-    // canonical mode and VMIN alike.
+    // canonical mode and VMIN alike, or once VTIME runs out.
     const min = @min(self.read_min(), s.len);
+    const timeout_us = self.read_timeout_us();
+    const inter_byte = self.config.c_cc[@intFromEnum(termios.cc_index.VMIN)] != 0;
     var count: usize = 0;
+
+    self.read_timed_out = false;
+    // With VMIN 0 the timer bounds the whole read. Above 0 it measures the gap
+    // between bytes, so it only starts once one has arrived.
+    var timer_id = if (timeout_us != 0 and !inter_byte) self.arm_read_timer(timeout_us) else null;
+    defer if (timer_id) |id| timer.remove_by_id(id);
 
     for (s) |*c| {
         while (!self.has_input()) {
-            if (count >= min) return count;
+            if (count >= min or self.read_timed_out) return count;
             // Woken by whoever feeds the line discipline. An interrupted wait
             // gives back what was read so far, and the signal that interrupted
             // it is handled on the way out.
@@ -273,6 +312,12 @@ pub fn read(self: *Self, s: []u8) ReadError!usize {
             self.current_line_begin +%= 1;
         self.read_tail +%= 1;
         count += 1;
+
+        if (timeout_us != 0 and inter_byte) {
+            if (timer_id) |id| timer.remove_by_id(id);
+            timer_id = self.arm_read_timer(timeout_us);
+        }
+
         if (self.config.c_lflag.ICANON and self.is_end_of_line(c.*)) {
             if (c.* == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
                 count -= 1;
