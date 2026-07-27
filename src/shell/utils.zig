@@ -210,6 +210,12 @@ pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth:
 const SignalId = @import("../task/signal.zig").Id;
 
 pub fn waitpid(shell: anytype, pid: i32) void {
+    // The awaited task's group runs in the foreground, so it is the one the
+    // terminal signals. Give the terminal back once it is over.
+    const awaited = @import("../task/task_set.zig").get_task_descriptor(pid);
+    const previous = tty.get_tty().set_foreground_pgid(if (awaited) |t| t.pgid else pid);
+    defer _ = tty.get_tty().set_foreground_pgid(previous);
+
     var status: @import("../task/wait.zig").Status = undefined;
     const ret = @import("../task/wait.zig").wait(
         pid,

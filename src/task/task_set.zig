@@ -1,6 +1,7 @@
 const task = @import("task.zig");
 const TaskDescriptor = task.TaskDescriptor;
 const scheduler = @import("scheduler.zig");
+const signal = @import("signal.zig");
 
 const NTASK = 100; // todo: get this value from config
 
@@ -43,6 +44,22 @@ fn next_pid() ?TaskDescriptor.Pid {
 pub fn get_task_descriptor(pid: TaskDescriptor.Pid) ?*TaskDescriptor {
     if (pid < 0 or pid >= list.len) return null;
     return list[@intCast(pid)];
+}
+
+/// Send `info` to every task of the process group `pgid`, and return how many
+/// were signalled.
+pub fn send_signal_to_group(pgid: TaskDescriptor.Pid, info: signal.siginfo_t) usize {
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
+
+    var signalled: usize = 0;
+    for (list) |entry| {
+        const descriptor = entry orelse continue;
+        if (descriptor.pgid != pgid) continue;
+        descriptor.send_signal(info);
+        signalled += 1;
+    }
+    return signalled;
 }
 
 pub fn destroy_task(pid: TaskDescriptor.Pid) !void {
