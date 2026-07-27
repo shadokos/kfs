@@ -224,18 +224,32 @@ pub const Reader = std.io.GenericReader(*Self, ReadError, read);
 
 /// Read from the TTY. In canonical mode, blocks until a full line
 /// is available. In raw mode, blocks until at least one byte is ready.
+/// Whether anything is readable. Canonical mode only publishes complete lines,
+/// raw mode any processed byte.
+fn has_input(self: *const Self) bool {
+    return if (self.config.c_lflag.ICANON)
+        self.read_tail != self.current_line_begin
+    else
+        self.read_tail != self.current_line_end;
+}
+
+/// Bytes that have to accumulate before a read returns. Canonical mode needs
+/// one, since the line discipline only publishes a line once it is complete.
+/// Otherwise VMIN says how many, and 0 means return with whatever is there.
+fn read_min(self: *const Self) usize {
+    if (self.config.c_lflag.ICANON) return 1;
+    return self.config.c_cc[@intFromEnum(termios.cc_index.VMIN)];
+}
+
 pub fn read(self: *Self, s: []u8) ReadError!usize {
+    // The read returns once `min` bytes have accumulated, one condition for
+    // canonical mode and VMIN alike.
+    const min = @min(self.read_min(), s.len);
     var count: usize = 0;
+
     for (s) |*c| {
-        // Block until data is available.
-        // Canonical: wait for a complete line.
-        // Raw: wait for any processed byte.
-        while (true) {
-            const has_data = if (self.config.c_lflag.ICANON)
-                self.read_tail != self.current_line_begin
-            else
-                self.read_tail != self.current_line_end;
-            if (has_data) break;
+        while (!self.has_input()) {
+            if (count >= min) return count;
             // The input task feeds the buffer, so waiting for an interrupt is
             // enough. todo: block on a reader wait queue instead.
             @import("../../cpu.zig").halt();
