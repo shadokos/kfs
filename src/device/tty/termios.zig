@@ -182,7 +182,9 @@ pub const termios = struct {
     c_cc: [NCCS]cc_t = .{
         keymap.C('D'),
         keymap.C('@'),
-        keymap.C('H'),
+        // DEL, what terminals send for Backspace. Ctrl-H erases too on some
+        // systems, but ^? is the default every Unix userspace expects.
+        127,
         keymap.C('C'),
         keymap.C('U'),
         0,

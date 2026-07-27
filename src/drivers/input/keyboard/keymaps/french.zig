@@ -45,7 +45,7 @@ pub const keymap = [_][6]u16{
     [6]u16{ 0o205, '0', k.A('0'), '@', '0', k.C('J') }, // 0x27 Key 0
     [6]u16{ k.C('M'), k.C('M'), k.CA('M'), k.C('M'), k.C('M'), k.C('M') }, // 0x28 Key ENTER
     [6]u16{ k.C('['), k.C('['), k.CA('['), k.C('['), k.C('['), k.C('[') }, // 0x29 Key ESC
-    [6]u16{ k.C('H'), k.C('H'), k.CA('H'), k.C('H'), k.C('H'), 127 }, // 0x2a Key BACKSPACE
+    [6]u16{ 127, 127, k.CA('H'), 127, 127, k.C('H') }, // 0x2a Key BACKSPACE
     [6]u16{ k.C('I'), k.C('I'), k.CA('I'), k.C('I'), k.C('I'), k.C('I') }, // 0x2b Key TAB
     [6]u16{ ' ', ' ', k.A(' '), k.A(' '), k.A(' '), k.C('@') }, // 0x2c Key SPACEBAR
     [6]u16{ ')', 0o370, k.A(')'), ']', '-', k.C('K') },
