@@ -4,6 +4,8 @@
 // printk/flush, and initialization.
 // Hardware drivers (VGA console, serial) register as TtyDriver backends.
 const std = @import("std");
+const wait_queue = @import("../../task/wait_queue.zig");
+const scheduler = @import("../../task/scheduler.zig");
 
 pub const TtyStruct = @import("tty_struct.zig");
 pub const TtyDriver = @import("tty_driver.zig");
@@ -25,6 +27,38 @@ pub const max_tty = total_ttys - 1;
 pub var tty_array: [total_ttys]TtyStruct = [1]TtyStruct{TtyStruct{}} ** total_ttys;
 
 pub var current_tty: u8 = 0;
+
+fn has_events(_: *void, _: ?*void) bool {
+    for (&tty_array) |*t| if (t.events) return true;
+    return false;
+}
+
+var input_queue: wait_queue.WaitQueue(.{ .predicate = has_events }) = .{};
+
+/// Flag a terminal as having hardware input pending, and wake the input task.
+/// This is all an interrupt handler should do: reading the device and running
+/// the line discipline happen later, in task context.
+pub fn notify(t: *TtyStruct) void {
+    t.events = true;
+    input_queue.try_unblock();
+}
+
+/// Turn pending hardware events into terminal input, forever.
+///
+/// Drivers only flag their terminal from an interrupt. Reading the device,
+/// translating, echoing and generating signals all happen here, so none of it
+/// runs on the interrupt stack, and input is processed whether or not anyone
+/// is reading.
+pub fn input_task(_: usize) u8 {
+    while (true) {
+        input_queue.block_no_int(scheduler.get_current_task(), null);
+        for (&tty_array) |*t| {
+            if (!t.events) continue;
+            t.events = false;
+            if (t.driver.receive) |receive| receive(t);
+        }
+    }
+}
 
 pub fn get_tty() *TtyStruct {
     return &tty_array[current_tty];

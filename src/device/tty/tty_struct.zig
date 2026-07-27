@@ -24,6 +24,10 @@ driver_data: *anyopaque = @ptrFromInt(@as(usize, 0xDEAD)),
 /// Current termios configuration.
 config: termios.termios = .{},
 
+/// Set by a driver interrupt, cleared by the input task, which then asks the
+/// driver to read what arrived.
+events: bool = false,
+
 /// Input ring buffer.
 input_buffer: [MAX_INPUT]u8 = undefined,
 
@@ -181,10 +185,9 @@ pub fn read(self: *Self, s: []u8) ReadError!usize {
             else
                 self.read_tail != self.current_line_end;
             if (has_data) break;
+            // The input task feeds the buffer, so waiting for an interrupt is
+            // enough. todo: block on a reader wait queue instead.
             @import("../../cpu.zig").halt();
-            if (self.driver.receive) |receive_fn| {
-                receive_fn(self);
-            }
         }
 
         c.* = self.input_buffer[self.read_tail];

@@ -116,6 +116,10 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
 
     @import("task/scheduler.zig").init(idle_task);
 
+    const input_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create input task");
+    input_task.spawn(&@import("device/tty/tty.zig").input_task, undefined) catch
+        @panic("Failed to spawn input task");
+
     const kernel_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create kernel task");
 
     const main = if (!@import("build_options").ci) kernel.main else @import("ci.zig").main;

@@ -130,7 +130,7 @@ fn serial_flush(_: *TtyStruct) void {}
 /// Poll the UART for incoming data and feed it into the TTY input buffer.
 fn serial_receive(tty_s: *TtyStruct) void {
     const self = get_serial_tty(tty_s);
-    if (self.uart_received()) {
+    while (self.uart_received()) {
         var buf = [1]u8{cpu.inb(self.port)};
         tty_s.input(&buf);
     }
@@ -202,23 +202,20 @@ pub var detected_count: usize = 0;
 const com_irqs = [2]pic.IRQ{ .COM1, .COM2 };
 
 fn com1_irq_handler(_: interrupts.InterruptFrame) void {
-    drain_uart(0);
     pic.ack(.COM1);
+    flag_port(0);
 }
 
 fn com2_irq_handler(_: interrupts.InterruptFrame) void {
-    drain_uart(1);
     pic.ack(.COM2);
+    flag_port(1);
 }
 
-/// Drain the UART FIFO into the TTY input buffer (IRQ context).
-fn drain_uart(port_index: usize) void {
+/// Hand the port over to the input task, which will call serial_receive.
+fn flag_port(port_index: usize) void {
     const port = &ports[port_index];
     if (!port.active) return;
-    while (port.uart_received()) {
-        var buf = [1]u8{cpu.inb(port.port)};
-        port.tty.input(&buf);
-    }
+    tty_mod.notify(port.tty);
 }
 
 /// Probe all COM ports, activate detected ones, wire them as TTYs,
