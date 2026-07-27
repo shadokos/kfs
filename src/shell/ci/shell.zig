@@ -3,6 +3,8 @@ const std = @import("std");
 pub const Shell = @import("../Shell.zig").Shell(@import("builtins.zig"));
 
 pub fn on_init(shell: *Shell) void {
+    // The packet protocol drives the line itself, no line editing wanted.
+    shell.tty.set_raw();
     _ = shell.writer().write("CI shell ready on ttyS0\n") catch {};
 }
 

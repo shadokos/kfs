@@ -10,7 +10,7 @@ pub fn on_init(shell: *Shell) void {
         42,
         colors.reset,
     }) catch {};
-    tty.get_tty().config.c_lflag.ECHOCTL = true;
+    shell.tty.config.c_lflag.ECHOCTL = true;
 }
 
 pub fn on_error(shell: *Shell) void {

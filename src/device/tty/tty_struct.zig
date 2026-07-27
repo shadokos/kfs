@@ -95,6 +95,15 @@ fn flush_input(self: *Self) void {
     self.unprocessed_begin = self.read_tail;
 }
 
+/// Switch the line to raw input, the equivalent of cfmakeraw(): no canonical
+/// processing, and a read that blocks until a byte arrives rather than polling,
+/// since the default VMIN of 0 would make every read return at once.
+pub fn set_raw(self: *Self) void {
+    self.config.c_lflag.ICANON = false;
+    self.config.c_cc[@intFromEnum(termios.cc_index.VMIN)] = 1;
+    self.config.c_cc[@intFromEnum(termios.cc_index.VTIME)] = 0;
+}
+
 /// Hand the terminal to `pgid`, the group its control characters will signal.
 /// Returns the group it replaces, to give it back afterwards.
 pub fn set_foreground_pgid(self: *Self, pgid: ?Pid) ?Pid {

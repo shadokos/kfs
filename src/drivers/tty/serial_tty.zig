@@ -94,12 +94,9 @@ pub fn serial_init(self: *Self, tty_s: *TtyStruct) void {
     tty_s.driver = &serial_driver;
     tty_s.driver_data = @ptrCast(self);
 
-    // Serial TTYs default to raw mode (no canonical processing).
-    tty_s.config.c_lflag.ICANON = false;
-    tty_s.config.c_lflag.ECHO = true;
-    tty_s.config.c_lflag.ECHOCTL = true;
-    tty_s.config.c_lflag.ECHONL = false;
-    // Enable basic output processing (ONLCR for serial terminals).
+    // The line keeps the standard termios defaults: whoever opens it decides
+    // how it should behave, see TtyStruct.set_raw. Only the convention a serial
+    // terminal expects on output belongs here.
     tty_s.config.c_oflag.OPOST = true;
     tty_s.config.c_oflag.ONLCR = true;
 }
