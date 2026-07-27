@@ -9,6 +9,8 @@ const TtyDriver = @import("tty_driver.zig");
 const signal = @import("../../task/signal.zig");
 const task_set = @import("../../task/task_set.zig");
 const Pid = @import("../../task/task.zig").TaskDescriptor.Pid;
+const wait_queue = @import("../../task/wait_queue.zig");
+const scheduler = @import("../../task/scheduler.zig");
 
 const MAX_INPUT: usize = 4096;
 
@@ -35,6 +37,9 @@ events: bool = false,
 /// Null until something claims the terminal.
 foreground_pgid: ?Pid = null,
 
+/// Readers waiting for the line discipline to publish something.
+read_queue: wait_queue.WaitQueue(.{ .predicate = input_ready }) = .{},
+
 /// Input ring buffer.
 input_buffer: [MAX_INPUT]u8 = undefined,
 
@@ -57,6 +62,7 @@ unprocessed_begin: input_buffer_pos_t = 0,
 pub fn input(self: *Self, s: []const u8) void {
     for (s) |c| self.input_char(c);
     self.local_processing();
+    self.read_queue.try_unblock();
 }
 
 /// Signal a control character generates, or null when it generates none.
@@ -224,6 +230,11 @@ pub const Reader = std.io.GenericReader(*Self, ReadError, read);
 
 /// Read from the TTY. In canonical mode, blocks until a full line
 /// is available. In raw mode, blocks until at least one byte is ready.
+fn input_ready(_: *void, data: ?*void) bool {
+    const self: *Self = @ptrCast(@alignCast(data.?));
+    return self.has_input();
+}
+
 /// Whether anything is readable. Canonical mode only publishes complete lines,
 /// raw mode any processed byte.
 fn has_input(self: *const Self) bool {
@@ -250,9 +261,11 @@ pub fn read(self: *Self, s: []u8) ReadError!usize {
     for (s) |*c| {
         while (!self.has_input()) {
             if (count >= min) return count;
-            // The input task feeds the buffer, so waiting for an interrupt is
-            // enough. todo: block on a reader wait queue instead.
-            @import("../../cpu.zig").halt();
+            // Woken by whoever feeds the line discipline. An interrupted wait
+            // gives back what was read so far, and the signal that interrupted
+            // it is handled on the way out.
+            self.read_queue.block(scheduler.get_current_task(), @ptrCast(self)) catch
+                return count;
         }
 
         c.* = self.input_buffer[self.read_tail];
