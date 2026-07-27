@@ -19,7 +19,13 @@ pub fn create_task() !*TaskDescriptor {
     if (pid == 0) {
         new_task.* = .{ .pid = pid, .pgid = pid, .parent = null, .state = .Running };
     } else {
-        new_task.* = .{ .pid = pid, .pgid = parent.pgid, .parent = parent, .state = .Ready };
+        new_task.* = .{
+            .pid = pid,
+            .pgid = parent.pgid,
+            .parent = parent,
+            .state = .Ready,
+            .controlling_tty = parent.controlling_tty,
+        };
         new_task.next_sibling = parent.childs;
         parent.childs = new_task;
     }

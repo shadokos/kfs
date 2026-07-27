@@ -42,6 +42,10 @@ pub const TaskDescriptor = struct {
     pid: Pid,
     pgid: Pid,
 
+    /// Terminal this task talks to. Inherited from the parent, null for a task
+    /// that has none, which sends its output to the console instead.
+    controlling_tty: ?*@import("../device/tty/tty_struct.zig") = null,
+
     owner: u32 = 0,
 
     state: State,

@@ -97,7 +97,28 @@ var ttyBufferWriter = init: {
 };
 
 pub inline fn get_buffered_writer() *std.io.Writer {
-    return ttyBufferWriter[current_tty];
+    return ttyBufferWriter[index_of(current())];
+}
+
+/// Terminal kernel messages go to. Independent of which console is displayed:
+/// a log has no task to belong to, so it needs a destination of its own.
+pub var console: *TtyStruct = &tty_array[0];
+
+pub fn set_console(t: *TtyStruct) void {
+    console = t;
+}
+
+fn index_of(t: *const TtyStruct) usize {
+    return (@intFromPtr(t) - @intFromPtr(&tty_array[0])) / @sizeOf(TtyStruct);
+}
+
+/// The terminal the running task talks to, or the console when it has none.
+/// Output produced on behalf of a task belongs on that task's terminal, not on
+/// whichever console happens to be displayed.
+pub fn current() *TtyStruct {
+    if (scheduler.is_initialized())
+        if (scheduler.get_current_task().controlling_tty) |t| return t;
+    return console;
 }
 
 var write_lock = @import("../../task/semaphore.zig").Mutex{};
@@ -105,13 +126,13 @@ var write_lock = @import("../../task/semaphore.zig").Mutex{};
 pub inline fn printk(comptime fmt: []const u8, args: anytype) void {
     write_lock.acquire();
     defer write_lock.release();
-    ttyBufferWriter[current_tty].print(fmt, args) catch {};
+    ttyBufferWriter[index_of(current())].print(fmt, args) catch {};
 }
 
 pub inline fn flush() void {
     write_lock.acquire();
     defer write_lock.release();
-    ttyBufferWriter[current_tty].flush() catch {};
+    ttyBufferWriter[index_of(current())].flush() catch {};
 }
 
 /// Initialize console TTYs with the given driver.

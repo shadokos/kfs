@@ -69,6 +69,10 @@ pub fn Shell(comptime _builtins: anytype) type {
                 post_cmd: ?*const anyopaque = null,
             },
         ) Self {
+            // Everything this shell runs, builtins and the kernel code they
+            // call, writes to this terminal rather than to the displayed one.
+            @import("../task/scheduler.zig").get_current_task().controlling_tty = tty_ref;
+
             var ret = Self{
                 .tty = tty_ref,
                 .config = config,
