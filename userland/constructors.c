@@ -1,15 +1,12 @@
 #include <stdio.h>
-#include <unistd.h>
-#define MSG(msg) write(1, msg, sizeof(msg) - 1)
 
-__attribute__((constructor(101))) void _c101(void) { MSG("constructor(101)\n"); }
-__attribute__((constructor))      void _c(void)    { MSG("constructor\n"); }
-__attribute__((destructor(101))) void _d101() { MSG("destructor(101)\n"); }
-__attribute__((destructor)) void _d() { MSG("destructor\n"); }
+__attribute__((constructor(101))) void _c101(void) { printf("constructor(%d): %s\n", 101, "test de printf lol"); }
+__attribute__((constructor))      void _c(void)    { printf("constructor\n"); }
+__attribute__((destructor(101)))  void _d101(void) { printf("destructor(101)\n"); }
+__attribute__((destructor))       void _d(void)    { printf("destructor\n"); }
 
-int main(int argc, char *argv[])
+int main(void)
 {
-	printf("Hello from mlibc!\n");
+	printf("main\n");
 	return 0;
 }
-
