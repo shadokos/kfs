@@ -386,6 +386,12 @@ fn driver_flush(tty: *TtyStruct) void {
     of(tty).view();
 }
 
+/// One keyboard shared by every console, so it is drained whole and its bytes
+/// go to whichever console is being shown.
+fn driver_receive(_: *TtyStruct) void {
+    @import("../input/keyboard/keyboard.zig").kb_read();
+}
+
 fn driver_activate(tty: *TtyStruct, active: bool) void {
     const self = of(tty);
     self.active = active;
@@ -398,4 +404,5 @@ pub const driver = TtyDriver{
     .write = &driver_write,
     .flush = &driver_flush,
     .activate = &driver_activate,
+    .receive = &driver_receive,
 };

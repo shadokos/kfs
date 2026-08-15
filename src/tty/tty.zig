@@ -9,6 +9,8 @@ pub const TtyDriver = @import("TtyDriver.zig");
 pub const termios = @import("termios.zig");
 
 const vt_console = @import("../drivers/tty/vt_console.zig");
+const wait_queue = @import("../task/wait_queue.zig");
+const scheduler = @import("../task/scheduler.zig");
 
 /// Highest terminal index.
 pub const max_tty = 9;
@@ -25,6 +27,34 @@ pub var current_tty: u8 = 0;
 /// The consoles behind the terminals. One screen between them, so only the
 /// displayed one paints, see vt_console.activate.
 var consoles: [max_tty + 1]vt_console = undefined;
+
+fn has_events(_: *void, _: ?*void) bool {
+    for (&tty_array) |*t| if (t.events) return true;
+    return false;
+}
+
+var input_queue: wait_queue.WaitQueue(.{ .predicate = has_events }) = .{};
+
+/// Flag a terminal as having hardware input waiting, and wake the input task.
+/// All an interrupt handler should do.
+pub fn notify(t: *TtyStruct) void {
+    t.events = true;
+    input_queue.try_unblock();
+}
+
+/// Turn hardware events into terminal input, forever. POSIX 11.1.5 has the
+/// system filling the input queue whether or not anyone is reading, and doing
+/// it here keeps the line discipline off the interrupt stack.
+pub fn input_task(_: usize) u8 {
+    while (true) {
+        input_queue.block_no_int(scheduler.get_current_task(), null);
+        for (&tty_array) |*t| {
+            if (!t.events) continue;
+            t.events = false;
+            if (t.driver.receive) |receive| receive(t);
+        }
+    }
+}
 
 pub fn get_tty() *TtyStruct {
     return &tty_array[current_tty];
