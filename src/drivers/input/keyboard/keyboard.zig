@@ -3,6 +3,7 @@ const ps2 = @import("../../ps2/ps2.zig");
 const pic = @import("../../pic/pic.zig");
 const keymap = @import("keymap.zig");
 const scanmap = @import("scanmap.zig");
+const vt_console = @import("../../tty/vt_console.zig");
 const scanmap_normal = scanmap.scanmap_normal;
 const scanmap_special = scanmap.scanmap_special;
 
@@ -46,7 +47,7 @@ pub var locks: KeyLocks = .{};
 var scan_mode: ScanMode = .Normal;
 
 pub fn send_to_tty(data: []const u8) void {
-    const current: *tty.Tty = &tty.tty_array[tty.current_tty];
+    const current: *tty.TtyStruct = &tty.tty_array[tty.current_tty];
 
     current.input(data);
 }
@@ -101,10 +102,9 @@ fn make_break(scancode: u16) ?u16 {
         },
         keymap.PGUP, keymap.PGDN => if (make) {
             if (!@import("build_options").posix) {
-                if (keyState.shift) {
-                    tty.get_tty().scroll(if (c == keymap.PGUP) tty.height else -tty.height);
-                } else {
-                    tty.get_tty().scroll(if (c == keymap.PGUP) 1 else -1);
+                if (vt_console.from(tty.get_tty())) |console| {
+                    const step: i32 = if (keyState.shift) vt_console.height else 1;
+                    console.scroll(if (c == keymap.PGUP) step else -step);
                 }
             } else return c;
         },
@@ -113,7 +113,7 @@ fn make_break(scancode: u16) ?u16 {
         },
         else => if (make and c != 0) {
             if (!@import("build_options").posix) {
-                tty.get_tty().reset_scroll();
+                if (vt_console.from(tty.get_tty())) |console| console.reset_scroll();
             }
             return c;
         },

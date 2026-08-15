@@ -3,7 +3,7 @@ zig-out
 .zig-cache
 .zig-docker
 *.iso
-src/tty/themes
+src/drivers/tty/themes
 .idea
 .optimize-*
 .bootloader-*

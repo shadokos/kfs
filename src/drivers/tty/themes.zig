@@ -1,5 +1,5 @@
 const std = @import("std");
-const vga = @import("../drivers/vga/text.zig");
+const vga = @import("../vga/text.zig");
 const themes = @import("themes/index.zig");
 const config = @import("config");
 const colors = @import("colors");

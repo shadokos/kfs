@@ -85,7 +85,7 @@ pub fn keymap(_: anytype, args: [][]u8) CmdError!void {
 }
 
 pub fn theme(_: anytype, args: [][]u8) CmdError!void {
-    const t = @import("../../tty/themes.zig");
+    const t = @import("../../drivers/tty/themes.zig");
     switch (args.len) {
         1 => {
             const list = t.theme_list;
@@ -98,7 +98,9 @@ pub fn theme(_: anytype, args: [][]u8) CmdError!void {
             utils.show_palette();
         },
         2 => {
-            tty.get_tty().set_theme(t.get_theme(args[1]) orelse return CmdError.InvalidParameter);
+            const selected = t.get_theme(args[1]) orelse return CmdError.InvalidParameter;
+            if (@import("../../drivers/tty/vt_console.zig").from(tty.get_tty())) |console|
+                console.set_theme(selected);
             printk("\x1b[2J\x1b[H", .{});
             utils.show_palette();
         },
