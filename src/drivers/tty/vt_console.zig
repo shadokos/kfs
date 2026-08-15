@@ -382,10 +382,6 @@ fn driver_write(tty: *TtyStruct, data: []const u8) usize {
     return data.len;
 }
 
-fn driver_put_char(tty: *TtyStruct, c: u8) void {
-    of(tty).putchar(c);
-}
-
 fn driver_flush(tty: *TtyStruct) void {
     of(tty).view();
 }
@@ -400,7 +396,6 @@ fn driver_activate(tty: *TtyStruct, active: bool) void {
 
 pub const driver = TtyDriver{
     .write = &driver_write,
-    .put_char = &driver_put_char,
     .flush = &driver_flush,
     .activate = &driver_activate,
 };

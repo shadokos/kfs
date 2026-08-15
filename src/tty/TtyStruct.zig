@@ -30,8 +30,8 @@ input_buffer: InputBuffer = .{},
 /// Feed bytes arriving from the hardware through the line discipline.
 pub fn input(self: *Self, s: []const u8) void {
     for (s) |c| self.input_char(c);
-    // Echo went to the driver a byte at a time; nothing has told it to show
-    // what it accumulated yet.
+    // Echo reached the driver as it went; nothing has told it to show what it
+    // accumulated yet.
     self.driver_flush();
 }
 
@@ -96,18 +96,21 @@ fn erase_char(self: *Self) void {
     const erased = self.input_buffer.erase() orelse return;
     if (!(self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE)) return;
 
-    self.driver_write("\x08 \x08");
+    self.output("\x08 \x08");
     if (self.config.c_lflag.ECHOCTL and self.is_echoctl(erased))
-        self.driver_write("\x08 \x08");
+        self.output("\x08 \x08");
 }
 
+/// Echo goes out the same way a write does, output processing included: the
+/// newline that ends a typed line has to become a carriage return and a line
+/// feed exactly as a written one does, or the next line starts under wherever
+/// the typing stopped.
 fn echo(self: *Self, c: u8) void {
     if (self.config.c_lflag.ECHO or (c == '\n' and self.config.c_lflag.ECHONL)) {
         if (self.config.c_lflag.ECHOCTL and self.is_echoctl(c)) {
-            self.driver_putchar('^');
-            self.driver_putchar(c | 0b01000000);
+            self.output(&[2]u8{ '^', c | 0b01000000 });
         } else {
-            self.driver_putchar(c);
+            self.output(&[1]u8{c});
         }
     }
 }
@@ -157,17 +160,13 @@ pub fn read(self: *Self, s: []u8) ReadError!usize {
     return count;
 }
 
-/// Write to the terminal, suitable for std.io.Writer.
-///
-/// Output processing only ever rewrites CR and LF, so the untouched runs
-/// between them are handed to the driver whole. A driver that decodes multibyte
-/// input therefore never sees a sequence cut in half, which chunking by a fixed
-/// buffer size would not guarantee.
-pub fn write(self: *Self, s: []const u8) WriteError!usize {
+/// Send bytes out through output processing, without pushing them to the
+/// hardware yet. Only CR and LF are rewritten, so the runs between them go to
+/// the driver whole and a multibyte sequence is never cut in half.
+fn output(self: *Self, s: []const u8) void {
     if (!self.config.c_oflag.OPOST) {
         _ = self.driver.write(self, s);
-        self.driver_flush();
-        return s.len;
+        return;
     }
 
     var start: usize = 0;
@@ -184,7 +183,11 @@ pub fn write(self: *Self, s: []const u8) WriteError!usize {
         start = i + 1;
     }
     if (start != s.len) _ = self.driver.write(self, s[start..]);
+}
 
+/// Write to the terminal, suitable for std.io.Writer.
+pub fn write(self: *Self, s: []const u8) WriteError!usize {
+    self.output(s);
     self.driver_flush();
     return s.len;
 }
@@ -198,20 +201,6 @@ pub fn reader(self: *Self) Reader {
 }
 
 // Reaching the hardware
-
-/// Write straight to the driver, skipping output processing. Echo uses this:
-/// what the line discipline emits is already in its final form.
-fn driver_write(self: *Self, data: []const u8) void {
-    _ = self.driver.write(self, data);
-}
-
-fn driver_putchar(self: *Self, c: u8) void {
-    if (self.driver.put_char) |put_char| {
-        put_char(self, c);
-    } else {
-        _ = self.driver.write(self, &[1]u8{c});
-    }
-}
 
 pub fn driver_flush(self: *Self) void {
     if (self.driver.flush) |flush| flush(self);
