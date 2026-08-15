@@ -163,6 +163,7 @@ pub fn handler(_: InterruptFrame) void {
         },
     };
     pic.ack(.Keyboard);
+    tty.notify(tty.get_tty());
 }
 
 fn is_key_available() bool {

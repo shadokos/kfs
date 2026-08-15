@@ -53,6 +53,9 @@ pub fn kernel_log(
 
             @import("debug.zig").dump_current_stack_trace() catch {};
 
+            // The scheduler has just been dismantled, so there is no input task
+            // left to run the keyboard. Polling it here is what still lets the
+            // backtrace above be scrolled through.
             while (true) {
                 @import("cpu.zig").halt();
                 @import("drivers/input/keyboard/keyboard.zig").kb_read();

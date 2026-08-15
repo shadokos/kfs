@@ -14,6 +14,10 @@ flush: ?*const fn (tty: *TtyStruct) void = null,
 /// something to a driver sharing one screen between terminals.
 activate: ?*const fn (tty: *TtyStruct, active: bool) void = null,
 
+/// Take in what the hardware has to offer. Called from the input task, never
+/// from the interrupt that flagged the terminal.
+receive: ?*const fn (tty: *TtyStruct) void = null,
+
 /// The termios settings changed. `old` is what they were, for a driver that
 /// only wants to reprogram what actually moved.
 set_termios: ?*const fn (tty: *TtyStruct, old: termios.termios) void = null,
