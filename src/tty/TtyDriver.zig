@@ -7,10 +7,6 @@ const termios = @import("termios.zig");
 /// Send processed output to the hardware. Returns the number of bytes taken.
 write: *const fn (tty: *TtyStruct, data: []const u8) usize,
 
-/// Send a single byte. Null falls back to `write` with a one byte slice; a
-/// driver only needs this when writing one byte is cheaper than a slice.
-put_char: ?*const fn (tty: *TtyStruct, c: u8) void = null,
-
 /// Push anything held back out to the hardware.
 flush: ?*const fn (tty: *TtyStruct) void = null,
 
