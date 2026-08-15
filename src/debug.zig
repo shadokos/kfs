@@ -4,6 +4,7 @@ const logger = std.log.scoped(.debug);
 const allocator = @import("memory.zig").bigAlloc.allocator();
 const utils = @import("shell/utils.zig");
 const tty = @import("tty/tty.zig");
+const vt_console = @import("drivers/tty/vt_console.zig");
 
 var sections: std.debug.Dwarf.SectionArray = std.debug.Dwarf.null_section_array;
 pub var dwarf_info: ?std.debug.Dwarf = null;
@@ -141,7 +142,7 @@ fn dump_stack_trace_internal(writer: *std.io.Writer, stack_it: std.debug.StackIt
         };
 
         if (verbose) {
-            writer.print("═" ** tty.width, .{}) catch {};
+            writer.print("═" ** vt_console.width, .{}) catch {};
             writer.print("{s}{s: ^80}{s}\n", .{ c.cyan, sym.name, c.reset }) catch {};
 
             writer.print("frame:\n- ebp: 0x{x}\n- esp: 0x{x}\n- ret: 0x{x}\n\n", .{ it.fp, old_fp, _addr }) catch {};
