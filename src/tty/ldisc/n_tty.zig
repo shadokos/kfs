@@ -7,6 +7,9 @@ const std = @import("std");
 
 const TtyStruct = @import("../TtyStruct.zig");
 const termios = @import("../termios.zig");
+const scheduler = @import("../../task/scheduler.zig");
+const timer = @import("../../timer.zig");
+const TaskDescriptor = @import("../../task/task.zig").TaskDescriptor;
 
 fn cc(tty: *const TtyStruct, comptime which: termios.cc_index) u8 {
     return tty.config.c_cc[@intFromEnum(which)];
@@ -122,28 +125,105 @@ pub fn has_input(tty: *const TtyStruct) bool {
         tty.input_buffer.count() != 0;
 }
 
-/// Hand bytes to a reader, waiting until the discipline has some.
-///
-/// VMIN and VTIME are not honoured yet, so a read returns on a complete line in
-/// canonical mode and on the first byte otherwise.
-pub fn read(tty: *TtyStruct, s: []u8) usize {
-    const scheduler = @import("../../task/scheduler.zig");
+/// VTIME counts tenths of a second.
+const vtime_unit_us = 100_000;
+
+fn read_timed_out(_: *TaskDescriptor, data: *usize) void {
+    const tty: *TtyStruct = @ptrCast(@alignCast(data));
+    tty.read_timed_out = true;
+    tty.read_queue.try_unblock();
+}
+
+fn arm_timer(tty: *TtyStruct, deciseconds: u8) ?u64 {
+    tty.read_timed_out = false;
+    return timer.schedule_event(.{
+        .timestamp = timer.get_utime_since_boot() + @as(u64, deciseconds) * vtime_unit_us,
+        .callback = read_timed_out,
+        .task = scheduler.get_current_task(),
+        .data = @ptrCast(@alignCast(tty)),
+    }) catch null;
+}
+
+/// Sleep until the discipline publishes something or VTIME runs out.
+fn wait(tty: *TtyStruct) TtyStruct.ReadError!void {
+    tty.read_queue.block(scheduler.get_current_task(), @ptrCast(tty)) catch
+        return error.EINTR;
+}
+
+/// Hand bytes to a reader. Canonical mode ignores VMIN and VTIME: a line is the
+/// unit, and is not readable until finished, POSIX 11.1.6.
+pub fn read(tty: *TtyStruct, s: []u8) TtyStruct.ReadError!usize {
+    if (s.len == 0) return 0;
+    return if (tty.config.c_lflag.ICANON)
+        read_canonical(tty, s)
+    else
+        read_raw(tty, s);
+}
+
+fn read_canonical(tty: *TtyStruct, s: []u8) TtyStruct.ReadError!usize {
     var count: usize = 0;
 
     for (s) |*c| {
-        while (!has_input(tty))
-            tty.read_queue.block_no_int(scheduler.get_current_task(), @ptrCast(tty));
+        while (!has_input(tty)) wait(tty) catch
+            return if (count != 0) count else error.EINTR;
 
         const byte = tty.input_buffer.pop().?;
         c.* = byte;
         count += 1;
 
-        if (tty.config.c_lflag.ICANON and is_end_of_line(tty, byte)) {
+        if (is_end_of_line(tty, byte)) {
             // Not part of the line. A line holding only EOF gives a read of
             // zero, which is how a terminal reports end of input.
             if (byte == cc(tty, .VEOF)) count -= 1;
             break;
         }
+    }
+    return count;
+}
+
+/// Non-canonical reads, the four cases of POSIX 11.1.7.
+///
+///     MIN>0 TIME>0  block for the first byte, then TIME between bytes
+///     MIN>0 TIME=0  block until MIN bytes
+///     MIN=0 TIME>0  TIME bounds the whole read, which a byte also ends
+///     MIN=0 TIME=0  whatever is there, at once, even nothing
+///
+/// MIN is capped by what the caller asked for.
+fn read_raw(tty: *TtyStruct, s: []u8) TtyStruct.ReadError!usize {
+    const vmin = @min(@as(usize, cc(tty, .VMIN)), s.len);
+    const vtime = cc(tty, .VTIME);
+    const inter_byte = vmin != 0 and vtime != 0;
+
+    var count: usize = 0;
+    var timer_id: ?u64 = null;
+    defer if (timer_id) |id| timer.remove_by_id(id);
+
+    tty.read_timed_out = false;
+    // At zero MIN the timer bounds the read; above it, the gap between bytes.
+    if (vmin == 0 and vtime != 0) timer_id = arm_timer(tty, vtime);
+
+    while (true) {
+        while (count < s.len) {
+            const byte = tty.input_buffer.pop() orelse break;
+            s[count] = byte;
+            count += 1;
+
+            if (inter_byte) {
+                if (timer_id) |id| timer.remove_by_id(id);
+                timer_id = arm_timer(tty, vtime);
+            }
+        }
+
+        if (count == s.len) break;
+        // Nothing to wait for: MIN and TIME both zero take what is there.
+        if (vmin == 0 and vtime == 0) break;
+        // MIN bytes have arrived, or with MIN at zero, the one byte that ends
+        // a timed read.
+        if (count >= vmin and (vmin != 0 or count != 0)) break;
+        // The gap or the read timer ran out.
+        if (tty.read_timed_out) break;
+
+        wait(tty) catch return if (count != 0) count else error.EINTR;
     }
     return count;
 }

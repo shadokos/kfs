@@ -35,6 +35,9 @@ events: bool = false,
 /// Readers waiting for the discipline to publish something.
 read_queue: wait_queue.WaitQueue(.{ .predicate = input_ready }) = .{},
 
+/// Raised when the VTIME timer fires, cleared when a read starts waiting again.
+read_timed_out: bool = false,
+
 // Input and reading, which the line discipline owns
 
 /// Feed bytes arriving from the hardware through the line discipline.
@@ -42,9 +45,11 @@ pub fn input(self: *Self, s: []const u8) void {
     n_tty.receive(self, s);
 }
 
+/// A waiting reader is woken by input arriving or by VTIME running out, and
+/// has to tell the two apart itself.
 fn input_ready(_: *void, data: ?*void) bool {
     const self: *Self = @ptrCast(@alignCast(data.?));
-    return n_tty.has_input(self);
+    return self.read_timed_out or n_tty.has_input(self);
 }
 
 /// Read from the terminal, suitable for std.io.Reader.
@@ -55,7 +60,9 @@ pub fn read(self: *Self, s: []u8) ReadError!usize {
 // Writing
 
 pub const WriteError = error{};
-pub const ReadError = error{};
+
+/// A read cut short by a signal has to say so: zero already means end of input.
+pub const ReadError = error{EINTR};
 
 pub const Writer = std.io.GenericWriter(*Self, WriteError, write);
 pub const Reader = std.io.GenericReader(*Self, ReadError, read);

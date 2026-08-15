@@ -852,3 +852,43 @@ pub fn unmount(shell: anytype, args: [][]u8) CmdError!void {
 
     mount_point.unmount();
 }
+
+/// Read from this terminal outside canonical mode, to exercise the four MIN and
+/// TIME cases of POSIX 11.1.7. Restores the previous settings on the way out.
+/// Usage: ttyread <vmin> <vtime> <count>
+pub fn ttyread(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 4) return CmdError.InvalidNumberOfArguments;
+
+    const termios = @import("../../tty/termios.zig");
+    const timer = @import("../../timer.zig");
+
+    const vmin = std.fmt.parseInt(u8, args[1], 0) catch return CmdError.InvalidParameter;
+    const vtime = std.fmt.parseInt(u8, args[2], 0) catch return CmdError.InvalidParameter;
+    const count = std.fmt.parseInt(usize, args[3], 0) catch return CmdError.InvalidParameter;
+
+    var buffer: [64]u8 = undefined;
+    if (count == 0 or count > buffer.len) return CmdError.InvalidParameter;
+
+    const t = tty.get_tty();
+    const saved = t.config;
+    defer t.set_termios(saved);
+
+    var raw = saved;
+    raw.c_lflag.ICANON = false;
+    raw.c_cc[@intFromEnum(termios.cc_index.VMIN)] = vmin;
+    raw.c_cc[@intFromEnum(termios.cc_index.VTIME)] = vtime;
+    t.set_termios(raw);
+
+    shell.print("MIN={d} TIME={d}, reading up to {d} bytes\n", .{ vmin, vtime, count });
+
+    const started = timer.get_utime_since_boot();
+    const read = t.read(buffer[0..count]) catch |e| {
+        utils.print_error(shell, "read: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+    const elapsed = timer.get_utime_since_boot() - started;
+
+    shell.print("\nread {d} bytes in {d} ms:", .{ read, elapsed / 1000 });
+    for (buffer[0..read]) |c| shell.print(" {x:0>2}", .{c});
+    shell.print("\n", .{});
+}
