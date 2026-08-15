@@ -5,15 +5,7 @@ const std = @import("std");
 
 const termios = @import("termios.zig");
 const TtyDriver = @import("TtyDriver.zig");
-
-const MAX_INPUT: usize = 4096; // must be a power of 2
-
-comptime {
-    if (@popCount(MAX_INPUT) != 1)
-        @compileError("MAX_INPUT must be a power of 2");
-}
-
-const input_buffer_pos_t = std.meta.Int(.unsigned, std.math.log2(MAX_INPUT));
+const InputBuffer = @import("InputBuffer.zig");
 
 const Self = @This();
 
@@ -30,41 +22,47 @@ driver_data: ?*anyopaque = null,
 /// Current termios configuration.
 config: termios.termios = .{},
 
-/// Input ring buffer.
-input_buffer: [MAX_INPUT]u8 = undefined,
-
-/// End of the input area, where new input is written.
-read_head: input_buffer_pos_t = 0,
-
-/// Start of the unread part, where read() takes from.
-read_tail: input_buffer_pos_t = 0,
-
-/// In canonical mode, start of the line being edited.
-current_line_begin: input_buffer_pos_t = 0,
-
-/// End of the processed area.
-current_line_end: input_buffer_pos_t = 0,
-
-/// First byte the line discipline has not looked at yet.
-unprocessed_begin: input_buffer_pos_t = 0,
+/// What the line discipline has produced and read() has not taken.
+input_buffer: InputBuffer = .{},
 
 // Input
 
 /// Feed bytes arriving from the hardware through the line discipline.
 pub fn input(self: *Self, s: []const u8) void {
     for (s) |c| self.input_char(c);
-    self.local_processing();
     // Echo went to the driver a byte at a time; nothing has told it to show
     // what it accumulated yet.
     self.driver_flush();
 }
 
-/// Queue one byte, after the c_iflag translations.
-fn input_char(self: *Self, c: u8) void {
-    if (self.input_processing(c)) |p| if (self.read_head +% 1 != self.read_tail) {
-        self.input_buffer[self.read_head] = p;
-        self.read_head +%= 1;
-    };
+/// One byte, all the way through the line discipline.
+fn input_char(self: *Self, raw: u8) void {
+    const c = self.input_processing(raw) orelse return;
+
+    if (!self.config.c_lflag.ICANON) {
+        // Nothing is being edited, so a byte is readable as soon as it lands.
+        self.input_buffer.push(c);
+        self.input_buffer.commit();
+        self.echo(c);
+        return;
+    }
+
+    if (self.is_end_of_line(c)) {
+        // EOF ends the line without appearing on the screen. It is still kept,
+        // so that read() can tell a line ended by EOF from one ended by a
+        // newline, see `read`.
+        if (c != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)]) self.echo(c);
+        self.input_buffer.push(c);
+        self.input_buffer.commit();
+    } else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
+        self.erase_char();
+    } else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
+        while (self.input_buffer.head != self.input_buffer.canon_head) self.erase_char();
+        // todo ECHOK
+    } else {
+        self.input_buffer.push(c);
+        self.echo(c);
+    }
 }
 
 /// POSIX input processing: IGNCR, ICRNL, INLCR.
@@ -81,7 +79,7 @@ fn is_end_of_line(self: *Self, c: u8) bool {
 }
 
 /// Whether ECHOCTL should show this byte as ^X rather than send it through.
-fn is_echoctl(self: Self, c: u8) bool {
+fn is_echoctl(self: *const Self, c: u8) bool {
     return c & 0b11100000 == 0 and
         c != '\t' and
         c != '\n' and
@@ -89,16 +87,18 @@ fn is_echoctl(self: Self, c: u8) bool {
         c != self.config.c_cc[@intFromEnum(termios.cc_index.VSTOP)];
 }
 
-/// Take one character back off the line being edited.
+/// Take one character back off the line being edited, and unprint it.
+///
+/// A character ECHOCTL showed as ^X took two columns, so it takes two to rub
+/// out. Doing nothing when the line is empty is what stops erase at the start
+/// of a line, POSIX 11.1.6.
 fn erase_char(self: *Self) void {
-    if (self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE) {
+    const erased = self.input_buffer.erase() orelse return;
+    if (!(self.config.c_lflag.ECHO and self.config.c_lflag.ECHOE)) return;
+
+    self.driver_write("\x08 \x08");
+    if (self.config.c_lflag.ECHOCTL and self.is_echoctl(erased))
         self.driver_write("\x08 \x08");
-        self.current_line_end -%= 1;
-        if (self.config.c_lflag.ECHOCTL and self.is_echoctl(self.input_buffer[self.current_line_end]))
-            self.driver_write("\x08 \x08");
-    } else {
-        self.current_line_end -%= 1;
-    }
 }
 
 fn echo(self: *Self, c: u8) void {
@@ -112,48 +112,6 @@ fn echo(self: *Self, c: u8) void {
     }
 }
 
-/// POSIX local processing, the canonical and non-canonical modes of c_lflag.
-fn local_processing(self: *Self) void {
-    if (self.config.c_lflag.ICANON) {
-        while (self.unprocessed_begin != self.read_head) {
-            const c: u8 = self.input_buffer[self.unprocessed_begin];
-            self.unprocessed_begin +%= 1;
-
-            if (self.is_end_of_line(c)) {
-                if (c != self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)]) {
-                    self.echo(c);
-                }
-                self.input_buffer[self.current_line_end] = c;
-                self.current_line_end +%= 1;
-                self.current_line_begin = self.current_line_end;
-            } else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VERASE)]) {
-                if (self.current_line_end != self.current_line_begin) {
-                    self.erase_char();
-                }
-            } else if (c == self.config.c_cc[@intFromEnum(termios.cc_index.VKILL)]) {
-                while (self.current_line_end != self.current_line_begin) {
-                    self.erase_char();
-                }
-                // todo ECHOK
-            } else {
-                self.input_buffer[self.current_line_end] = c;
-                self.current_line_end +%= 1;
-                self.echo(c);
-            }
-        }
-        self.read_head = self.current_line_end;
-        self.unprocessed_begin = self.current_line_end;
-    } else {
-        while (self.current_line_end != self.read_head) {
-            if (self.config.c_lflag.ECHO or
-                (self.input_buffer[self.current_line_end] == '\n' and
-                    self.config.c_lflag.ECHONL))
-                self.driver_putchar(self.input_buffer[self.current_line_end]);
-            self.current_line_end +%= 1;
-        }
-    }
-}
-
 // Reading and writing
 
 pub const WriteError = error{};
@@ -162,25 +120,36 @@ pub const ReadError = error{};
 pub const Writer = std.io.GenericWriter(*Self, WriteError, write);
 pub const Reader = std.io.GenericReader(*Self, ReadError, read);
 
+/// Whether a read can be satisfied right now. A canonical read may only reach
+/// a completed line, POSIX 11.1.6.
+fn has_input(self: *const Self) bool {
+    return if (self.config.c_lflag.ICANON)
+        self.input_buffer.canon_count() != 0
+    else
+        self.input_buffer.count() != 0;
+}
+
 /// Read from the terminal, suitable for std.io.Reader.
 ///
-/// In canonical mode a read is satisfied by a complete line; otherwise by any
-/// byte the line discipline has published. VMIN and VTIME are not honoured yet.
+/// VMIN and VTIME are not honoured yet, so a read returns on a complete line in
+/// canonical mode and on the first byte otherwise.
 pub fn read(self: *Self, s: []u8) ReadError!usize {
     var count: usize = 0;
     for (s) |*c| {
-        while (self.read_tail == self.current_line_begin and self.read_head +% 1 != self.read_tail) {
+        while (!self.has_input()) {
             @import("../cpu.zig").halt();
             @import("../drivers/input/keyboard/keyboard.zig").kb_read();
         }
 
-        c.* = self.input_buffer[self.read_tail];
-        if (self.read_tail == self.current_line_begin)
-            self.current_line_begin +%= 1;
-        self.read_tail +%= 1;
+        const byte = self.input_buffer.pop().?;
+        c.* = byte;
         count += 1;
-        if (self.config.c_lflag.ICANON and self.is_end_of_line(c.*)) {
-            if (c.* == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
+
+        if (self.config.c_lflag.ICANON and self.is_end_of_line(byte)) {
+            // EOF ended the line, so it is not part of it. A line holding only
+            // EOF gives a read of zero, which is how a terminal reports the end
+            // of its input.
+            if (byte == self.config.c_cc[@intFromEnum(termios.cc_index.VEOF)])
                 count -= 1;
             break;
         }
