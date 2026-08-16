@@ -273,15 +273,20 @@ export fn wrapper(
     if (!interrupt_enable)
         scheduler.lock_depth -|= 1;
 
-    // A task killed or stopped by a signal is marked as such but is still on
-    // this stack, and would otherwise iret back into userspace and carry on.
-    // Giving up the processor here rather than where the signal was handled
-    // means lock_depth has already been put back: this frame is never returned
-    // to, or not until a SIGCONT puts the task back on the ready queue.
-    if (scheduler.is_initialized()) switch (scheduler.get_current_task().state) {
-        .Zombie, .Stopped => scheduler.schedule(),
-        else => {},
-    };
+    // A task killed or stopped is still on this stack. Given up here and not
+    // where the signal was handled, so lock_depth is already back in balance. A
+    // continued task comes back past signal handling, hence the loop.
+    while (scheduler.is_initialized()) {
+        const state = scheduler.get_current_task().state;
+        if (state != .Zombie and state != .Stopped) break;
+
+        scheduler.schedule();
+
+        if (privilege_transition) {
+            setup_iret_frame(frame);
+            frame.* = scheduler.get_current_task().ucontext.uc_mcontext;
+        }
+    }
 
     ret_from_interrupt(frame);
 }

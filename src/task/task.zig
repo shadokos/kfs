@@ -292,11 +292,27 @@ pub const TaskDescriptor = struct {
         }
     }
 
+    /// Queue a signal, and decide here what it does to a task that is not
+    /// running: signals are only acted on when a task returns to userspace.
     pub fn send_signal(self: *Self, sig: signal.siginfo_t) void {
+        const id = sig.si_signo.safeUnwrap() orelse return;
+
+        // A stop and a continue cancel each other out, POSIX 2.4.3.
+        switch (self.signalManager.get_defaultAction(id)) {
+            .Continue => for ([_]signal.Id{ .SIGSTOP, .SIGTSTP, .SIGTTIN, .SIGTTOU }) |stop|
+                self.signalManager.discard(stop),
+            .Stop => self.signalManager.discard(.SIGCONT),
+            else => {},
+        }
+
         self.signalManager.queue_signal(sig);
-        if (sig.si_signo.safeUnwrap() == .SIGCONT and self.state == .Stopped) {
-            self.state = .Ready;
-            ready_queue.push(self);
+
+        if (self.state == .Stopped) {
+            // SIGKILL too: it can be neither blocked nor ignored.
+            if (id == .SIGCONT or id == .SIGKILL) {
+                self.state = .Ready;
+                ready_queue.push(self);
+            }
         } else if (self.state == .Blocked) {
             @import("wait_queue.zig").interrupt(self);
         }
