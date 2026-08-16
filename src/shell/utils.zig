@@ -236,7 +236,7 @@ pub fn waitpid(shell: anytype, pid: i32) void {
         .{
             .WNOHANG = false,
             .WCONTINUED = false,
-            .WUNTRACED = false,
+            .WUNTRACED = true,
         },
     ) catch |e| {
         shell.print_error("waitpid: wait error: {s}", .{@errorName(e)});
