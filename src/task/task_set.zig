@@ -73,3 +73,21 @@ pub fn destroy_task(pid: TaskDescriptor.Pid) !void {
     count -= 1;
     TaskDescriptor.cache.allocator().destroy(descriptor);
 }
+
+/// Send a signal to every task in a process group, and say how many got it.
+///
+/// A terminal signals a group rather than a task: the control characters of
+/// POSIX 11.1.9 reach whichever job holds the terminal, not one process of it.
+pub fn send_signal_to_group(pgid: TaskDescriptor.Pid, sig: @import("signal.zig").siginfo_t) usize {
+    scheduler.enter_critical();
+    defer scheduler.exit_critical();
+
+    var sent: usize = 0;
+    for (list) |entry| {
+        const descriptor = entry orelse continue;
+        if (descriptor.pgid != pgid) continue;
+        descriptor.send_signal(sig);
+        sent += 1;
+    }
+    return sent;
+}

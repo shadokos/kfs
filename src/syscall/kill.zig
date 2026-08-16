@@ -17,11 +17,20 @@ pub fn do(pid: task.TaskDescriptor.Pid, id: signal.Id) !void {
             // todo set more fields of siginfo
         });
     } else if (pid == 0) {
-        // todo: process group
+        const pgid = scheduler.get_current_task().pgid;
+        if (task_set.send_signal_to_group(pgid, .{
+            .si_signo = .{ .valid = id },
+            .si_code = .SI_USER,
+            .si_pid = scheduler.get_current_task().pid,
+        }) == 0) return Errno.ESRCH;
     } else if (pid == -1) {
         // todo: every process for which the calling process has  per-
         // mission to send signals, except for process 1
     } else { // pid < -1
-        // todo: process group with id -id
+        if (task_set.send_signal_to_group(-pid, .{
+            .si_signo = .{ .valid = id },
+            .si_code = .SI_USER,
+            .si_pid = scheduler.get_current_task().pid,
+        }) == 0) return Errno.ESRCH;
     }
 }
