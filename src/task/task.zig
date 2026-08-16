@@ -204,6 +204,7 @@ pub const TaskDescriptor = struct {
     fn handle_default_action(self: *Self, sig: signal.siginfo_t) void {
         switch (self.signalManager.get_defaultAction(sig.si_signo.unwrap())) {
             .Ignore => {},
+            // Marks the task; not returning to userspace is decided in wrapper.
             .Terminate => {
                 if (self.state == .Ready)
                     ready_queue.remove(self);
