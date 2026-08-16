@@ -216,7 +216,17 @@ pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth:
 
 const SignalId = @import("../task/signal.zig").Id;
 
+/// Wait for a job, with the terminal handed over to it for the duration.
+///
+/// A job in the foreground is the one the control characters of the terminal
+/// signal, POSIX 11.1.2. Doing it here is what a shell does with setpgid and
+/// tcsetpgrp; those do not exist yet, so the group is the job's own pid and the
+/// handover is hardcoded.
 pub fn waitpid(shell: anytype, pid: i32) void {
+    const terminal = tty.get_tty();
+    const previous = terminal.set_foreground_pgid(pid);
+    defer _ = terminal.set_foreground_pgid(previous);
+
     var status: @import("../task/wait.zig").Status = undefined;
     const ret = @import("../task/wait.zig").wait(
         pid,

@@ -6,6 +6,7 @@ const std = @import("std");
 const termios = @import("termios.zig");
 const TtyDriver = @import("TtyDriver.zig");
 const InputBuffer = @import("InputBuffer.zig");
+const Pid = @import("../task/task.zig").TaskDescriptor.Pid;
 const n_tty = @import("ldisc/n_tty.zig");
 const wait_queue = @import("../task/wait_queue.zig");
 
@@ -37,6 +38,10 @@ read_queue: wait_queue.WaitQueue(.{ .predicate = input_ready }) = .{},
 
 /// Raised when the VTIME timer fires, cleared when a read starts waiting again.
 read_timed_out: bool = false,
+
+/// Process group the control characters of this terminal signal, POSIX 11.1.2.
+/// Null until something claims the terminal, and nothing is signalled then.
+foreground_pgid: ?Pid = null,
 
 // Input and reading, which the line discipline owns
 
@@ -111,6 +116,14 @@ pub fn reader(self: *Self) Reader {
 
 pub fn driver_flush(self: *Self) void {
     if (self.driver.flush) |flush| flush(self);
+}
+
+/// Hand the terminal to a process group, and give back the one it replaces so
+/// that a caller can put it back afterwards.
+pub fn set_foreground_pgid(self: *Self, pgid: ?Pid) ?Pid {
+    const previous = self.foreground_pgid;
+    self.foreground_pgid = pgid;
+    return previous;
 }
 
 /// Tell the driver whether this terminal is the one being shown.

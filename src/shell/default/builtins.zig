@@ -383,6 +383,9 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         if (std.mem.eql(u8, name, args[1])) {
             const new_task = @import("../../task/task_set.zig").create_task() catch
                 @panic("Failed to create new_task");
+            // A job of its own, so that the terminal can signal it without
+            // reaching the shell that started it.
+            new_task.pgid = new_task.pid;
             new_task.spawn(
                 &@import("../../task/userspace.zig").call_userspace,
                 @intFromPtr(@extern(?*fn () void, .{ .name = "userland_" ++ name }).?),

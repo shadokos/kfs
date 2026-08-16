@@ -10,6 +10,8 @@ const termios = @import("../termios.zig");
 const scheduler = @import("../../task/scheduler.zig");
 const timer = @import("../../timer.zig");
 const TaskDescriptor = @import("../../task/task.zig").TaskDescriptor;
+const signal = @import("../../task/signal.zig");
+const task_set = @import("../../task/task_set.zig");
 
 fn cc(tty: *const TtyStruct, comptime which: termios.cc_index) u8 {
     return tty.config.c_cc[@intFromEnum(which)];
@@ -26,8 +28,43 @@ pub fn receive(tty: *TtyStruct, s: []const u8) void {
     tty.read_queue.try_unblock();
 }
 
+/// The signal a control character raises, or null when it raises none.
+/// A c_cc entry left at zero disables that character, POSIX 11.1.9.
+fn signal_char(tty: *const TtyStruct, c: u8) ?signal.Id {
+    if (!tty.config.c_lflag.ISIG) return null;
+
+    const generators = .{
+        .{ termios.cc_index.VINTR, signal.Id.SIGINT },
+        .{ termios.cc_index.VQUIT, signal.Id.SIGQUIT },
+        .{ termios.cc_index.VSUSP, signal.Id.SIGTSTP },
+    };
+    inline for (generators) |generator| {
+        const wanted = tty.config.c_cc[@intFromEnum(generator[0])];
+        if (wanted != 0 and c == wanted) return generator[1];
+    }
+    return null;
+}
+
+/// Raise a signal on the group holding the terminal, POSIX 11.1.9.
+///
+/// The half typed line goes with it unless NOFLSH says otherwise: whatever was
+/// being edited was meant for a job that is about to be interrupted.
+fn raise_signal(tty: *TtyStruct, c: u8, id: signal.Id) void {
+    echo(tty, c);
+    if (!tty.config.c_lflag.NOFLSH) tty.input_buffer.clear();
+
+    const pgid = tty.foreground_pgid orelse return;
+    _ = task_set.send_signal_to_group(pgid, .{
+        .si_signo = .{ .valid = id },
+        .si_code = .SI_KERNEL,
+        .si_pid = 0,
+    });
+}
+
 fn receive_char(tty: *TtyStruct, raw: u8) void {
     const c = input_processing(tty, raw) orelse return;
+
+    if (signal_char(tty, c)) |id| return raise_signal(tty, c, id);
 
     if (!tty.config.c_lflag.ICANON) {
         // Nothing is being edited, so a byte is readable as soon as it lands.
