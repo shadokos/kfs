@@ -273,12 +273,15 @@ export fn wrapper(
     if (!interrupt_enable)
         scheduler.lock_depth -|= 1;
 
-    // A task killed by a signal is marked dead but is still on this stack, and
-    // would otherwise iret back into userspace and keep running. Giving up the
-    // processor here rather than where the signal was handled means lock_depth
-    // has already been put back: this frame is never returned to.
-    if (scheduler.is_initialized() and scheduler.get_current_task().state == .Zombie)
-        scheduler.schedule();
+    // A task killed or stopped by a signal is marked as such but is still on
+    // this stack, and would otherwise iret back into userspace and carry on.
+    // Giving up the processor here rather than where the signal was handled
+    // means lock_depth has already been put back: this frame is never returned
+    // to, or not until a SIGCONT puts the task back on the ready queue.
+    if (scheduler.is_initialized()) switch (scheduler.get_current_task().state) {
+        .Zombie, .Stopped => scheduler.schedule(),
+        else => {},
+    };
 
     ret_from_interrupt(frame);
 }
