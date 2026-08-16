@@ -22,6 +22,7 @@ pub fn on_error(shell: *Shell) void {
 }
 
 pub fn pre_process(shell: *Shell) void {
+    utils.reap_children(shell);
     tty.flush();
     utils.print_prompt(shell);
 }
