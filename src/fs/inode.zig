@@ -169,7 +169,11 @@ pub fn destroy(self: *Self) void {
 pub fn open(self: *Self) Error.open!*File {
     const ret = try File.create();
     errdefer ret.destroy();
-    try self.call_or_panic(.open, .{ret});
+    if (self.mode.type == .Fifo) {
+        try @import("pipe.zig").open(self, ret);
+    } else {
+        try self.call_or_panic(.open, .{ret});
+    }
     return ret;
 }
 
