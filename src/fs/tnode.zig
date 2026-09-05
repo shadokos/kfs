@@ -6,6 +6,7 @@ const logger = std.log.scoped(.tnode);
 
 name: []const u8,
 inode: *Inode,
+mountpoint: ?MountPoint = null,
 sibling_node: std.DoublyLinkedList.Node = .{},
 parent: *Self,
 refs: usize = 0,
@@ -69,12 +70,34 @@ pub fn release(self: *Self) void {
     std.debug.assert(self.refs > 0);
     self.refs -= 1;
     if (self.refs == 0) {
+        std.debug.assert(self.mountpoint == null);
         self.inode.release();
         self.parent.inode.type_specific.Directory.children.remove(&self.sibling_node);
         self.parent.release();
         if (!tnodeCache.remove(.{ .inode = self.parent.inode, .name = self.name }))
             @panic("todo");
         destroy(self);
+    }
+}
+
+pub fn mount(self: *Self, inode: *Inode) void {
+    logger.debug("mount tnode: {*}", .{self});
+    if (self.mountpoint) |_| {
+        @panic("todo: already a mountpoint");
+    }
+    self.mountpoint = .{
+        .shadowed_inode = self.inode,
+    };
+    self.inode = inode.get_ref();
+}
+
+pub fn unmount(self: *Self) void {
+    if (self.mountpoint) |*mountpoint| {
+        self.inode.release();
+        self.inode = mountpoint.shadowed_inode;
+        self.mountpoint = null;
+    } else {
+        @panic("todo: not a mountpoint");
     }
 }
 

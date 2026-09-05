@@ -878,3 +878,40 @@ pub fn mknod(shell: anytype, args: [][]u8) CmdError!void {
 
     try translate_errno(shell, dir_tnode.inode.link(filename, inode));
 }
+
+pub fn mount(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 3 or args.len > 4) return CmdError.InvalidNumberOfArguments;
+
+    const device = args[1];
+    const mount_point_path = args[2];
+    const fsname = if (args.len == 4) args[3] else null;
+
+    const mount_point = vfs.resolve(mount_point_path) catch {
+        utils.print_error(shell, "Cannot resolve {s}", .{mount_point_path});
+        return CmdError.OtherError;
+    };
+
+    var diag: std.zon.parse.Diagnostics = .{};
+    const part_identifier = std.zon.parse.fromSlice(vfs.PartIdentifier, @import("../../memory.zig").smallAlloc.allocator(), @ptrCast(device), &diag, .{}) catch {
+        utils.print_error(shell, "Couldn't parse device `{s}`: {f}", .{ device, diag });
+        return CmdError.InvalidParameter;
+    };
+
+    vfs.mount(mount_point, part_identifier, .{ .fs = fsname }) catch |e| {
+        utils.print_error(shell, "Cannot mount device: {s}\n", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+}
+
+pub fn unmount(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const mount_point_path = args[1];
+
+    const mount_point = vfs.resolve(mount_point_path) catch {
+        utils.print_error(shell, "Cannot resolve {s}", .{mount_point_path});
+        return CmdError.OtherError;
+    };
+
+    mount_point.unmount();
+}

@@ -3,6 +3,8 @@ const memory = @import("memory.zig");
 const multiboot = @import("multiboot.zig");
 const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 
+root: @import("fs/vfs.zig").PartIdentifier,
+
 const Self = @This();
 var instance: ?Self = null;
 

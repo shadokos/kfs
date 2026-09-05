@@ -14,6 +14,39 @@ const bigAlloc: std.mem.Allocator = @import("../memory.zig").bigAlloc.allocator(
 
 var drivers: std.ArrayListUnmanaged(FileSystem) = .empty;
 
+pub const PartIdentifier = union(enum) {
+    UUID: []const u8,
+    path: []const u8,
+    virtual,
+};
+
+pub fn identify_fs(partition: *block.Partition) ?*FileSystem {
+    for (drivers.items) |*fs| {
+        if (fs.identify(partition)) {
+            return fs;
+        }
+    } else return null;
+}
+
+pub fn has_uuid(partition: *block.Partition, uuid: u128) ?*FileSystem {
+    for (drivers.items) |*fs| {
+        if (fs.identify(partition) and fs.uuid(partition) == uuid) {
+            return fs;
+        }
+    }
+    return null;
+}
+
+pub fn scan_for_uuid(uuid: u128) ?struct { *FileSystem, *block.Partition } {
+    var it = registry.partitions.inorderIterator();
+    while (it.next()) |entry| {
+        if (has_uuid(entry.key, uuid)) |fs| {
+            return .{ fs, entry.key };
+        }
+    }
+    return null;
+}
+
 pub fn add_filesystem(fs: FileSystem) !void {
     try drivers.append(smallAlloc, fs);
 }
@@ -46,6 +79,32 @@ pub fn create_hard_root(inode : *Inode) void {
 
 pub fn get_hard_root() *Tnode {
     return &(root_dentry orelse @panic("no hard root"));
+}
+
+pub fn mount(dst: *Tnode, identifier: PartIdentifier, options: MountOptions) !void {
+    var fs: ?*FileSystem = null;
+    const partition: ?*block.Partition = switch (identifier) {
+        .UUID => |uuid_str| b: {
+            const uuid = @import("../misc/parse_uuid.zig").parse_uuid(uuid_str) orelse return Errno.ENOTBLK;
+            fs, const part: *block.Partition = scan_for_uuid(uuid) orelse return Errno.ENOTBLK;
+            break :b part;
+        },
+        .path => |path| b: {
+            const tnode = try resolve(path);
+            if (tnode.inode.mode.type != .Block) {
+                return Errno.ENOTBLK;
+            }
+            const device = tnode.inode.type_specific.Block;
+            break :b registry.get_partition(device) orelse return Errno.ENOTBLK;
+        },
+        .virtual => null,
+    };
+    if (options.fs) |fs_name| {
+        fs = get_fs_by_name(fs_name) orelse return Errno.ENODEV;
+    }
+    const final_fs = fs orelse (if (partition) |p| identify_fs(p) else null) orelse return Errno.ENODEV;
+    const superblock = final_fs.create(partition, memory.smallAlloc.allocator());
+    dst.mount(try superblock.get_root());
 }
 
 pub fn init() !void {

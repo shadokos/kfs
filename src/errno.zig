@@ -82,6 +82,9 @@ pub const Errno = error{
     ETXTBSY,
     EWOULDBLOCK,
     EXDEV,
+
+    // non-POSIX
+    ENOTBLK,
 };
 
 pub fn is_in_set(e: anytype, comptime s: type) bool {
