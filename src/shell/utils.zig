@@ -216,6 +216,25 @@ pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth:
 
 const SignalId = @import("../task/signal.zig").Id;
 
+/// Give a job the shell's terminal as its standard streams. A task starts with
+/// no descriptors at all, and going through the file layer is what puts its
+/// reads and writes under the access control of POSIX 11.1.4.
+pub fn attach_standard_streams(job: *task.TaskDescriptor) !void {
+    const vfs = @import("../fs/vfs.zig");
+
+    var buffer: [16]u8 = undefined;
+    const path = try std.fmt.bufPrint(&buffer, "/dev/tty{d}", .{tty.current_tty});
+
+    const tnode = try vfs.resolve(path);
+    defer tnode.release();
+
+    const file = try tnode.inode.open();
+    // set() takes its own reference, so the one from open() is ours to drop.
+    defer file.close() catch {};
+
+    for (0..3) |fd| try job.files.set(@intCast(fd), file);
+}
+
 /// Collect the children that have died since the last prompt: nothing removes a
 /// terminated task until its parent asks for it.
 pub fn reap_children(shell: anytype) void {
