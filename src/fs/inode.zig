@@ -173,6 +173,8 @@ pub fn open(self: *Self) Error.open!*File {
         try @import("pipe.zig").open(self, ret);
     } else if (self.mode.type == .Block) {
         try @import("block.zig").open(self, ret);
+    } else if (self.mode.type == .Character) {
+        try @import("character.zig").open(self, ret);
     } else {
         try self.call_or_panic(.open, .{ret});
     }
