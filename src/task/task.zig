@@ -152,16 +152,7 @@ pub const TaskDescriptor = struct {
     /// group is hung up first, it was talking to a terminal it is about to lose.
     fn hangup_controlling_terminal(self: *Self) void {
         if (self.session.sid != self.pid) return;
-        const terminal = self.session.ctty orelse return;
-
-        if (terminal.foreground_pgid) |pgid| {
-            _ = task_set.send_signal_to_group(pgid, .{
-                .si_signo = .{ .valid = .SIGHUP },
-                .si_code = .SI_KERNEL,
-                .si_pid = 0,
-            });
-        }
-        self.session.disown(terminal);
+        self.session.hangup();
     }
 
     /// What a blocking call should do about whatever signal is waiting.
