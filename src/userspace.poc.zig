@@ -61,6 +61,14 @@ fn putchar(c: u8) linksection(".userspace") void {
     _ = syscall(.write, &.{ 1, &c, 1 });
 }
 
+fn putchar_fd(fd: i32, c: u8) linksection(".userspace") void {
+    _ = syscall(.write, &.{ fd, &c, 1 });
+}
+
+fn putstr_fd(fd: i32, s: []const u8) linksection(".userspace") void {
+    _ = syscall(.write, &.{ fd, s.ptr, s.len });
+}
+
 fn putstr(s: []const u8) linksection(".userspace") void {
     for (s) |c| {
         putchar(c);
@@ -244,5 +252,24 @@ export fn userland_fork() linksection(".userspace") void {
     _ = syscall(.sleep, .{100 * id});
     putstr("fork 4\n");
     _ = syscall(.sleep, .{20000});
+    _ = syscall(.exit, .{0});
+}
+
+const open = @import("syscall/open.zig");
+
+export fn userland_io() linksection(".userspace") void {
+    const fd = syscall(.open, .{
+        "/bonjour".ptr,
+        open.Flags{
+            .openMode = .wronly,
+            .create = true,
+            .exclusive = true,
+        },
+        open.Mode{},
+    });
+    putnbr(fd);
+    putstr_fd(fd, "AAAAAAAAAAAAAAAAAAAAAA\n");
+    _ = syscall(.truncate, .{ "/bonjour", 10 });
+    putstr_fd(fd, "BBBBBBBBBBBBBBBBBBBBBB\n");
     _ = syscall(.exit, .{0});
 }

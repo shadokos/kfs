@@ -366,6 +366,7 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         "sleep",
         "count",
         "fork",
+        "io",
     };
 
     if (args.len != 2) {
