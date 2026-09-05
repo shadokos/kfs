@@ -123,6 +123,8 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     vfs.create_hard_root(root_inode);
 
     vfs.add_filesystem(@import("drivers/devfs/driver.zig").fs) catch @panic("Failed to initialize devfs.");
+    @import("drivers/ext2/driver.zig").static_init() catch @panic("Failed to initialize ext2.");
+    vfs.add_filesystem(@import("drivers/ext2/driver.zig").fs) catch @panic("Failed to initialize ext2.");
 
     const root = CommandLine.get().root;
     if (root != .virtual) {
