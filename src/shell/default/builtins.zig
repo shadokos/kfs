@@ -41,6 +41,10 @@ pub fn clear(_: anytype, _: [][]u8) CmdError!void {
     return;
 }
 
+pub fn cmd(_: anytype, _: [][]u8) CmdError!void {
+    utils.print_cmd();
+}
+
 pub fn hexdump(_: anytype, args: [][]u8) CmdError!void {
     if (args.len != 3) {
         return CmdError.InvalidNumberOfArguments;
