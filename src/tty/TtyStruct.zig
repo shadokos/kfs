@@ -43,6 +43,10 @@ read_timed_out: bool = false,
 /// Null until something claims the terminal, and nothing is signalled then.
 foreground_pgid: ?Pid = null,
 
+/// Session this terminal controls, POSIX 11.1.3. At most one, hence a single
+/// pointer.
+session: ?*@import("../task/session.zig") = null,
+
 // Input and reading, which the line discipline owns
 
 /// Feed bytes arriving from the hardware through the line discipline.

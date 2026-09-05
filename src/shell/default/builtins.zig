@@ -951,3 +951,31 @@ pub fn stty(shell: anytype, args: [][]u8) CmdError!void {
         attr.c_cc[@intFromEnum(termios.cc_index.VTIME)],
     });
 }
+
+/// Show the session and process group of a task, and the terminal the session
+/// controls. Zero, or no argument, means the shell itself.
+/// Usage: session [pid]
+pub fn session(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len > 2) return CmdError.InvalidNumberOfArguments;
+
+    const task_set = @import("../../task/task_set.zig");
+    const pid = if (args.len == 2)
+        std.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter
+    else
+        0;
+
+    const task = if (pid == 0)
+        scheduler.get_current_task()
+    else
+        task_set.get_task_descriptor(pid) orelse {
+            utils.print_error(shell, "No such task: {d}", .{pid});
+            return CmdError.OtherError;
+        };
+
+    shell.print("pid {d} pgid {d} sid {d}", .{ task.pid, task.pgid, task.session.sid });
+    if (task.session.ctty) |terminal| {
+        shell.print(" ctty tty{d} fg {?d}\n", .{ terminal.index, terminal.foreground_pgid });
+    } else {
+        shell.print(" no controlling terminal\n", .{});
+    }
+}
