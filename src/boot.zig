@@ -118,6 +118,10 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
 
     vfs.init() catch @panic("Cannot initialize vfs");
 
+    const root_fs = @import("drivers/rootfs/driver.zig").fs;
+    const root_inode = root_fs.create(null, undefined).get_root() catch unreachable;
+    vfs.create_hard_root(root_inode);
+
     const kernel_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create kernel task");
 
     const main = if (!@import("build_options").ci) kernel.main else @import("ci.zig").main;
