@@ -898,3 +898,56 @@ pub fn ttyread(shell: anytype, args: [][]u8) CmdError!void {
     for (buffer[0..read]) |c| shell.print(" {x:0>2}", .{c});
     shell.print("\n", .{});
 }
+
+/// Read or change the termios of a terminal, by the path userspace takes.
+/// Usage: stty <path> [raw|sane]
+pub fn stty(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 2 or args.len > 3) return CmdError.InvalidNumberOfArguments;
+
+    const termios = @import("../../tty/termios.zig");
+    const control = @import("../../tty/ioctl.zig");
+
+    const tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer tnode.release();
+
+    const file = try translate_errno(shell, tnode.inode.open());
+    defer file.close() catch {};
+
+    var attr: termios.abi.Termios = undefined;
+    _ = try translate_errno(
+        shell,
+        file.ioctl(@intFromEnum(control.Request.TCGETS), @intFromPtr(&attr)),
+    );
+
+    if (args.len == 3) {
+        if (std.mem.eql(u8, args[2], "raw")) {
+            attr.c_lflag.ICANON = false;
+            attr.c_lflag.ECHO = false;
+            attr.c_cc[@intFromEnum(termios.cc_index.VMIN)] = 1;
+            attr.c_cc[@intFromEnum(termios.cc_index.VTIME)] = 0;
+        } else if (std.mem.eql(u8, args[2], "sane")) {
+            attr = termios.to_abi(.{});
+        } else return CmdError.InvalidParameter;
+
+        _ = try translate_errno(
+            shell,
+            file.ioctl(@intFromEnum(control.Request.TCSETSF), @intFromPtr(&attr)),
+        );
+    }
+
+    shell.print("iflag {b:0>12} oflag {b:0>8} lflag {b:0>10}\n", .{
+        @as(u12, @truncate(@as(u32, @bitCast(attr.c_iflag)))),
+        @as(u8, @truncate(@as(u32, @bitCast(attr.c_oflag)))),
+        @as(u10, @truncate(@as(u32, @bitCast(attr.c_lflag)))),
+    });
+    shell.print("icanon {} echo {} isig {} vmin {d} vtime {d}\n", .{
+        attr.c_lflag.ICANON,
+        attr.c_lflag.ECHO,
+        attr.c_lflag.ISIG,
+        attr.c_cc[@intFromEnum(termios.cc_index.VMIN)],
+        attr.c_cc[@intFromEnum(termios.cc_index.VTIME)],
+    });
+}
