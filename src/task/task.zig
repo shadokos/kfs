@@ -16,6 +16,8 @@ const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = std.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
+const vfs = @import("../fs/vfs.zig");
+const TNode = @import("../fs/tnode.zig");
 
 const callback_allocator = @import("../memory.zig").smallAlloc.allocator();
 const Callback = *const fn (*TaskDescriptor) void;
@@ -43,6 +45,8 @@ pub const TaskDescriptor = struct {
     pgid: Pid,
 
     owner: u32 = 0,
+    cwd: *TNode,
+    root: *TNode,
 
     state: State,
 
@@ -337,6 +341,14 @@ pub const TaskDescriptor = struct {
         gdt.flush();
         scheduler.exit_critical();
         exit(function(data));
+    }
+
+    pub fn chdir(self: *Self, new_dir: *TNode) void {
+        if (new_dir.inode.mode.type != .Directory) {
+            @panic("todo");
+        }
+        self.cwd.release();
+        self.cwd = new_dir.get_ref();
     }
 };
 

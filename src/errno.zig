@@ -109,3 +109,7 @@ pub fn error_num(e: Errno) usize {
         },
     };
 }
+
+pub fn strerror(err: Errno) []const u8 {
+    return @errorName(err);
+}

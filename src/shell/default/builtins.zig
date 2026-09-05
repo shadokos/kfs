@@ -4,6 +4,12 @@ const helpers = @import("helpers.zig");
 const utils = @import("../utils.zig");
 const CmdError = @import("../Shell.zig").CmdError;
 const colors = @import("colors");
+const scheduler = @import("../../task/scheduler.zig");
+const Inode = @import("../../fs/inode.zig");
+const vfs = @import("../../fs/vfs.zig");
+const strerror = @import("../../errno.zig").strerror;
+
+const cwd = &@import("shell.zig").cwd;
 
 // TODO Replace printk with format(shell.writer, format, args)...
 // As this builtin definitions are only used with graphic mode, it's ok to use printk for now
@@ -562,4 +568,313 @@ pub fn lschar(shell: anytype, args: [][]u8) CmdError!void {
 
     const filter: ?[]const u8 = if (args.len >= 2) args[1] else null;
     char_reg.show_lschar(shell.writer, filter);
+}
+
+
+pub fn pwd(shell: anytype, _: [][]u8) CmdError!void {
+    shell.print("{s}\n", .{cwd.*});
+}
+
+fn translate_errno(shell: anytype, val: anytype) CmdError!@TypeOf(val catch unreachable) {
+    return val catch |e| {
+        utils.print_error(shell, "Error: {s}", .{strerror(e)});
+        return CmdError.OtherError;
+    };
+}
+
+pub fn ls(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len > 2) return CmdError.InvalidNumberOfArguments;
+
+    const path = if (args.len == 2) args[1] else ".";
+    const tnode = vfs.resolve(path) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{path});
+        return CmdError.OtherError;
+    };
+
+    const file = try translate_errno(shell, tnode.inode.open());
+    defer file.close() catch {};
+
+    var ent: @import("../../fs/file.zig").DirEnt = undefined;
+    while (try translate_errno(shell, file.readdir(&ent))) {
+        shell.print("{: <10} {s: <10} {s}\n", .{ ent.inode, @tagName(ent.type), ent.name[0..ent.name_len] });
+    }
+}
+
+pub fn cd(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+    const allocator = @import("../../memory.zig").smallAlloc.allocator();
+
+    const new_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    if (new_tnode.inode.mode.type != .Directory) {
+        utils.print_error(shell, "Invalid path: {s}: Not a directory", .{args[1]});
+        return CmdError.OtherError;
+    }
+    scheduler.get_current_task().chdir(new_tnode);
+    new_tnode.release();
+
+    const tmp = cwd.*;
+    cwd.* = std.fs.path.resolve(allocator, &.{ cwd.*, args[1] }) catch @panic("OOM");
+    allocator.free(tmp);
+}
+
+pub fn cat(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer file_tnode.release();
+    if (file_tnode.inode.mode.type == .Directory) {
+        utils.print_error(shell, "Invalid path: {s} is a directory", .{args[1]});
+        return CmdError.OtherError;
+    }
+
+    const file = try translate_errno(shell, file_tnode.inode.open());
+    defer file.close() catch {};
+    var buffer: [512]u8 = undefined;
+    var read_size: usize = undefined;
+
+    read_size = try translate_errno(shell, file.read(buffer[0..]));
+    while (read_size != 0) {
+        std.mem.replaceScalar(u8, buffer[0..], 0, 219);
+        shell.print("{s}", .{buffer[0..read_size]});
+        read_size = try translate_errno(shell, file.read(buffer[0..]));
+    }
+}
+
+pub fn readlink(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer file_tnode.release();
+    if (file_tnode.inode.mode.type != .Link) {
+        utils.print_error(shell, "Invalid path: {s} is not a symlink", .{args[1]});
+        return CmdError.OtherError;
+    }
+    shell.print("{s}\n", .{file_tnode.inode.type_specific.Link});
+}
+
+pub fn write(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+
+    const data = args[2];
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+
+    if (file_tnode.inode.mode.type != .Regular and file_tnode.inode.mode.type != .Fifo) {
+        utils.print_error(shell, "Invalid path: {s} is not a regular file", .{args[1]});
+        return CmdError.OtherError;
+    }
+
+    const file = try translate_errno(shell, file_tnode.inode.open());
+    defer file.close() catch {};
+    shell.print("{} bytes written\n", .{try translate_errno(shell, file.write(data))});
+}
+
+pub fn pwrite(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 4) return CmdError.InvalidNumberOfArguments;
+
+    const offset = std.fmt.parseInt(usize, args[3], 0) catch {
+        utils.print_error(shell, "Invalid offset", .{});
+        return CmdError.OtherError;
+    };
+    const data = args[2];
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+
+    if (file_tnode.inode.mode.type != .Regular and file_tnode.inode.mode.type != .Fifo) {
+        utils.print_error(shell, "Invalid path: {s} is not a regular file", .{args[1]});
+        return CmdError.OtherError;
+    }
+
+    const file = try translate_errno(shell, file_tnode.inode.open());
+    defer file.close() catch {};
+    shell.print("{} bytes written\n", .{try translate_errno(shell, file.pwrite(offset, data))});
+}
+
+pub fn stat(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer file_tnode.release();
+    std.log.debug("stat tnode: {*}", .{file_tnode});
+    shell.print("inode: {}\n", .{file_tnode.inode.ino});
+    shell.print("type: {}\n", .{file_tnode.inode.mode.type});
+    shell.print("size: {}\n", .{file_tnode.inode.size});
+    shell.print("hardlinks: {}\n", .{file_tnode.inode.hard_links});
+}
+
+pub fn truncate(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer file_tnode.release();
+    if (file_tnode.inode.mode.type != .Regular) {
+        utils.print_error(shell, "Invalid path: {s} is not a regular file", .{args[1]});
+        return CmdError.OtherError;
+    }
+
+    const offset = std.fmt.parseInt(u64, args[2], 0) catch {
+        utils.print_error(shell, "Invalid size", .{});
+        return CmdError.OtherError;
+    };
+
+    try translate_errno(shell, file_tnode.inode.truncate(offset));
+}
+
+pub fn unlink(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+    const path = args[1];
+    const dirname = std.fs.path.dirnamePosix(path) orelse if (std.fs.path.isAbsolute(path)) {
+        utils.print_error(shell, "Cannot unlink root", .{});
+        return CmdError.OtherError;
+    } else ".";
+    const filename = std.fs.path.basenamePosix(path);
+    const dir_tnode = vfs.resolve(dirname) catch {
+        utils.print_error(shell, "Cannot resolve {s}", .{dirname});
+        return CmdError.OtherError;
+    };
+    defer dir_tnode.release();
+    try translate_errno(shell, dir_tnode.inode.unlink(filename));
+}
+
+pub fn link(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+
+    const old_path = args[1];
+    const old_dirname = std.fs.path.dirnamePosix(old_path) orelse if (std.fs.path.isAbsolute(old_path)) {
+        utils.print_error(shell, "Cannot unlink root", .{});
+        return CmdError.OtherError;
+    } else ".";
+    const old_dir_tnode = vfs.resolve(old_dirname) catch {
+        utils.print_error(shell, "Cannot resolve {s}", .{old_dirname});
+        return CmdError.OtherError;
+    };
+
+    const new_path = args[2];
+    const new_dirname = std.fs.path.dirnamePosix(new_path) orelse if (std.fs.path.isAbsolute(new_path)) {
+        utils.print_error(shell, "Cannot unlink root", .{});
+        return CmdError.OtherError;
+    } else ".";
+    const new_filename = std.fs.path.basenamePosix(new_path);
+    const new_dir_tnode = vfs.resolve(new_dirname) catch {
+        utils.print_error(shell, "Cannot resolve {s}", .{new_dirname});
+        return CmdError.OtherError;
+    };
+
+    try translate_errno(shell, old_dir_tnode.inode.link(new_filename, new_dir_tnode.inode));
+}
+
+pub fn flush_fs(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer file_tnode.release();
+    try translate_errno(shell, file_tnode.inode.superblock.flush_all());
+}
+
+pub fn evict_fs(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer file_tnode.release();
+    try translate_errno(shell, file_tnode.inode.superblock.release_all());
+}
+
+pub fn statfs(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const file_tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer file_tnode.release();
+    const superblock = file_tnode.inode.superblock;
+
+    shell.print(
+        \\  File: "{[File]s}"
+        \\    ID: {[ID]?x} Namelen: {[Namelen]d:<7} Type: TODO
+        \\Block size: {[BlockSize]d:<10} Fundamental block size: {[FundamentalBlockSize]d}
+        \\Blocks: Total: {[BlocksTotal]d:<10} Free: {[BlockFree]:<10} Available: {[BlockAvailable]d}
+        \\Inodes: Total: {[InodesTotal]d:<10} Free: {[InodesFree]}
+    , .{
+        .File = file_tnode.name,
+        .ID = superblock.fsid,
+        .Namelen = superblock.max_name,
+        .BlockSize = superblock.block_size,
+        .FundamentalBlockSize = superblock.fragment_size,
+        .BlocksTotal = superblock.blocks,
+        .BlockFree = superblock.free_blocks,
+        .BlockAvailable = superblock.free_blocks - superblock.reserved_blocks,
+        .InodesTotal = superblock.files,
+        .InodesFree = superblock.free_files,
+    });
+}
+
+pub fn mknod(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 5) return CmdError.InvalidNumberOfArguments;
+
+    const device_types = @import("../../device/types.zig");
+
+    const path = args[1];
+    const dirname = std.fs.path.dirnamePosix(path) orelse if (std.fs.path.isAbsolute(path)) {
+        utils.print_error(shell, "Cannot unlink root", .{});
+        return CmdError.OtherError;
+    } else ".";
+    const filename = std.fs.path.basenamePosix(path);
+    const dir_tnode = vfs.resolve(dirname) catch {
+        utils.print_error(shell, "Cannot resolve {s}", .{dirname});
+        return CmdError.OtherError;
+    };
+    defer dir_tnode.release();
+
+    if (args[2].len > 1) {
+        utils.print_error(shell, "Invalid node type", .{});
+        return CmdError.OtherError;
+    }
+
+    const major = std.fmt.parseInt(device_types.major_t, args[3], 0) catch {
+        utils.print_error(shell, "Invalid major", .{});
+        return CmdError.OtherError;
+    };
+
+    const minor = std.fmt.parseInt(device_types.minor_t, args[4], 0) catch {
+        utils.print_error(shell, "Invalid minor", .{});
+        return CmdError.OtherError;
+    };
+
+    const inode = try translate_errno(shell, switch (args[2][0]) {
+        'b' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Block }, .{ .Block = .{ .major = major, .minor = minor } }),
+        'c' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Character }, .{ .Character = .{ .major = major, .minor = minor } }),
+        else => {
+            utils.print_error(shell, "Invalid node type", .{});
+            return CmdError.OtherError;
+        },
+    });
+    defer inode.release();
+
+    try translate_errno(shell, dir_tnode.inode.link(filename, inode));
 }
