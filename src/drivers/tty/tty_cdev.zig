@@ -18,7 +18,11 @@ const log = std.log.scoped(.tty_cdev);
 
 const MAJOR: types.major_t = 4;
 
+/// /dev/tty, resolved at every open to the caller's controlling terminal.
+const CTTY_MAJOR: types.major_t = 5;
+
 var cdevs: [tty.max_tty + 1]CharDevice = undefined;
+var ctty_cdev: CharDevice = undefined;
 
 /// fs/character.zig leaves the device in `data`; what follows needs the
 /// terminal it stands for.
@@ -26,6 +30,16 @@ fn open(dev: *CharDevice, file: *File) char.CharError!void {
     file.vtable = &file_vtable;
     file.data = &tty.tty_array[dev.devt.minor];
 }
+
+/// Open the controlling terminal of the calling session, POSIX 11.1.1. A
+/// session without one gets ENXIO.
+fn open_ctty(_: *CharDevice, file: *File) char.CharError!void {
+    const session = @import("../../task/scheduler.zig").get_current_task().session;
+    file.data = session.ctty orelse return error.DeviceNotFound;
+    file.vtable = &file_vtable;
+}
+
+const ctty_ops = char.Operations{ .open = &open_ctty };
 
 fn terminal(file: *File) *TtyStruct {
     return @ptrCast(@alignCast(file.data.?));
@@ -80,6 +94,14 @@ pub fn init() void {
         log.err("cannot reserve major {d}: {s}", .{ MAJOR, @errorName(err) });
         return;
     };
+
+    registry.register_char_dev(CTTY_MAJOR, "tty") catch |err| {
+        log.err("cannot reserve major {d}: {s}", .{ CTTY_MAJOR, @errorName(err) });
+        return;
+    };
+    ctty_cdev = CharDevice.init("tty", CTTY_MAJOR, 0, &ctty_ops);
+    ctty_cdev.register() catch |err|
+        log.err("cannot register tty: {s}", .{@errorName(err)});
 
     for (&cdevs, 0..) |*dev, i| {
         var buffer: [CharDevice.CDEV_NAME_LEN]u8 = undefined;
