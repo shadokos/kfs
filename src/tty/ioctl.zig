@@ -13,8 +13,13 @@ pub const Request = enum(u32) {
     TCSETSF = 4,
 
     // Wired into options/posix/include/termios.h in mlibc, so not ours to pick.
+    /// Take this terminal as the controlling terminal of the calling session.
+    TIOCSCTTY = 0x540E,
     TIOCGPGRP = 0x540F,
     TIOCSPGRP = 0x5410,
+    /// Give up the controlling terminal.
+    TIOCNOTTY = 0x5422,
+    /// The session this terminal answers to, what tcgetsid reads.
     TIOCGSID = 0x5429,
 
     _,

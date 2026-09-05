@@ -13,6 +13,8 @@ const tty = @import("../../tty/tty.zig");
 const TtyStruct = @import("../../tty/TtyStruct.zig");
 const termios = @import("../../tty/termios.zig");
 const control = @import("../../tty/ioctl.zig");
+const scheduler = @import("../../task/scheduler.zig");
+const TaskDescriptor = @import("../../task/task.zig").TaskDescriptor;
 
 const log = std.log.scoped(.tty_cdev);
 
@@ -74,6 +76,24 @@ fn ioctl(file: *File, request: u32, arg: usize) File.Error.ioctl!usize {
             const new: *const termios.abi.Termios = @ptrFromInt(arg);
             if (request_ == .TCSETSF) terminal_.input_buffer.clear();
             terminal_.set_termios(termios.from_abi(new.*));
+        },
+        .TIOCGSID => {
+            // POSIX tcgetsid: a terminal no session answers for is not the
+            // caller's either.
+            const owner = terminal_.session orelse return error.ENOTTY;
+            const out: *TaskDescriptor.Pid = @ptrFromInt(arg);
+            out.* = owner.sid;
+        },
+        .TIOCSCTTY => {
+            const task = scheduler.get_current_task();
+            if (task.session.sid != task.pid) return error.EPERM;
+            // Stealing a terminal from another session is not offered.
+            task.session.claim(terminal_, task.pgid) catch return error.EPERM;
+        },
+        .TIOCNOTTY => {
+            const session = scheduler.get_current_task().session;
+            if (session.ctty != terminal_) return error.ENOTTY;
+            session.hangup();
         },
         else => return error.EINVAL,
     }

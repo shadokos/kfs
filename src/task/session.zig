@@ -37,7 +37,7 @@ pub fn release(self: *Self) void {
     self.refs -= 1;
     if (self.refs != 0) return;
 
-    if (self.ctty) |terminal| self.disown(terminal);
+    self.hangup();
     allocator.destroy(self);
 }
 
@@ -50,6 +50,20 @@ pub fn claim(self: *Self, terminal: *TtyStruct, leader_pgid: TaskDescriptor.Pid)
     self.ctty = terminal;
     terminal.session = self;
     _ = terminal.set_foreground_pgid(leader_pgid);
+}
+
+/// Give the terminal up, hanging up the foreground group first.
+pub fn hangup(self: *Self) void {
+    const terminal = self.ctty orelse return;
+
+    if (terminal.foreground_pgid) |pgid| {
+        _ = @import("task_set.zig").send_signal_to_group(pgid, .{
+            .si_signo = .{ .valid = .SIGHUP },
+            .si_code = .SI_KERNEL,
+            .si_pid = 0,
+        });
+    }
+    self.disown(terminal);
 }
 
 /// Give the terminal back with no foreground group left to signal.

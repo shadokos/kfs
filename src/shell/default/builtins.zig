@@ -1013,3 +1013,36 @@ pub fn ctty(shell: anytype, args: [][]u8) CmdError!void {
     };
     shell.print("fd {d}\n", .{fd});
 }
+
+/// Send a control request to an open path, as userspace reaches tcgetsid.
+/// Usage: tioctl <path> <sid|notty|sctty>
+pub fn tioctl(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+
+    const control = @import("../../tty/ioctl.zig");
+
+    const tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer tnode.release();
+
+    const file = try translate_errno(shell, tnode.inode.open());
+    defer file.close() catch {};
+
+    var sid: i32 = -1;
+    const request: control.Request = if (std.mem.eql(u8, args[2], "sid"))
+        .TIOCGSID
+    else if (std.mem.eql(u8, args[2], "notty"))
+        .TIOCNOTTY
+    else if (std.mem.eql(u8, args[2], "sctty"))
+        .TIOCSCTTY
+    else
+        return CmdError.InvalidParameter;
+
+    _ = try translate_errno(
+        shell,
+        file.ioctl(@intFromEnum(request), @intFromPtr(&sid)),
+    );
+    if (request == .TIOCGSID) shell.print("sid {d}\n", .{sid});
+}
