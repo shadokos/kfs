@@ -610,9 +610,12 @@ pub fn write(shell: anytype, args: [][]u8) CmdError!void {
         return CmdError.OtherError;
     };
 
-    if (file_tnode.inode.mode.type != .Regular and file_tnode.inode.mode.type != .Fifo) {
-        utils.print_error(shell, "Invalid path: {s} is not a regular file", .{args[1]});
-        return CmdError.OtherError;
+    switch (file_tnode.inode.mode.type) {
+        .Regular, .Fifo, .Character => {},
+        else => {
+            utils.print_error(shell, "Invalid path: {s} cannot be written to", .{args[1]});
+            return CmdError.OtherError;
+        },
     }
 
     const file = try translate_errno(shell, file_tnode.inode.open());
