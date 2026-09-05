@@ -147,6 +147,23 @@ pub const TaskDescriptor = struct {
         }
     }
 
+    /// POSIX 11.1.3: when the controlling process dies, its terminal leaves the
+    /// session, so that another session leader can take it. The foreground
+    /// group is hung up first, it was talking to a terminal it is about to lose.
+    fn hangup_controlling_terminal(self: *Self) void {
+        if (self.session.sid != self.pid) return;
+        const terminal = self.session.ctty orelse return;
+
+        if (terminal.foreground_pgid) |pgid| {
+            _ = task_set.send_signal_to_group(pgid, .{
+                .si_signo = .{ .valid = .SIGHUP },
+                .si_code = .SI_KERNEL,
+                .si_pid = 0,
+            });
+        }
+        self.session.disown(terminal);
+    }
+
     /// What a blocking call should do about whatever signal is waiting.
     pub const Disposition = enum { none, stop, interrupt };
 
@@ -180,6 +197,7 @@ pub const TaskDescriptor = struct {
     pub fn update_status(self: *Self, new_status_info: ?status_informations.Status) void {
         self.status_info = new_status_info;
         if (new_status_info) |s| {
+            if (s.transition == .Terminated) self.hangup_controlling_terminal();
             if (self.parent) |p| {
                 p.status_stack.add(&self.status_stack_process_node, s.transition);
                 p.status_wait_queue.try_unblock();
