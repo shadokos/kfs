@@ -122,6 +122,8 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     const root_inode = root_fs.create(null, undefined).get_root() catch unreachable;
     vfs.create_hard_root(root_inode);
 
+    vfs.add_filesystem(@import("drivers/devfs/driver.zig").fs) catch @panic("Failed to initialize devfs.");
+
     const root = CommandLine.get().root;
     if (root != .virtual) {
         vfs.mount(vfs.get_hard_root(), root, .{}) catch @panic("Failed to mount root fs.");
