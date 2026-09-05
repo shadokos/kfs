@@ -56,6 +56,21 @@ pub fn input_task(_: usize) u8 {
     }
 }
 
+/// Give a newly opened terminal to the session that opened it, POSIX 11.1.3.
+///
+/// A session leader with no controlling terminal, opening a terminal no session
+/// answers for, gets it. Called from open() rather than from the driver, the
+/// flags being what decides and only open() having them.
+pub fn acquire_controlling(file: *@import("../fs/file.zig"), no_ctty: bool) void {
+    if (no_ctty) return;
+
+    const terminal = @import("../drivers/tty/tty_cdev.zig").terminal_of(file) orelse return;
+    const task = scheduler.get_current_task();
+    if (task.session.sid != task.pid) return;
+
+    task.session.claim(terminal, task.pgid) catch {};
+}
+
 pub fn get_tty() *TtyStruct {
     return &tty_array[current_tty];
 }

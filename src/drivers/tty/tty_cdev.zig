@@ -31,6 +31,13 @@ fn terminal(file: *File) *TtyStruct {
     return @ptrCast(@alignCast(file.data.?));
 }
 
+/// The terminal an open file stands for, or null. The vtable tells them apart:
+/// only a file opened here carries a TtyStruct in `data`.
+pub fn terminal_of(file: *File) ?*TtyStruct {
+    if (file.vtable != &file_vtable) return null;
+    return terminal(file);
+}
+
 fn read(file: *File, buffer: []u8) File.Error.read!usize {
     return terminal(file).read(buffer);
 }

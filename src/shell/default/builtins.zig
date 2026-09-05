@@ -979,3 +979,37 @@ pub fn session(shell: anytype, args: [][]u8) CmdError!void {
         shell.print(" no controlling terminal\n", .{});
     }
 }
+
+/// Start a session, POSIX setsid. The shell keeps it: a terminal opened
+/// afterwards becomes its controlling terminal.
+pub fn setsid(shell: anytype, _: [][]u8) CmdError!void {
+    const sid = @import("../../syscall/setsid.zig").do() catch |e| {
+        utils.print_error(shell, "setsid: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+    shell.print("session {d}\n", .{sid});
+}
+
+/// Open a path through the open syscall, acquiring the controlling terminal as
+/// userspace would. Leaves the descriptor open.
+/// Usage: ctty <path> [noctty]
+pub fn ctty(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 2 or args.len > 3) return CmdError.InvalidNumberOfArguments;
+
+    const open = @import("../../syscall/open.zig");
+
+    var path: [256]u8 = undefined;
+    if (args[1].len >= path.len) return CmdError.InvalidParameter;
+    @memcpy(path[0..args[1].len], args[1]);
+    path[args[1].len] = 0;
+
+    const no_ctty = args.len == 3 and std.mem.eql(u8, args[2], "noctty");
+    const fd = open.do(@ptrCast(&path), .{
+        .openMode = .read_write,
+        .no_controlling_tty = no_ctty,
+    }, .{}) catch |e| {
+        utils.print_error(shell, "open: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+    shell.print("fd {d}\n", .{fd});
+}
