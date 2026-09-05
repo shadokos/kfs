@@ -48,6 +48,10 @@ pub const TaskDescriptor = struct {
     pid: Pid,
     pgid: Pid,
 
+    /// Session this task belongs to, and through it the controlling terminal.
+    /// Shared with every other task of the session, inherited across fork.
+    session: *@import("session.zig"),
+
     owner: u32 = 0,
     cwd: *TNode,
     root: *TNode,
@@ -101,6 +105,7 @@ pub const TaskDescriptor = struct {
 
     pub fn deinit(self: *Self) void {
         self.status_wait_queue.unblock_all();
+        self.session.release();
 
         // Hot fix;
         // When a task exits, the callback are called only for the parent task.
