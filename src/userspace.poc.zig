@@ -345,3 +345,47 @@ export fn userland_ctty() linksection(".userspace") void {
 }
 
 const TIOCGSID: u32 = 0x5429;
+
+/// Terminal access control, POSIX 11.1.4, from userspace. A child in a group of
+/// its own reads, and SIGTTIN stops it.
+export fn userland_jobctl() linksection(".userspace") void {
+    const path = "/dev/tty0";
+    const flags = open.Flags{ .openMode = .read_write };
+
+    // setsid refuses a process group leader, hence the extra fork.
+    if (syscall(.fork, .{}) != 0) {
+        _ = syscall(.sleep, .{3000});
+        _ = syscall(.exit, .{0});
+    }
+
+    _ = syscall(.setsid, .{});
+    _ = syscall(.open, .{ path.ptr, flags, open.Mode{} });
+
+    if (syscall(.fork, .{}) == 0) {
+        // A group of its own is a background group.
+        _ = syscall(.setpgid, .{ 0, 0 });
+        _ = syscall(.sleep, .{200});
+
+        var scratch: [1]u8 = undefined;
+        const read_bytes = syscall(.read, .{ 0, &scratch, 1 });
+        putstr("BAD: background read returned ");
+        putnbr(read_bytes);
+        putstr("\n");
+        _ = syscall(.exit, .{1});
+    }
+
+    var status: u32 = 0;
+    const who = syscall(.waitpid, .{ -1, &status, wait.WaitOptions{ .WUNTRACED = true } });
+
+    putstr("child ");
+    putnbr(who);
+    putstr(" status ");
+    putnbr(status & 0xff);
+    putstr(" signal ");
+    putnbr((status >> 8) & 0xff);
+    putstr("\n");
+
+    _ = syscall(.exit, .{0});
+}
+
+const wait = @import("task/wait.zig");
