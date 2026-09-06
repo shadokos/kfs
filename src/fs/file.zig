@@ -40,6 +40,8 @@ pub const Error = struct {
         EPERM,
         ENOSPC,
         EINVAL,
+        /// A write cut short by a signal, SIGTTOU among them.
+        EINTR,
     };
     pub const readdir = error{
         EBUSY,
@@ -53,6 +55,8 @@ pub const Error = struct {
         EINVAL,
         EIO,
         EPERM,
+        /// tcsetattr from a background group raises SIGTTOU and gives up.
+        EINTR,
     };
     pub const seek = error{
         EOVERFLOW,

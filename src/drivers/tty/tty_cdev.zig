@@ -13,6 +13,8 @@ const tty = @import("../../tty/tty.zig");
 const TtyStruct = @import("../../tty/TtyStruct.zig");
 const termios = @import("../../tty/termios.zig");
 const control = @import("../../tty/ioctl.zig");
+const job_control = @import("../../tty/job_control.zig");
+const task_set = @import("../../task/task_set.zig");
 const scheduler = @import("../../task/scheduler.zig");
 const TaskDescriptor = @import("../../task/task.zig").TaskDescriptor;
 
@@ -54,12 +56,19 @@ pub fn terminal_of(file: *File) ?*TtyStruct {
     return terminal(file);
 }
 
+// Access control belongs on the descriptor path, POSIX 11.1.4: kernel output
+// has no process group.
+
 fn read(file: *File, buffer: []u8) File.Error.read!usize {
-    return terminal(file).read(buffer);
+    const terminal_ = terminal(file);
+    try job_control.check_read(terminal_, scheduler.get_current_task());
+    return terminal_.read(buffer);
 }
 
 fn write(file: *File, data: []const u8) File.Error.write!usize {
-    return terminal(file).write(data);
+    const terminal_ = terminal(file);
+    try job_control.check_write(terminal_, scheduler.get_current_task());
+    return terminal_.write(data);
 }
 
 /// The control requests POSIX reaches through tcgetattr and tcsetattr. With no
@@ -73,9 +82,32 @@ fn ioctl(file: *File, request: u32, arg: usize) File.Error.ioctl!usize {
             out.* = termios.to_abi(terminal_.config);
         },
         .TCSETS, .TCSETSW, .TCSETSF => |request_| {
+            try job_control.check_control(terminal_, scheduler.get_current_task());
             const new: *const termios.abi.Termios = @ptrFromInt(arg);
             if (request_ == .TCSETSF) terminal_.input_buffer.clear();
             terminal_.set_termios(termios.from_abi(new.*));
+        },
+        .TIOCGPGRP => {
+            // POSIX tcgetpgrp: only the caller's own terminal answers.
+            const task = scheduler.get_current_task();
+            if (task.session.ctty != terminal_) return error.ENOTTY;
+
+            const out: *TaskDescriptor.Pid = @ptrFromInt(arg);
+            // No foreground group is reported as a group id that matches none.
+            out.* = terminal_.foreground_pgid orelse std.math.maxInt(TaskDescriptor.Pid);
+        },
+        .TIOCSPGRP => {
+            const task = scheduler.get_current_task();
+            if (task.session.ctty != terminal_) return error.ENOTTY;
+            try job_control.check_control(terminal_, task);
+
+            const wanted: *const TaskDescriptor.Pid = @ptrFromInt(arg);
+            if (wanted.* <= 0) return error.EINVAL;
+            // A group of another session would leave the terminal unreachable.
+            const member = task_set.find_in_group(wanted.*) orelse return error.EPERM;
+            if (member.session != task.session) return error.EPERM;
+
+            _ = terminal_.set_foreground_pgid(wanted.*);
         },
         .TIOCGSID => {
             // POSIX tcgetsid: a terminal no session answers for is not the
