@@ -396,3 +396,44 @@ export fn userland_spin() linksection(".userspace") void {
     putstr("spinning, no syscalls from here\n");
     while (true) {}
 }
+
+/// A read paused by a stop signal. The routine stops and continues itself, the
+/// shell being busy waiting for this job. SUSP should pause the read, not end
+/// it: nothing is reported until a line is typed, after the SIGCONT.
+export fn userland_readstop() linksection(".userspace") void {
+    const path = "/dev/tty0";
+    const flags = open.Flags{ .openMode = .read_write };
+
+    const reader = syscall(.fork, .{});
+    if (reader == 0) {
+        _ = syscall(.setsid, .{});
+        const fd = syscall(.open, .{ path.ptr, flags, open.Mode{} });
+
+        putstr("reader pid ");
+        putnbr(syscall(.getpid, .{}));
+        putstr(", reading\n");
+
+        var line: [16]u8 = undefined;
+        const got = syscall(.read, .{ fd, &line, line.len });
+
+        putstr("read returned ");
+        putnbr(got);
+        putstr("\n");
+        _ = syscall(.exit, .{0});
+    }
+
+    _ = syscall(.sleep, .{1500});
+    putstr("stopping the reader\n");
+    _ = syscall(.kill, .{ reader, SIGTSTP });
+
+    _ = syscall(.sleep, .{2000});
+    putstr("continuing it, nothing should be read yet\n");
+    _ = syscall(.kill, .{ reader, SIGCONT });
+
+    // Long enough to type a line and see what comes of it.
+    _ = syscall(.sleep, .{12000});
+    _ = syscall(.exit, .{0});
+}
+
+const SIGTSTP: u32 = 24;
+const SIGCONT: u32 = 25;

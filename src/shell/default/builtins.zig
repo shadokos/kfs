@@ -372,6 +372,7 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         "ctty",
         "jobctl",
         "spin",
+        "readstop",
     };
 
     if (args.len != 2) {
