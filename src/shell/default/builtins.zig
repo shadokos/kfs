@@ -369,6 +369,7 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         "count",
         "fork",
         "io",
+        "ctty",
     };
 
     if (args.len != 2) {
@@ -388,6 +389,10 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
             new_task.pgid = new_task.pid;
             utils.attach_standard_streams(new_task) catch |e|
                 utils.print_error(shell, "no standard streams: {s}", .{@errorName(e)});
+
+            const previous = utils.foreground(new_task);
+            defer utils.restore_foreground(previous);
+
             new_task.spawn(
                 &@import("../../task/userspace.zig").call_userspace,
                 @intFromPtr(@extern(?*fn () void, .{ .name = "userland_" ++ name }).?),
