@@ -141,6 +141,11 @@ fn set_termios(terminal: *TtyStruct, _: termios.termios) void {
     cpu.outb(self.port + line_control, lcr);
 }
 
+/// Drop DTR and RTS, which is how a UART hangs up.
+fn hangup(terminal: *TtyStruct) void {
+    cpu.outb(of(terminal).port + modem_control, 0x00);
+}
+
 pub const driver = TtyDriver{
     .write = &write,
     .flush = &flush,
@@ -148,6 +153,7 @@ pub const driver = TtyDriver{
     .flush_output = &flush_output,
     .receive = &receive,
     .set_termios = &set_termios,
+    .hangup = &hangup,
 };
 
 fn of(terminal: *TtyStruct) *Self {

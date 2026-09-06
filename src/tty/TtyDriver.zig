@@ -28,6 +28,10 @@ drain: ?*const fn (tty: *TtyStruct) void = null,
 /// Throw away what has not been transmitted yet, for tcflush.
 flush_output: ?*const fn (tty: *TtyStruct) void = null,
 
+/// Drop the line, for HUPCL on the last close. A console has no line to drop
+/// and leaves this null.
+hangup: ?*const fn (tty: *TtyStruct) void = null,
+
 /// The termios settings changed. `old` is what they were, for a driver that
 /// only wants to reprogram what actually moved.
 set_termios: ?*const fn (tty: *TtyStruct, old: termios.termios) void = null,

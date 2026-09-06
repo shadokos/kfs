@@ -937,6 +937,11 @@ pub fn stty(shell: anytype, args: [][]u8) CmdError!void {
             attr.c_cc[@intFromEnum(termios.cc_index.VTIME)] = 0;
         } else if (std.mem.eql(u8, args[2], "sane")) {
             attr = termios.to_abi(.{});
+        } else if (std.mem.eql(u8, args[2], "nolocal")) {
+            // A line with a carrier to lose, so a disconnect means something.
+            attr.c_cflag.CLOCAL = false;
+        } else if (std.mem.eql(u8, args[2], "local")) {
+            attr.c_cflag.CLOCAL = true;
         } else return CmdError.InvalidParameter;
 
         _ = try translate_errno(
@@ -1052,4 +1057,27 @@ pub fn tioctl(shell: anytype, args: [][]u8) CmdError!void {
         file.ioctl(@intFromEnum(request), @intFromPtr(&sid)),
     );
     if (request == .TIOCGSID) shell.print("sid {d}\n", .{sid});
+}
+
+/// Drop the line on a terminal, to exercise POSIX 11.1.10 without a modem.
+/// Usage: hangup <path>
+pub fn hangup(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+
+    const tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer tnode.release();
+
+    const file = try translate_errno(shell, tnode.inode.open());
+    defer file.close() catch {};
+
+    const terminal = @import("../../drivers/tty/tty_cdev.zig").terminal_of(file) orelse {
+        utils.print_error(shell, "{s} is not a terminal", .{args[1]});
+        return CmdError.OtherError;
+    };
+
+    terminal.hangup();
+    shell.print("tty{d} hung up: {}\n", .{ terminal.index, terminal.hung_up });
 }
