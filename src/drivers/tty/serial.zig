@@ -280,6 +280,13 @@ pub fn init() void {
         ports[detected].terminal = line;
         line.driver = &driver;
         line.driver_data = @ptrCast(&ports[detected]);
+
+        // A line has a carrier to lose; CLOCAL would make every hangup a
+        // no-op, POSIX 11.1.10.
+        var config = line.config;
+        config.c_cflag.CLOCAL = false;
+        line.set_termios(config);
+
         detected += 1;
 
         @import("tty_cdev.zig").register_line(name, line.index) catch |err|
