@@ -1,5 +1,5 @@
 const std = @import("std");
-const Slab = @import("slab/slab.zig").Slab;
+const Slab = @import("slab/slab.zig");
 const Cache = @import("slab/cache.zig").Cache;
 const PageAllocator = @import("../page_allocator.zig");
 const globalCache = &@import("../../memory.zig").globalCache;
@@ -12,7 +12,7 @@ pub const MultipoolAllocator = struct {
 
     caches: [14]*Cache = undefined,
 
-    pub fn init(comptime name: []const u8, page_allocator: PageAllocator) !Self {
+    pub fn init(comptime name: []const u8, page_allocator: PageAllocator, dbg: Slab.DebugFlags) !Self {
         const CacheDescription = struct {
             name: []const u8,
             size: usize,
@@ -45,6 +45,7 @@ pub const MultipoolAllocator = struct {
                 cache_descriptions[i].size,
                 @alignOf(usize),
                 cache_descriptions[i].order,
+                dbg,
             );
         }
 
@@ -92,16 +93,16 @@ pub const MultipoolAllocator = struct {
     }
 
     pub fn obj_size(_: *Self, ptr: anytype) !usize {
-        const pfd = globalCache.cache.get_page_frame_descriptor(@ptrCast(@alignCast(ptr)));
-        if (!pfd.flags.slab) return error.InvalidArgument;
-        const slab: ?*Slab = if (pfd.next) |slab| @ptrCast(@alignCast(slab)) else null;
-
-        if (slab) |s| {
-            return if (s.is_obj_in_slab(@ptrCast(@alignCast(ptr))))
-                s.header.cache.size_obj
-            else
-                error.InvalidArgument;
-        } else return error.InvalidArgument;
+        const slab = Slab.resolve_head(@ptrCast(@alignCast(ptr))) catch return error.InvalidArgument;
+        const cache: *Cache = slab.cache();
+        const slot_addr = @intFromPtr(ptr);
+        const base = slab.base_addr();
+        const slab_end = base + cache.slot_size * cache.obj_per_slab;
+        if (slot_addr < base or slot_addr + cache.slot_size > slab_end)
+            return error.InvalidArgument;
+        if ((slot_addr - base) % cache.slot_size != 0)
+            return error.InvalidArgument;
+        return cache.size_obj;
     }
 
     fn vtable_alloc(ctx: *anyopaque, len: usize, alignment: Alignment, ret_addr: usize) ?[*]u8 {

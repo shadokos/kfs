@@ -94,8 +94,6 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
 
     @import("task/signal.zig").SignalQueue.init_cache() catch @panic("Failed to initialized SignalQueue cache");
 
-    @import("task/task.zig").TaskDescriptor.init_cache() catch @panic("Failed to initialized task_descriptor cache");
-
     // The ready_queue and wait_queue init functions are only here to setup their on_terminate task callbacks
     @import("task/ready_queue.zig").init();
     @import("task/wait_queue.zig").init();

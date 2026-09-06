@@ -209,10 +209,10 @@ pub fn cache_create(_: anytype, args: [][]u8) CmdError!void {
     const new_cache = globalCache.create(
         name,
         @import("../../memory.zig").directPageAllocator.page_allocator(),
-
         size,
         @truncate(order),
         @alignOf(usize),
+        .{},
     ) catch {
         printk("Failed to create cache\n", .{});
         return CmdError.OtherError;
