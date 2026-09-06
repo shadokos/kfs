@@ -42,6 +42,7 @@ fn open(dev: *CharDevice, file: *File) char.CharError!void {
 
     file.vtable = &file_vtable;
     file.data = &tty.tty_array[index];
+    tty.tty_array[index].opened();
 }
 
 /// Name a terminal that is not a console, once a driver has claimed it. The
@@ -79,12 +80,15 @@ pub fn terminal_of(file: *File) ?*TtyStruct {
 fn read(file: *File, buffer: []u8) File.Error.read!usize {
     const terminal_ = terminal(file);
     try job_control.check_read(terminal_, scheduler.get_current_task());
+    // A dropped line reports end of input, POSIX 11.1.10.
+    if (terminal_.hung_up) return 0;
     return terminal_.read(buffer);
 }
 
 fn write(file: *File, data: []const u8) File.Error.write!usize {
     const terminal_ = terminal(file);
     try job_control.check_write(terminal_, scheduler.get_current_task());
+    if (terminal_.hung_up) return error.EIO;
     // Only a process waits on a suspended terminal; kernel output must not
     // block behind a Ctrl-S.
     try terminal_.wait_for_output();
