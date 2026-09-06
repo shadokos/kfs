@@ -105,6 +105,7 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     @import("device/char/registry.zig").init();
     @import("drivers/char/mem.zig").init();
     @import("drivers/tty/tty_cdev.zig").init();
+    @import("drivers/tty/serial.zig").init();
 
     @import("drivers/pci/pci.zig").init() catch @panic("Failed to initialize PCI subsystem");
     @import("drivers/ide/ide.zig").init() catch @panic("Failed to initialize IDE subsystem");

@@ -146,6 +146,16 @@ pub fn reader(self: *Self) Reader {
 
 // Reaching the hardware
 
+/// Wait for the hardware to have sent everything, for tcdrain.
+pub fn drain(self: *Self) void {
+    if (self.driver.drain) |f| f(self);
+}
+
+/// Drop what the hardware has not sent, for tcflush.
+pub fn flush_output(self: *Self) void {
+    if (self.driver.flush_output) |f| f(self);
+}
+
 pub fn driver_flush(self: *Self) void {
     if (self.driver.flush) |flush| flush(self);
 }

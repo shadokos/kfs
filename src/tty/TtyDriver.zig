@@ -18,6 +18,16 @@ activate: ?*const fn (tty: *TtyStruct, active: bool) void = null,
 /// from the interrupt that flagged the terminal.
 receive: ?*const fn (tty: *TtyStruct) void = null,
 
+/// Wait until everything handed over has left the hardware.
+///
+/// A driver that has transmitted a byte by the time `write` returns has nothing
+/// to wait for and leaves this null, which is what makes tcdrain a no-op on a
+/// console and real on a line.
+drain: ?*const fn (tty: *TtyStruct) void = null,
+
+/// Throw away what has not been transmitted yet, for tcflush.
+flush_output: ?*const fn (tty: *TtyStruct) void = null,
+
 /// The termios settings changed. `old` is what they were, for a driver that
 /// only wants to reprogram what actually moved.
 set_termios: ?*const fn (tty: *TtyStruct, old: termios.termios) void = null,
