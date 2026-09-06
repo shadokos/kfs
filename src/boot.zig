@@ -4,6 +4,8 @@ const multiboot2_h = @import("c_headers.zig").multiboot2_h;
 const multiboot = @import("multiboot.zig");
 const builtin = std.builtin;
 const paging = @import("memory/paging.zig");
+const vfs = @import("fs/vfs.zig");
+const CommandLine = @import("command_line.zig");
 const log = std.log;
 
 const STACK_SIZE: u32 = 64 * 1024;
@@ -113,6 +115,21 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     const idle_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create idle task");
 
     @import("task/scheduler.zig").init(idle_task);
+
+    vfs.init() catch @panic("Cannot initialize vfs");
+
+    const root_fs = @import("drivers/rootfs/driver.zig").fs;
+    const root_inode = root_fs.create(null, undefined).get_root() catch unreachable;
+    vfs.create_hard_root(root_inode);
+
+    vfs.add_filesystem(@import("drivers/devfs/driver.zig").fs) catch @panic("Failed to initialize devfs.");
+    @import("drivers/ext2/driver.zig").static_init() catch @panic("Failed to initialize ext2.");
+    vfs.add_filesystem(@import("drivers/ext2/driver.zig").fs) catch @panic("Failed to initialize ext2.");
+
+    const root = CommandLine.get().root;
+    if (root != .virtual) {
+        vfs.mount(vfs.get_hard_root(), root, .{}) catch @panic("Failed to mount root fs.");
+    }
 
     const kernel_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create kernel task");
 

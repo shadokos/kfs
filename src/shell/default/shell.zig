@@ -3,6 +3,8 @@ pub const Shell = @import("../Shell.zig").Shell(@import("builtins.zig"));
 const colors = @import("colors");
 const tty = @import("../../tty/tty.zig");
 
+pub var cwd: []const u8 = undefined;
+
 pub fn on_init(shell: *Shell) void {
     shell.writer.print("tty {d}, Hello {s}{d}{s}\n", .{
         @import("../../tty/tty.zig").current_tty,
@@ -11,6 +13,7 @@ pub fn on_init(shell: *Shell) void {
         colors.reset,
     }) catch {};
     tty.get_tty().config.c_lflag.ECHOCTL = true;
+    cwd = @import("../../memory.zig").smallAlloc.allocator().dupe(u8, "/") catch unreachable;
 }
 
 pub fn on_error(shell: *Shell) void {

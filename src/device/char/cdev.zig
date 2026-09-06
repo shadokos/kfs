@@ -1,5 +1,8 @@
 const std = @import("std");
 
+const Inode = @import("../../fs/inode.zig");
+const File = @import("../../fs/file.zig");
+
 const core = @import("char.zig");
 const CharError = core.CharError;
 const Operations = core.Operations;
@@ -17,8 +20,8 @@ const Self = @This();
 
 name: [CDEV_NAME_LEN:0]u8,
 devt: dev_t,
-ops: *const Operations,
 ref_count: u32 = 0,
+ops: *const Operations,
 
 /// Initialize a CharDevice value. The caller owns the memory.
 /// After init, call `register()` to make it visible in the registry.
@@ -53,9 +56,9 @@ pub fn unregister(self: *Self) void {
 }
 
 /// Open the device (increments ref count).
-pub fn open(self: *Self) CharError!void {
+pub fn open(self: *Self, file: *File) CharError!void {
     if (self.ops.open) |open_fn| {
-        try open_fn(self);
+        try open_fn(self, file);
     }
     self.ref_count += 1;
 }
@@ -68,17 +71,17 @@ pub fn release(self: *Self) void {
     }
 }
 
-/// Read bytes from the device into buffer.
-pub fn read(self: *Self, buffer: []u8) CharError!usize {
-    const read_fn = self.ops.read orelse return CharError.NotSupported;
-    return read_fn(self, buffer);
-}
+// /// Read bytes from the device into buffer.
+// pub fn read(self: *Self, buffer: []u8) CharError!usize {
+//     const read_fn = self.ops.read orelse return CharError.NotSupported;
+//     return read_fn(self, buffer);
+// }
 
-/// Write bytes to the device.
-pub fn write(self: *Self, data: []const u8) CharError!usize {
-    const write_fn = self.ops.write orelse return CharError.NotSupported;
-    return write_fn(self, data);
-}
+// /// Write bytes to the device.
+// pub fn write(self: *Self, data: []const u8) CharError!usize {
+//     const write_fn = self.ops.write orelse return CharError.NotSupported;
+//     return write_fn(self, data);
+// }
 
 /// Perform an ioctl operation.
 pub fn ioctl(self: *Self, cmd: u32, arg: usize) CharError!usize {

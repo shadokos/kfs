@@ -16,6 +16,9 @@ const status_informations = @import("status_informations.zig");
 const StatusStack = @import("status_stack.zig").StatusStack;
 const logger = std.log.scoped(.task);
 const Errno = @import("../errno.zig").Errno;
+const vfs = @import("../fs/vfs.zig");
+const TNode = @import("../fs/tnode.zig");
+const FileSet = @import("file_set.zig");
 
 const callback_allocator = @import("../memory.zig").smallAlloc.allocator();
 const Callback = *const fn (*TaskDescriptor) void;
@@ -39,10 +42,15 @@ pub fn remove_on_terminate_callback(callback: *const fn (*TaskDescriptor) void) 
 pub const TaskDescriptor = struct {
     // todo: define the appropriate size for a kernelspace stack or get this value from config
     stack: [64 * 1024]u8 align(4096) = undefined,
+
+    files: FileSet = .{},
+
     pid: Pid,
     pgid: Pid,
 
     owner: u32 = 0,
+    cwd: *TNode,
+    root: *TNode,
 
     state: State,
 
@@ -118,6 +126,8 @@ pub const TaskDescriptor = struct {
                 prev.next_sibling = self.next_sibling;
             }
         }
+
+        self.files.reset() catch {};
 
         if (self.vm) |vm| {
             vm.deinit();
@@ -337,6 +347,14 @@ pub const TaskDescriptor = struct {
         gdt.flush();
         scheduler.exit_critical();
         exit(function(data));
+    }
+
+    pub fn chdir(self: *Self, new_dir: *TNode) void {
+        if (new_dir.inode.mode.type != .Directory) {
+            @panic("todo");
+        }
+        self.cwd.release();
+        self.cwd = new_dir.get_ref();
     }
 };
 
