@@ -94,3 +94,25 @@ pub fn send_signal_to_group(pgid: TaskDescriptor.Pid, sig: @import("signal.zig")
     }
     return sent;
 }
+
+/// Whether a process group has nobody left outside it to restart it. POSIX
+/// XBD 3: every member's parent is in the group itself or outside its session.
+pub fn is_orphaned_group(pgid: TaskDescriptor.Pid) bool {
+    for (list) |entry| {
+        const member = entry orelse continue;
+        if (member.pgid != pgid) continue;
+
+        const parent = member.parent orelse continue;
+        if (parent.pgid != pgid and parent.session == member.session) return false;
+    }
+    return true;
+}
+
+/// Any task of a process group, or null when the group holds none.
+pub fn find_in_group(pgid: TaskDescriptor.Pid) ?*TaskDescriptor {
+    for (list) |entry| {
+        const member = entry orelse continue;
+        if (member.pgid == pgid) return member;
+    }
+    return null;
+}
