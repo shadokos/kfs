@@ -1,5 +1,24 @@
 const paging = @import("memory/paging.zig");
 const signal = @import("task/signal.zig");
+const userspace = @import("task/userspace.zig");
+const scheduler = @import("task/scheduler.zig");
+
+/// Spawn trampoline for the demos. The Image is synthetic: there is no program
+/// header table, so phdr_vaddr is 0 and no AT_PHDR is emitted.
+pub fn enter_demo(entrypoint: usize) u8 {
+    const task = scheduler.get_current_task();
+    task.init_vm() catch @panic("todo Failed to initialize userspace");
+
+    const vm = task.vm.?;
+    userspace.map_userspace(vm);
+
+    userspace.enter_userspace(vm, .{
+        .entry = entrypoint,
+        .phdr_vaddr = 0,
+        .phentsize = 0,
+        .phnum = 0,
+    }, &[_][:0]const u8{"poc"}, &.{});
+}
 
 fn poc_signal(id: u32) linksection(".userspace") callconv(.c) void {
     const str = " Signal handled\n";
