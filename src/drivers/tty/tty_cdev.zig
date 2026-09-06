@@ -25,14 +25,31 @@ const MAJOR: types.major_t = 4;
 /// /dev/tty, resolved at every open to the caller's controlling terminal.
 const CTTY_MAJOR: types.major_t = 5;
 
-var cdevs: [tty.max_tty + 1]CharDevice = undefined;
+var cdevs: [tty.num_ttys]CharDevice = undefined;
+
+/// Minor of the first line that is not a console, as Linux numbers ttyS0.
+const LINE_MINOR_BASE: types.minor_t = 64;
 var ctty_cdev: CharDevice = undefined;
 
 /// fs/character.zig leaves the device in `data`; what follows needs the
 /// terminal it stands for.
 fn open(dev: *CharDevice, file: *File) char.CharError!void {
+    const minor = dev.devt.minor;
+    const index = if (minor >= LINE_MINOR_BASE)
+        tty.num_consoles + (minor - LINE_MINOR_BASE)
+    else
+        minor;
+
     file.vtable = &file_vtable;
-    file.data = &tty.tty_array[dev.devt.minor];
+    file.data = &tty.tty_array[index];
+}
+
+/// Name a terminal that is not a console, once a driver has claimed it. The
+/// minor is all read and write need, so the file layer sees no difference.
+pub fn register_line(name: []const u8, index: u8) !void {
+    const minor = LINE_MINOR_BASE + (index - tty.num_consoles);
+    cdevs[index] = CharDevice.init(name, MAJOR, @intCast(minor), &ops);
+    try cdevs[index].register();
 }
 
 /// Open the controlling terminal of the calling session, POSIX 11.1.1. A
@@ -93,11 +110,12 @@ fn ioctl(file: *File, request: u32, arg: usize) File.Error.ioctl!usize {
         .TCFLSH => {
             try job_control.check_control(terminal_, scheduler.get_current_task());
             switch (@as(control.FlushQueue, @enumFromInt(arg))) {
-                // Nothing is ever pending on the way out: a console has
-                // transmitted a byte by the time write returns. These become
-                // real with a line that can be busy.
-                .OUTPUT => {},
-                .INPUT, .BOTH => terminal_.input_buffer.clear(),
+                .OUTPUT => terminal_.flush_output(),
+                .INPUT => terminal_.input_buffer.clear(),
+                .BOTH => {
+                    terminal_.input_buffer.clear();
+                    terminal_.flush_output();
+                },
                 else => return error.EINVAL,
             }
         },
@@ -111,8 +129,10 @@ fn ioctl(file: *File, request: u32, arg: usize) File.Error.ioctl!usize {
                 else => return error.EINVAL,
             }
         },
-        // Both wait on the hardware, and a console keeps nothing waiting.
-        .TCDRAIN, .TCSBRK => try job_control.check_control(terminal_, scheduler.get_current_task()),
+        .TCDRAIN, .TCSBRK => {
+            try job_control.check_control(terminal_, scheduler.get_current_task());
+            terminal_.drain();
+        },
         .TIOCGPGRP => {
             // POSIX tcgetpgrp: only the caller's own terminal answers.
             const task = scheduler.get_current_task();
@@ -181,7 +201,7 @@ pub fn init() void {
     ctty_cdev.register() catch |err|
         log.err("cannot register tty: {s}", .{@errorName(err)});
 
-    for (&cdevs, 0..) |*dev, i| {
+    for (cdevs[0..tty.num_consoles], 0..) |*dev, i| {
         var buffer: [CharDevice.CDEV_NAME_LEN]u8 = undefined;
         const name = std.fmt.bufPrint(&buffer, "tty{d}", .{i}) catch continue;
         dev.* = CharDevice.init(name, MAJOR, @intCast(i), &ops);
