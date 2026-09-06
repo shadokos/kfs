@@ -61,9 +61,33 @@ fn raise_signal(tty: *TtyStruct, c: u8, id: signal.Id) void {
     });
 }
 
+/// The START and STOP characters, POSIX 11.2.2 IXON. They control output and
+/// are not themselves input, so they never reach a reader.
+///
+/// IXANY makes any character restart output, which is what makes a terminal
+/// frozen by a stray Ctrl-S recoverable by typing anything at all.
+fn flow_control(tty: *TtyStruct, c: u8) bool {
+    if (!tty.config.c_iflag.IXON) return false;
+
+    if (c == cc(tty, .VSTOP)) {
+        tty.set_output_stopped(true);
+        return true;
+    }
+    if (c == cc(tty, .VSTART)) {
+        tty.set_output_stopped(false);
+        return true;
+    }
+    if (tty.output_stopped and tty.config.c_iflag.IXANY) {
+        tty.set_output_stopped(false);
+        return true;
+    }
+    return false;
+}
+
 fn receive_char(tty: *TtyStruct, raw: u8) void {
     const c = input_processing(tty, raw) orelse return;
 
+    if (flow_control(tty, c)) return;
     if (signal_char(tty, c)) |id| return raise_signal(tty, c, id);
 
     if (!tty.config.c_lflag.ICANON) {

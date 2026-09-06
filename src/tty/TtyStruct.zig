@@ -39,6 +39,13 @@ read_queue: wait_queue.WaitQueue(.{ .predicate = input_ready }) = .{},
 /// Raised when the VTIME timer fires, cleared when a read starts waiting again.
 read_timed_out: bool = false,
 
+/// Output suspended by the STOP character or by tcflow, POSIX 11.2.2. A writer
+/// waits rather than losing what it had to say.
+output_stopped: bool = false,
+
+/// Writers held back while output is suspended.
+output_queue: wait_queue.WaitQueue(.{ .predicate = output_ready }) = .{},
+
 /// Process group the control characters of this terminal signal, POSIX 11.1.2.
 /// Null until something claims the terminal, and nothing is signalled then.
 foreground_pgid: ?Pid = null,
@@ -59,6 +66,27 @@ pub fn input(self: *Self, s: []const u8) void {
 fn input_ready(_: *void, data: ?*void) bool {
     const self: *Self = @ptrCast(@alignCast(data.?));
     return self.read_timed_out or n_tty.has_input(self);
+}
+
+fn output_ready(_: *void, data: ?*void) bool {
+    const self: *Self = @ptrCast(@alignCast(data.?));
+    return !self.output_stopped;
+}
+
+/// Suspend or resume output, POSIX 11.2.2. Resuming wakes whoever was waiting.
+pub fn set_output_stopped(self: *Self, stopped: bool) void {
+    self.output_stopped = stopped;
+    if (!stopped) self.output_queue.try_unblock();
+}
+
+/// Wait until output is allowed again. Interruptible: a job frozen by a STOP
+/// character must still be killable.
+pub fn wait_for_output(self: *Self) error{EINTR}!void {
+    while (self.output_stopped)
+        self.output_queue.block(
+            @import("../task/scheduler.zig").get_current_task(),
+            @ptrCast(self),
+        ) catch return error.EINTR;
 }
 
 /// Read from the terminal, suitable for std.io.Reader.

@@ -118,7 +118,8 @@ pub const lflags = packed struct {
 };
 
 pub const termios = struct {
-    c_iflag: iflags = .{ .BRKINT = true, .ICRNL = true },
+    // IXON on by default: Ctrl-S and Ctrl-Q are what every terminal does.
+    c_iflag: iflags = .{ .BRKINT = true, .ICRNL = true, .IXON = true },
     c_oflag: oflags = .{ .OPOST = true, .ONLCR = true },
     c_cflag: cflags = .{ .CREAD = true, .CLOCAL = true },
     c_lflag: lflags = .{ .ISIG = true, .ICANON = true, .ECHO = true, .IEXTEN = true, .ECHOE = true, .ECHOK = true },

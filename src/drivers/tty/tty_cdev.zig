@@ -68,6 +68,9 @@ fn read(file: *File, buffer: []u8) File.Error.read!usize {
 fn write(file: *File, data: []const u8) File.Error.write!usize {
     const terminal_ = terminal(file);
     try job_control.check_write(terminal_, scheduler.get_current_task());
+    // Only a process waits on a suspended terminal; kernel output must not
+    // block behind a Ctrl-S.
+    try terminal_.wait_for_output();
     return terminal_.write(data);
 }
 
@@ -87,6 +90,29 @@ fn ioctl(file: *File, request: u32, arg: usize) File.Error.ioctl!usize {
             if (request_ == .TCSETSF) terminal_.input_buffer.clear();
             terminal_.set_termios(termios.from_abi(new.*));
         },
+        .TCFLSH => {
+            try job_control.check_control(terminal_, scheduler.get_current_task());
+            switch (@as(control.FlushQueue, @enumFromInt(arg))) {
+                // Nothing is ever pending on the way out: a console has
+                // transmitted a byte by the time write returns. These become
+                // real with a line that can be busy.
+                .OUTPUT => {},
+                .INPUT, .BOTH => terminal_.input_buffer.clear(),
+                else => return error.EINVAL,
+            }
+        },
+        .TCXONC => {
+            try job_control.check_control(terminal_, scheduler.get_current_task());
+            switch (@as(control.FlowAction, @enumFromInt(arg))) {
+                .OUTPUT_OFF => terminal_.set_output_stopped(true),
+                .OUTPUT_ON => terminal_.set_output_stopped(false),
+                // Sending a character to an end a console does not have.
+                .INPUT_OFF, .INPUT_ON => {},
+                else => return error.EINVAL,
+            }
+        },
+        // Both wait on the hardware, and a console keeps nothing waiting.
+        .TCDRAIN, .TCSBRK => try job_control.check_control(terminal_, scheduler.get_current_task()),
         .TIOCGPGRP => {
             // POSIX tcgetpgrp: only the caller's own terminal answers.
             const task = scheduler.get_current_task();
