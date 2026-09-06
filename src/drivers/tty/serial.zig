@@ -7,6 +7,9 @@ const cpu = @import("../../cpu.zig");
 const pic = @import("../pic/pic.zig");
 const interrupts = @import("../../interrupts.zig");
 
+const wait_queue = @import("../../task/wait_queue.zig");
+const scheduler = @import("../../task/scheduler.zig");
+
 const tty = @import("../../tty/tty.zig");
 const TtyStruct = @import("../../tty/TtyStruct.zig");
 const TtyDriver = @import("../../tty/TtyDriver.zig");
@@ -66,6 +69,9 @@ irq: pic.IRQ,
 terminal: *TtyStruct = undefined,
 tx: Ring = .{},
 
+/// Whoever is waiting for the line to fall silent, for tcdrain.
+drain_queue: wait_queue.WaitQueue(.{ .predicate = sent_everything }) = .{},
+
 /// Whether the transmitter is idle and waiting to be handed a byte.
 fn can_transmit(self: *const Self) bool {
     return cpu.inb(self.port + line_status) & 0x20 != 0;
@@ -75,12 +81,34 @@ fn has_received(self: *const Self) bool {
     return cpu.inb(self.port + line_status) & 0x01 != 0;
 }
 
-/// Hand the transmitter as much as it will take.
+/// Holding and shift register both empty: the last bit has left the wire.
+fn is_idle(self: *const Self) bool {
+    return cpu.inb(self.port + line_status) & 0x40 != 0;
+}
+
+fn sent_everything(_: *void, waiter: ?*void) bool {
+    const self: *Self = @ptrCast(@alignCast(waiter.?));
+    return self.tx.is_empty();
+}
+
+/// Ask the transmitter to say when it has room, or stop asking. It has room
+/// whenever there is nothing to send, so leaving this on never stops firing.
+fn want_room(self: *Self, wanted: bool) void {
+    const current = cpu.inb(self.port + interrupt_enable);
+    const next = if (wanted) current | 0x02 else current & ~@as(u8, 0x02);
+    if (next != current) cpu.outb(self.port + interrupt_enable, next);
+}
+
+/// Hand the transmitter as much as it will take, and arrange to be told when
+/// it wants more.
 fn kick(self: *Self) void {
     while (self.can_transmit()) {
         const c = self.tx.pop() orelse break;
         cpu.outb(self.port + data, c);
     }
+
+    self.want_room(!self.tx.is_empty());
+    if (self.tx.is_empty()) self.drain_queue.try_unblock();
 }
 
 // Driver
@@ -103,17 +131,22 @@ fn flush(terminal: *TtyStruct) void {
     of(terminal).kick();
 }
 
-/// Wait for the queue and the transmitter both to be empty, for tcdrain.
+/// Wait for everything to have left, for tcdrain. The byte in the shift
+/// register has no interrupt of its own, hence the spin at the end.
 fn drain(terminal: *TtyStruct) void {
     const self = of(terminal);
-    while (!self.tx.is_empty() or !self.can_transmit()) {
-        self.kick();
-        cpu.halt();
-    }
+
+    while (!self.tx.is_empty())
+        self.drain_queue.block_no_int(scheduler.get_current_task(), @ptrCast(self));
+
+    while (!self.is_idle()) cpu.halt();
 }
 
 fn flush_output(terminal: *TtyStruct) void {
-    of(terminal).tx.clear();
+    const self = of(terminal);
+    self.tx.clear();
+    self.want_room(false);
+    self.drain_queue.try_unblock();
 }
 
 /// Take in what arrived. Called from the input task, never from the interrupt.
@@ -201,10 +234,17 @@ fn activate(self: *Self) error{Faulty}!void {
     return;
 }
 
+/// Take what arrived, give the transmitter what it has room for. Reading the
+/// line is left to the input task.
+fn service(self: *Self) void {
+    if (self.has_received()) tty.notify(self.terminal);
+    self.kick();
+}
+
 /// A shared line says only which pair the interrupt came from, so both ports
 /// on it are asked.
 fn service_irq(irq: pic.IRQ) void {
-    for (ports[0..detected]) |*p| if (p.irq == irq) tty.notify(p.terminal);
+    for (ports[0..detected]) |*p| if (p.irq == irq) p.service();
 }
 
 fn uses_irq(irq: pic.IRQ) bool {
