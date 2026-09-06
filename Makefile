@@ -8,6 +8,11 @@ BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
 QEMU_BOOT_DRIVE ?= -hda kfs.iso
 QEMU_DRIVE ?=
 
+# COM1 on the terminal. signal=off keeps Ctrl-C for the guest instead of
+# letting it kill qemu, which is what makes /dev/ttyS0 usable as a terminal.
+# Repeat -serial to give the kernel more ports to probe.
+QEMU_SERIAL ?= -chardev stdio,id=serial0,signal=off -serial chardev:serial0
+
 .PHONY: all
 all: build
 
@@ -19,7 +24,7 @@ all: build
 
 .PHONY: run
 run: build
-	qemu-system-i386 $(QEMU_BOOT_DRIVE) ${QEMU_DRIVE}
+	qemu-system-i386 $(QEMU_BOOT_DRIVE) $(QEMU_DRIVE) $(QEMU_SERIAL)
 
 
 .PHONY: build
