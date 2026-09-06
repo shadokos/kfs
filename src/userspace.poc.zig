@@ -389,3 +389,10 @@ export fn userland_jobctl() linksection(".userspace") void {
 }
 
 const wait = @import("task/wait.zig");
+
+/// A loop that asks the kernel for nothing. The only way back in is a hardware
+/// interrupt, which is how a signal reaches a task that makes no calls.
+export fn userland_spin() linksection(".userspace") void {
+    putstr("spinning, no syscalls from here\n");
+    while (true) {}
+}
