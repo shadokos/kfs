@@ -181,10 +181,24 @@ fn arm_timer(tty: *TtyStruct, deciseconds: u8) ?u64 {
     }) catch null;
 }
 
-/// Sleep until the discipline publishes something or VTIME runs out.
+/// Sleep until the discipline publishes something or VTIME runs out. A stop
+/// pauses the read on this stack rather than ending it.
 fn wait(tty: *TtyStruct) TtyStruct.ReadError!void {
-    tty.read_queue.block(scheduler.get_current_task(), @ptrCast(tty)) catch
-        return error.EINTR;
+    const task = scheduler.get_current_task();
+
+    while (true) {
+        tty.read_queue.block(task, @ptrCast(tty)) catch {};
+
+        // Input beats a signal that is only waiting.
+        if (tty.read_timed_out or has_input(tty)) return;
+
+        switch (task.pending_disposition()) {
+            .stop => task.stop_in_place(),
+            .interrupt => return error.EINTR,
+            // Woken by nothing in particular; wait again.
+            .none => {},
+        }
+    }
 }
 
 /// Hand bytes to a reader. Canonical mode ignores VMIN and VTIME: a line is the
