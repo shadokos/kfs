@@ -142,6 +142,36 @@ pub const TaskDescriptor = struct {
         }
     }
 
+    /// What a blocking call should do about whatever signal is waiting.
+    pub const Disposition = enum { none, stop, interrupt };
+
+    pub fn pending_disposition(self: *Self) Disposition {
+        const id = self.signalManager.peek_pending(self.ucontext.uc_sigmask) orelse return .none;
+        // A handler runs, which is an interruption whatever the signal meant.
+        if (self.signalManager.get_action(id).sa_handler != signal.SIG_DFL) return .interrupt;
+
+        return switch (self.signalManager.get_defaultAction(id)) {
+            .Stop => .stop,
+            .Terminate => .interrupt,
+            .Ignore, .Continue => .none,
+        };
+    }
+
+    /// Stop on the caller's own stack rather than on the way out to userspace,
+    /// so a blocking call resumes instead of returning short.
+    pub fn stop_in_place(self: *Self) void {
+        const info = self.signalManager.get_pending_signal(self.ucontext.uc_sigmask) orelse return;
+
+        if (self.state == .Ready) ready_queue.remove(self);
+        self.state = .Stopped;
+        self.update_status(.{
+            .transition = .Stopped,
+            .signaled = true,
+            .siginfo = info,
+        });
+        scheduler.schedule();
+    }
+
     pub fn update_status(self: *Self, new_status_info: ?status_informations.Status) void {
         self.status_info = new_status_info;
         if (new_status_info) |s| {

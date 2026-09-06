@@ -267,6 +267,16 @@ pub const SignalManager = struct {
         self.pending &= ~(@as(SigSet, 1) << @as(u5, @intCast(index)));
     }
 
+    /// The signal a blocking call would be interrupted by, without consuming it.
+    pub fn peek_pending(self: *Self, mask: SigSet) ?Id {
+        self.mutex.acquire();
+        defer self.mutex.release();
+
+        const real_mask: SigSet = mask & ~non_maskable;
+        if (self.pending & ~real_mask == 0) return null;
+        return @enumFromInt(@ctz(self.pending & ~real_mask));
+    }
+
     pub fn get_pending_signal(self: *Self, mask: SigSet) ?siginfo_t {
         self.mutex.acquire();
         defer self.mutex.release();
