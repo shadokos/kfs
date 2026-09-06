@@ -55,7 +55,7 @@ pub fn kernel_log(
 
             while (true) {
                 @import("cpu.zig").halt();
-                @import("tty/keyboard.zig").kb_read();
+                @import("drivers/input/keyboard/keyboard.zig").kb_read();
             }
         }
     }
