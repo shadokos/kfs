@@ -69,7 +69,7 @@ pub const TypeSpecificParams = union(Inode.Mode.Type) {
 };
 
 pub const VTable = struct {
-    load_inode: *const fn (*Self, Inode.Ino) Error.load_inode!*Inode,
+    load_inode: *const fn (*Self, Inode.Ino, ?*anyopaque) Error.load_inode!*Inode,
     release_inode: *const fn (*Self, *Inode) Error.release_inode!void,
     get_root: *const fn (*Self) Error.get_root!*Inode,
     create_inode: *const fn (
@@ -85,11 +85,11 @@ pub fn get_root(self: *Self) Error.get_root!*Inode {
     return self.vtable.get_root(self);
 }
 
-pub fn retrieve_inode(self: *Self, ino: Inode.Ino) Error.load_inode!*Inode {
+pub fn retrieve_inode(self: *Self, ino: Inode.Ino, data : ?*anyopaque) Error.load_inode!*Inode {
     if (self.cache.get(ino)) |inode| {
         return inode.get_ref();
     } else {
-        const ret = try self.vtable.load_inode(self, ino);
+        const ret = try self.vtable.load_inode(self, ino, data);
         errdefer self.vtable.release_inode(self, ret) catch {}; // todo: ignore error?
         self.cache.put(ino, ret) catch return error.ENOMEM;
         return ret.get_ref();

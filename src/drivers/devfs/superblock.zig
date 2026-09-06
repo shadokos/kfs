@@ -57,7 +57,7 @@ const superblock_vtable: Superblock.VTable = .{
     .create_inode = undefined,
 };
 
-pub fn load_inode(superblock: *Superblock, vfs_ino: VfsInode.Ino) Superblock.Error.load_inode!*Inode {
+pub fn load_inode(superblock: *Superblock, vfs_ino: VfsInode.Ino, _ : ?*anyopaque) Superblock.Error.load_inode!*Inode {
     const ino: Ino = @bitCast(vfs_ino);
     const ret = try Inode.create();
     ret.* = .{

@@ -46,13 +46,13 @@ fn root_lookup(inode: *Inode, name: []const u8) Inode.Error.lookup!?*Inode {
             .type = .Block,
             .device = partition.devt,
         };
-        return inode.superblock.retrieve_inode(@bitCast(ino));
+        return inode.superblock.retrieve_inode(@bitCast(ino), null);
     } else if (char_registry.get_device_by_name(name)) |device| {
         const ino: Superblock.Ino = .{
             .type = .Character,
             .device = device.devt,
         };
-        return inode.superblock.retrieve_inode(@bitCast(ino));
+        return inode.superblock.retrieve_inode(@bitCast(ino), null);
     } else {
         return null;
     }

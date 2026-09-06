@@ -121,7 +121,7 @@ pub fn create_inode(
     return (try Ext2Superblock.FromVfs(superblock).create_inode(uid, gid, mode, type_specific)).ToVfs();
 }
 
-pub fn vtable_load_inode(superblock: *Superblock, ino: Inode.Ino) Superblock.Error.load_inode!*Inode {
+pub fn vtable_load_inode(superblock: *Superblock, ino: Inode.Ino, _ : ?*anyopaque) Superblock.Error.load_inode!*Inode {
     return (try Ext2Superblock.FromVfs(superblock).load_inode(ino)).ToVfs();
 }
 

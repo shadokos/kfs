@@ -143,7 +143,7 @@ pub fn load_inode(self: *Self, ino: VfsInode.Ino) (error{ENOMEM} || ReadError)!*
 }
 
 pub fn retrieve_inode(self: *Self, ino: VfsInode.Ino) VfsSuperblock.Error.load_inode!*Inode {
-    return Inode.FromVfs(try self.ToVfs().retrieve_inode(ino));
+    return Inode.FromVfs(try self.ToVfs().retrieve_inode(ino, null));
 }
 
 pub fn release_inode(self: *Self, inode: *Inode) void {
