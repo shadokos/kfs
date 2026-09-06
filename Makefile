@@ -6,6 +6,10 @@ OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo ReleaseSafe) | 
 
 BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
 QEMU_BOOT_DRIVE ?= -hda kfs.iso
+
+# ext2 image appended to the iso, so userland binaries have somewhere to live.
+FS = fs.iso
+FS_UUID = 8581277f-6f63-447a-8d0c-347e180d2466
 QEMU_DRIVE ?=
 
 # COM1 on the terminal. signal=off keeps Ctrl-C for the guest instead of
@@ -29,7 +33,7 @@ run: build
 
 
 .PHONY: build
-build: .optimize-$(OPTIMIZE) .bootloader-$(BOOTLOADER)
+build: .optimize-$(OPTIMIZE) .bootloader-$(BOOTLOADER) $(FS)
 	$(ZIG) build -Doptimize=$(OPTIMIZE) $(BUILD_ARGS)
 
 .PHONY: debug
@@ -47,6 +51,9 @@ small: .optimize-ReleaseSmall .bootloader-$(BOOTLOADER)
 .PHONY: fast
 fast: .optimize-ReleaseFast .bootloader-$(BOOTLOADER)
 	$(ZIG) build -Doptimize=ReleaseFast $(BUILD_ARGS)
+
+$(FS): iso/
+	mkfs -F -t ext2 -U $(FS_UUID) -d iso ./$(FS) 10M
 
 .optimize-%:
 	rm -rf .optimize-*
@@ -68,7 +75,7 @@ clean:
 
 .PHONY: fclean
 fclean: clean
-	rm -rf .zig-out .optimize-* .bootloader-* kfs.iso
+	rm -rf .zig-out .optimize-* .bootloader-* kfs.iso $(FS)
 
 .PHONY: format
 format:
