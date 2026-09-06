@@ -29,12 +29,14 @@ pub fn kernel_log(
     if (message_level == .err and scope == .default) {
         scheduler.enter_critical();
         if (@import("build_options").ci) {
-            var com_port = @import("shell/ci/shell.zig").com_port_1;
-            var packet = @import("shell/ci/packet.zig").Packet([]u8).init(com_port.get_writer().any());
+            const ci = @import("shell/ci/shell.zig");
+            var packet = @import("shell/ci/packet.zig").Packet([]u8).init(ci.line.get_writer().any());
 
             packet.err = error.KernelPanic;
-            _ = com_port.write("\n") catch {}; // Ensure starting a new packet if we panicked in the middle of one
+            _ = ci.line.write("\n") catch {}; // Ensure starting a new packet if we panicked in the middle of one
             packet.sendf(format, args);
+            // Interrupts are off here, so nothing will drain the line for us.
+            ci.line.flush_sync();
 
             @import("drivers/acpi/acpi.zig").power_off();
         } else if (@import("build_options").optimize != .Debug) {
