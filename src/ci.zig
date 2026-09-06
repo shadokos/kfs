@@ -2,8 +2,8 @@ const ci_shell = @import("shell/ci/shell.zig");
 
 pub fn main(_: usize) u8 {
     var shell = ci_shell.Shell.init(
-        ci_shell.com_port_1.get_reader().any(),
-        ci_shell.com_port_1.get_writer().any(),
+        ci_shell.line.get_reader().any(),
+        ci_shell.line.get_writer().any(),
         .{ .colors = false },
         .{ .on_init = &ci_shell.on_init, .on_error = &ci_shell.on_error },
     );

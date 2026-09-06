@@ -116,12 +116,11 @@ fn kick(self: *Self) void {
 fn write(terminal: *TtyStruct, bytes: []const u8) usize {
     const self = of(terminal);
 
-    for (bytes, 0..) |c, sent| {
-        // A full ring drops, as MAX_INPUT does in the other direction.
-        if (!self.tx.push(c)) {
-            self.kick();
-            if (!self.tx.push(c)) return sent;
-        }
+    for (bytes) |c| {
+        // A full queue means the wire is slower than the writer, so wait for
+        // room rather than lose what there was to say. Unlike input, which has
+        // nowhere to wait and drops at MAX_INPUT.
+        while (!self.tx.push(c)) self.kick();
     }
     self.kick();
     return bytes.len;
@@ -140,6 +139,18 @@ fn drain(terminal: *TtyStruct) void {
         self.drain_queue.block_no_int(scheduler.get_current_task(), @ptrCast(self));
 
     while (!self.is_idle()) cpu.halt();
+}
+
+/// Push the queue out by hand, for a caller that cannot wait. A panic runs with
+/// interrupts off, so the transmit interrupt is never going to come.
+pub fn flush_sync(terminal: *TtyStruct) void {
+    const self = of(terminal);
+
+    while (self.tx.pop()) |c| {
+        while (!self.can_transmit()) {}
+        cpu.outb(self.port + data, c);
+    }
+    while (!self.is_idle()) {}
 }
 
 fn flush_output(terminal: *TtyStruct) void {
@@ -203,6 +214,12 @@ const com_irqs = [_]pic.IRQ{ .COM1, .COM2, .COM1, .COM2 };
 
 pub var ports: [com_ports.len]Self = undefined;
 pub var detected: usize = 0;
+
+/// The terminal on the first line found, for a caller with no descriptor to
+/// reach it by. Null until init has run.
+pub fn first_line() ?*TtyStruct {
+    return if (detected > 0) ports[0].terminal else null;
+}
 
 /// A scratch register that keeps what is written to it is a UART.
 fn probe(port: u16) bool {
