@@ -34,7 +34,7 @@ class Buffer:
     def __init__(self, socket: socket):
         self.buffer = b''
         self.socket = socket
-        self.socket.settimeout(90)
+        self.socket.settimeout(120)
 
     def read_delimiter(self, delimiter: bytes | str = b'\n') -> bytes | None:
         while delimiter not in self.buffer:
