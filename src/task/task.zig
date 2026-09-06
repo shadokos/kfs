@@ -19,6 +19,13 @@ const Errno = @import("../errno.zig").Errno;
 const vfs = @import("../fs/vfs.zig");
 const TNode = @import("../fs/tnode.zig");
 const FileSet = @import("file_set.zig");
+const INode = @import("../fs/inode.zig");
+const elf = @import("elf.zig");
+const sysv = @import("sysv.zig");
+const userspace = @import("userspace.zig");
+
+const heapAlloc = memory.bigAlloc.allocator();
+const smallAlloc = memory.smallAlloc.allocator();
 
 const callback_allocator = @import("../memory.zig").smallAlloc.allocator();
 const Callback = *const fn (*TaskDescriptor) void;
@@ -197,17 +204,147 @@ pub const TaskDescriptor = struct {
         } else @panic("todo");
     }
 
-    pub fn init_vm(self: *Self) !void {
-        if (self.vm != null) {
-            @panic("task already has a vm");
+    fn deinit_vm(self: *Self) void {
+        if (self.vm) |vm| {
+            destroy_vm(vm);
+            self.vm = null;
         }
+    }
+
+    fn destroy_vm(vm: *VirtualSpace) void {
+        vm.deinit();
+        VirtualSpace.cache.allocator().destroy(vm);
+    }
+
+    fn create_vm() !*VirtualSpace {
         const vm = try VirtualSpace.cache.allocator().create(VirtualSpace);
         try vm.init();
         try vm.add_space(0, paging.high_half / paging.page_size);
         try vm.add_space((paging.page_tables) / paging.page_size, 768);
         vm.transfer();
         try vm.fill_page_tables(paging.page_tables / paging.page_size, 768, false);
-        self.vm = vm;
+        return vm;
+    }
+
+    pub fn init_vm(self: *Self) !void {
+        if (self.vm != null) {
+            @panic("task already has a vm");
+        }
+        self.vm = try create_vm();
+    }
+
+    pub fn dupe_strings_z(strings: []const []const u8) Errno![]const [:0]const u8 {
+        const out = smallAlloc.alloc([:0]const u8, strings.len) catch return Errno.ENOMEM;
+        errdefer smallAlloc.free(out);
+        var filled: usize = 0;
+        errdefer for (out[0..filled]) |s| smallAlloc.free(s);
+        for (strings, 0..) |s, i| {
+            out[i] = smallAlloc.dupeZ(u8, s) catch return Errno.ENOMEM;
+            filled += 1;
+        }
+        return out;
+    }
+
+    pub fn free_strings_z(strings: []const [:0]const u8) void {
+        for (strings) |s| smallAlloc.free(s);
+        smallAlloc.free(strings);
+    }
+
+    pub const ExecRequest = struct {
+        data: []const u8,
+        argv: []const [:0]const u8,
+        envp: []const [:0]const u8,
+    };
+
+    /// Everything about an exec that can fail: read the image, validate it, and copy
+    /// argv/envp into kernel memory. Touches no task, so on error nothing is committed
+    /// and the caller's own resources are still safe to release.
+    /// The returned request is owned by the matching commit_exec.
+    pub fn prepare_exec(
+        inode: *INode,
+        argv: []const []const u8,
+        envp: []const []const u8,
+    ) Errno!*ExecRequest {
+        const file = try inode.open();
+        defer file.close() catch {};
+
+        var magic: [2]u8 = undefined;
+        if (try file.pread(0, magic[0..]) != magic.len) {
+            return Errno.EINVAL;
+        }
+        if (std.mem.eql(u8, magic[0..], "#!")) {
+            @panic("Must implement shebang");
+        }
+
+        const data = heapAlloc.alloc(u8, std.math.cast(usize, inode.size) orelse return Errno.E2BIG) catch
+            return Errno.ENOMEM;
+        errdefer heapAlloc.free(data);
+        if (try file.pread(0, data) != data.len)
+            return Errno.EIO;
+        elf.validate(data) catch |e| return switch (e) {
+            error.InvalidElf, error.UnsupportedElf => Errno.ENOEXEC,
+            error.LoadFailed => unreachable, // validate do not map anything
+        };
+
+        var count: usize = 0;
+        for (argv) |arg| count += arg.len + 1;
+        for (envp) |env| count += env.len + 1;
+        if (count > sysv.arg_max) return Errno.E2BIG;
+
+        const argv_z = try dupe_strings_z(argv);
+        errdefer free_strings_z(argv_z);
+        const envp_z = try dupe_strings_z(envp);
+        errdefer free_strings_z(envp_z);
+
+        const req = smallAlloc.create(ExecRequest) catch return Errno.ENOMEM;
+        req.* = .{ .data = data, .argv = argv_z, .envp = envp_z };
+        return req;
+    }
+
+    /// The half that cannot fail, and does not come back: it resets the kernel stack
+    /// the caller is running on.
+    pub fn commit_exec(self: *Self, req: *ExecRequest) void {
+        self.spawn(&exec_entry, @intFromPtr(req)) catch @panic("Failed to spawn exec task");
+    }
+
+    fn load_image(
+        file_data: []const u8,
+        argv_z: []const [:0]const u8,
+        envp_z: []const [:0]const u8,
+    ) !userspace.PreparedEntry {
+        // load() copies every PT_LOAD into the new vm, and build_sysv_stack copies
+        // the strings onto the user stack: none of these outlive this function.
+        defer heapAlloc.free(file_data);
+        defer free_strings_z(argv_z);
+        defer free_strings_z(envp_z);
+
+        const self = scheduler.get_current_task();
+
+        const new_vm = try create_vm();
+        errdefer destroy_vm(new_vm);
+
+        const image = try elf.load(new_vm, file_data);
+
+        userspace.map_userspace(new_vm);
+        const entry = userspace.prepare_entry(new_vm, image, argv_z, envp_z);
+
+        self.deinit_vm();
+        self.vm = new_vm;
+        return entry;
+    }
+
+    fn exec_entry(data: usize) u8 {
+        const request: *ExecRequest = @ptrFromInt(data);
+        const file_data = request.data;
+        const argv_z = request.argv;
+        const envp_z = request.envp;
+        smallAlloc.destroy(request);
+
+        // Everything fallible lives in a function that actually returns, so its
+        // defer/errdefer run, only the ring-3 jump below is noreturn, and by then
+        // there is nothing left to release.
+        const entry = load_image(file_data, argv_z, envp_z) catch exit(1);
+        userspace.iret_to(entry);
     }
 
     pub fn clone_vm(self: *Self, other: *Self) !void {
