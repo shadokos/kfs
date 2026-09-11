@@ -1,5 +1,6 @@
 const std = @import("std");
 const tty = @import("../tty/tty.zig");
+const vt_console = @import("../drivers/tty/vt_console.zig");
 const StackIterator = std.debug.StackIterator;
 
 const c = @import("colors");
@@ -10,7 +11,7 @@ extern var stack_bottom: [*]u8;
 pub fn ensure_newline(writer: std.io.AnyWriter) void {
     writer.print("{s}\x1b[{d}C\r", .{
         c.invert ++ "%" ++ c.reset, // No newline char: '%' character in reverse
-        tty.width - 2, // Move cursor to the end of the line or on the next line if the line is not empty
+        vt_console.width - 2, // Move cursor to the end of the line or on the next line if the line is not empty
     }) catch {};
 }
 

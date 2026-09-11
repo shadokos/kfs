@@ -85,9 +85,7 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     @import("timer.zig").init();
 
     @import("drivers/ps2/ps2.zig").init();
-
     @import("drivers/input/keyboard/keyboard.zig").init();
-
     @import("./drivers/acpi/acpi.zig").init();
 
     @import("syscall.zig").init();
@@ -131,8 +129,13 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
         vfs.mount(vfs.get_hard_root(), root, .{}) catch @panic("Failed to mount root fs.");
     }
 
-    const kernel_task = @import("task/task_set.zig").create_task() catch @panic("Failed to create kernel task");
+    const tty_input_task = @import("task/task_set.zig").create_task() catch
+        @panic("Failed to create tty input task");
+    tty_input_task.spawn(@import("tty/tty.zig").input_task, undefined) catch
+        @panic("Failed to spawn tty input task");
 
+    const kernel_task = @import("task/task_set.zig").create_task() catch
+        @panic("Failed to create kernel task");
     const main = if (!@import("build_options").ci) kernel.main else @import("ci.zig").main;
     kernel_task.spawn(main, undefined) catch @panic("Failed to spawn kernel main task");
 
