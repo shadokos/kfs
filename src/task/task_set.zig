@@ -2,6 +2,7 @@ const task = @import("task.zig");
 const TaskDescriptor = task.TaskDescriptor;
 const scheduler = @import("scheduler.zig");
 const vfs = @import("../fs/vfs.zig");
+const Session = @import("session.zig");
 
 const NTASK = 100; // todo: get this value from config
 
@@ -25,6 +26,7 @@ pub fn create_task() !*TaskDescriptor {
             .state = .Running,
             .root = hard_root,
             .cwd = hard_root,
+            .session = try Session.create(pid),
         };
     } else {
         new_task.* = .{
@@ -34,6 +36,7 @@ pub fn create_task() !*TaskDescriptor {
             .state = .Ready,
             .cwd = parent.cwd,
             .root = parent.root,
+            .session = parent.session.get_ref(),
         };
         new_task.next_sibling = parent.childs;
         parent.childs = new_task;

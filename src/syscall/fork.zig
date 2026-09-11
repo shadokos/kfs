@@ -25,7 +25,7 @@ pub fn do_raw() void {
     const new_task = task_set.create_task() catch |e| {
         current_task.ucontext.uc_mcontext.ebx = @intFromError(switch (e) {
             error.TooMuchProcesses => Errno.EAGAIN,
-            error.OutOfMemory => Errno.ENOMEM,
+            error.OutOfMemory, error.ENOMEM => Errno.ENOMEM,
         });
         return;
     };

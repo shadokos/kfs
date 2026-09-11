@@ -273,3 +273,75 @@ export fn userland_io() linksection(".userspace") void {
     putstr_fd(fd, "BBBBBBBBBBBBBBBBBBBBBB\n");
     _ = syscall(.exit, .{0});
 }
+
+/// Sessions and the controlling terminal, POSIX 11.1.3, from userspace. The
+/// kernel shell cannot show this: the only session leader it has is itself.
+export fn userland_ctty() linksection(".userspace") void {
+    const path = "/dev/tty0";
+    const flags = open.Flags{ .openMode = .read_write };
+
+    // setsid refuses a process group leader, and the spawned job is one.
+    putstr("job pid ");
+    putnbr(syscall(.getpid, .{}));
+    putstr(" pgid ");
+    putnbr(syscall(.getpgid, .{0}));
+    putstr("\n");
+
+    const leader = syscall(.fork, .{});
+    if (leader == 0) {
+        const sid = syscall(.setsid, .{});
+        putstr("leader pid ");
+        putnbr(syscall(.getpid, .{}));
+        putstr(" pgid ");
+        putnbr(syscall(.getpgid, .{0}));
+        putstr(" session ");
+        putnbr(sid);
+
+        const fd = syscall(.open, .{ path.ptr, flags, open.Mode{} });
+        putstr(" fd ");
+        putnbr(fd);
+
+        var owner: i32 = -1;
+        _ = syscall(.ioctl, .{ fd, TIOCGSID, &owner });
+        putstr(" tiocgsid ");
+        putnbr(owner);
+        putstr("\n");
+
+        // In the foreground group, so the leader's death should hang it up.
+        if (syscall(.fork, .{}) == 0) {
+            putstr("fg child pid ");
+            putnbr(syscall(.getpid, .{}));
+            putstr(" pgid ");
+            putnbr(syscall(.getpgid, .{0}));
+            putstr("\n");
+            _ = syscall(.sleep, .{1500});
+            putstr("BAD: foreground child outlived the hangup\n");
+            _ = syscall(.exit, .{1});
+        }
+
+        _ = syscall(.sleep, .{300});
+        _ = syscall(.exit, .{0});
+    }
+
+    _ = syscall(.sleep, .{2500});
+
+    // A second session, to see whether the terminal came back.
+    if (syscall(.fork, .{}) == 0) {
+        _ = syscall(.setsid, .{});
+        const fd = syscall(.open, .{ path.ptr, flags, open.Mode{} });
+
+        var owner: i32 = -1;
+        const answer = syscall(.ioctl, .{ fd, TIOCGSID, &owner });
+        if (answer == 0 and owner == syscall(.getsid, .{0}))
+            putstr("terminal released and taken again\n")
+        else
+            putstr("BAD: terminal still answers to the dead session\n");
+
+        _ = syscall(.exit, .{0});
+    }
+
+    _ = syscall(.sleep, .{1000});
+    _ = syscall(.exit, .{0});
+}
+
+const TIOCGSID: u32 = 0x5429;

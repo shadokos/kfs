@@ -13,7 +13,13 @@ pub fn open(base: *Inode, file: *File) Inode.Error.open!void {
         .refs = 1,
         .data = device,
     };
-    device.open(file) catch return error.EIO;
+    // /dev/tty without a controlling terminal has to reach the caller as ENXIO.
+    device.open(file) catch |err| return switch (err) {
+        error.DeviceNotFound => error.ENXIO,
+        error.OutOfMemory => error.ENOMEM,
+        error.PermissionDenied => error.EPERM,
+        else => error.EIO,
+    };
 }
 
 fn read(file: *File, buffer: []u8) File.Error.read!usize {

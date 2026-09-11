@@ -48,6 +48,10 @@ pub const TaskDescriptor = struct {
     pid: Pid,
     pgid: Pid,
 
+    /// Session this task belongs to, and through it the controlling terminal.
+    /// Shared with every other task of the session, inherited across fork.
+    session: *@import("session.zig"),
+
     owner: u32 = 0,
     cwd: *TNode,
     root: *TNode,
@@ -101,6 +105,7 @@ pub const TaskDescriptor = struct {
 
     pub fn deinit(self: *Self) void {
         self.status_wait_queue.unblock_all();
+        self.session.release();
 
         // Hot fix;
         // When a task exits, the callback are called only for the parent task.
@@ -142,6 +147,14 @@ pub const TaskDescriptor = struct {
         }
     }
 
+    /// POSIX 11.1.3: when the controlling process dies, its terminal leaves the
+    /// session, so that another session leader can take it. The foreground
+    /// group is hung up first, it was talking to a terminal it is about to lose.
+    fn hangup_controlling_terminal(self: *Self) void {
+        if (self.session.sid != self.pid) return;
+        self.session.hangup();
+    }
+
     /// What a blocking call should do about whatever signal is waiting.
     pub const Disposition = enum { none, stop, interrupt };
 
@@ -175,6 +188,7 @@ pub const TaskDescriptor = struct {
     pub fn update_status(self: *Self, new_status_info: ?status_informations.Status) void {
         self.status_info = new_status_info;
         if (new_status_info) |s| {
+            if (s.transition == .Terminated) self.hangup_controlling_terminal();
             if (self.parent) |p| {
                 p.status_stack.add(&self.status_stack_process_node, s.transition);
                 p.status_wait_queue.try_unblock();

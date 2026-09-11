@@ -97,7 +97,6 @@ pub fn do(path: [*:0]const u8, flags: Flags, mode: Mode) Errno!FileSet.Fd {
         flags.close_on_exec or
         flags.close_on_fork or
         flags.directory or
-        flags.no_controlling_tty or
         flags.no_follow or
         flags.non_blocking or
         flags.tty_init)
@@ -109,5 +108,6 @@ pub fn do(path: [*:0]const u8, flags: Flags, mode: Mode) Errno!FileSet.Fd {
     if (flags.truncate) {
         try inode.truncate(0);
     }
+    @import("../tty/tty.zig").acquire_controlling(file, flags.no_controlling_tty);
     return try scheduler.get_current_task().files.add(file);
 }

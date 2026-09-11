@@ -951,3 +951,98 @@ pub fn stty(shell: anytype, args: [][]u8) CmdError!void {
         attr.c_cc[@intFromEnum(termios.cc_index.VTIME)],
     });
 }
+
+/// Show the session and process group of a task, and the terminal the session
+/// controls. Zero, or no argument, means the shell itself.
+/// Usage: session [pid]
+pub fn session(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len > 2) return CmdError.InvalidNumberOfArguments;
+
+    const task_set = @import("../../task/task_set.zig");
+    const pid = if (args.len == 2)
+        std.fmt.parseInt(i32, args[1], 0) catch return CmdError.InvalidParameter
+    else
+        0;
+
+    const task = if (pid == 0)
+        scheduler.get_current_task()
+    else
+        task_set.get_task_descriptor(pid) orelse {
+            utils.print_error(shell, "No such task: {d}", .{pid});
+            return CmdError.OtherError;
+        };
+
+    shell.print("pid {d} pgid {d} sid {d}", .{ task.pid, task.pgid, task.session.sid });
+    if (task.session.ctty) |terminal| {
+        shell.print(" ctty tty{d} fg {?d}\n", .{ terminal.index, terminal.foreground_pgid });
+    } else {
+        shell.print(" no controlling terminal\n", .{});
+    }
+}
+
+/// Start a session, POSIX setsid. The shell keeps it: a terminal opened
+/// afterwards becomes its controlling terminal.
+pub fn setsid(shell: anytype, _: [][]u8) CmdError!void {
+    const sid = @import("../../syscall/setsid.zig").do() catch |e| {
+        utils.print_error(shell, "setsid: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+    shell.print("session {d}\n", .{sid});
+}
+
+/// Open a path through the open syscall, acquiring the controlling terminal as
+/// userspace would. Leaves the descriptor open.
+/// Usage: ctty <path> [noctty]
+pub fn ctty(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len < 2 or args.len > 3) return CmdError.InvalidNumberOfArguments;
+
+    const open = @import("../../syscall/open.zig");
+
+    var path: [256]u8 = undefined;
+    if (args[1].len >= path.len) return CmdError.InvalidParameter;
+    @memcpy(path[0..args[1].len], args[1]);
+    path[args[1].len] = 0;
+
+    const no_ctty = args.len == 3 and std.mem.eql(u8, args[2], "noctty");
+    const fd = open.do(@ptrCast(&path), .{
+        .openMode = .read_write,
+        .no_controlling_tty = no_ctty,
+    }, .{}) catch |e| {
+        utils.print_error(shell, "open: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+    shell.print("fd {d}\n", .{fd});
+}
+
+/// Send a control request to an open path, as userspace reaches tcgetsid.
+/// Usage: tioctl <path> <sid|notty|sctty>
+pub fn tioctl(shell: anytype, args: [][]u8) CmdError!void {
+    if (args.len != 3) return CmdError.InvalidNumberOfArguments;
+
+    const control = @import("../../tty/ioctl.zig");
+
+    const tnode = vfs.resolve(args[1]) catch {
+        utils.print_error(shell, "Invalid path: {s} does not exist", .{args[1]});
+        return CmdError.OtherError;
+    };
+    defer tnode.release();
+
+    const file = try translate_errno(shell, tnode.inode.open());
+    defer file.close() catch {};
+
+    var sid: i32 = -1;
+    const request: control.Request = if (std.mem.eql(u8, args[2], "sid"))
+        .TIOCGSID
+    else if (std.mem.eql(u8, args[2], "notty"))
+        .TIOCNOTTY
+    else if (std.mem.eql(u8, args[2], "sctty"))
+        .TIOCSCTTY
+    else
+        return CmdError.InvalidParameter;
+
+    _ = try translate_errno(
+        shell,
+        file.ioctl(@intFromEnum(request), @intFromPtr(&sid)),
+    );
+    if (request == .TIOCGSID) shell.print("sid {d}\n", .{sid});
+}
