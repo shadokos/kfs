@@ -1,5 +1,45 @@
 const paging = @import("memory/paging.zig");
 const signal = @import("task/signal.zig");
+const userspace = @import("task/userspace.zig");
+const scheduler = @import("task/scheduler.zig");
+const TaskDescriptor = @import("task/task.zig").TaskDescriptor;
+const VirtualSpace = @import("memory/virtual_space.zig").VirtualSpace;
+const RegionSet = @import("memory/region_set.zig").RegionSet;
+const regions = @import("memory/regions.zig");
+
+/// What the demo builtin hands to enter_demo. 'argv' points at the shell's own storage,
+/// which outlives the call: spawn() switches to the new task immediately, so the strings
+/// are copied to the user stack before the shell resumes.
+pub const DemoRequest = struct {
+    entry: usize,
+    argv: []const []const u8,
+};
+
+/// Spawn trampoline for the demos. The Image is synthetic: there is no program header
+/// table, so phdr_vaddr is 0 and no AT_PHDR (and other entry depending on it) are emitted.
+pub fn enter_demo(data: usize) u8 {
+    const req: *const DemoRequest = @ptrFromInt(data);
+
+    const task = scheduler.get_current_task();
+    task.init_vm() catch @panic("todo Failed to initialize userspace");
+
+    const vm = task.vm.?;
+    userspace.map_userspace(vm);
+
+    const argv = TaskDescriptor.dupe_strings_z(req.argv) catch @panic("todo Failed to copy argv");
+
+    const entry = userspace.prepare_entry(vm, .{
+        .entry = req.entry,
+        .phdr_vaddr = 0,
+        .phentsize = 0,
+        .phnum = 0,
+    }, argv, &.{});
+
+    // prepare_entry copied the strings onto the user stack, and iret_to is noreturn,
+    // so release here: a defer would never run.
+    TaskDescriptor.free_strings_z(argv);
+    userspace.iret_to(entry);
+}
 
 fn poc_signal(id: u32) linksection(".userspace") callconv(.c) void {
     const str = " Signal handled\n";
@@ -53,7 +93,10 @@ pub fn syscall(code: anytype, args: anytype) linksection(".userspace") i32 {
           [_] "{esi}" (_args.esi),
           [_] "{edi}" (_args.edi),
     ));
-    if (ebx != 0) return -1;
+    // The kernel returns the result in eax and the errno in ebx. Fold that into the
+    // usual negative-errno convention so callers keep a single value to test, without
+    // losing which error it was.
+    if (ebx != 0) return -@as(i32, @intCast(ebx));
     return res;
 }
 
@@ -272,6 +315,46 @@ export fn userland_io() linksection(".userspace") void {
     _ = syscall(.truncate, .{ "/bonjour", 10 });
     putstr_fd(fd, "BBBBBBBBBBBBBBBBBBBBBB\n");
     _ = syscall(.exit, .{0});
+}
+
+/// demo execve <path> [args...]
+///
+/// Unlike the other demos this one needs its own entry block, so it enters naked:
+/// the block is addressed through esp, and a normal prologue has already moved it.
+export fn userland_execve() linksection(".userspace") callconv(.naked) noreturn {
+    asm volatile (
+        \\ mov %esp, %ecx
+        \\ push %ecx
+        \\ call demo_execve
+    );
+}
+
+export fn demo_execve(sp: [*]const usize) linksection(".userspace") callconv(.c) noreturn {
+    // sysv entry block: argc, argv[argc], NULL, envp[], NULL, auxv
+    const argc = sp[0];
+    const argv: [*]const ?[*:0]const u8 = @ptrCast(sp + 1);
+    const envp: [*:null]const ?[*:0]const u8 = @ptrCast(sp + 2 + argc);
+
+    if (argc < 2) {
+        putstr("usage: demo execve <path> [args...]\n");
+        _ = syscall(.exit, .{1});
+        unreachable;
+    }
+
+    // Our own argv[0] is the demo name, so hand the image argv[1..]: it gets the path
+    // as its argv[0], like a shell would pass it.
+    const err = syscall(.execve, .{
+        argv[1].?,
+        @as([*:null]const ?[*:0]const u8, @ptrCast(argv + 1)),
+        envp,
+    });
+
+    // execve only comes back when it failed
+    putstr("execve failed, errno ");
+    putnbr(-err);
+    putstr("\n");
+    _ = syscall(.exit, .{1});
+    unreachable;
 }
 
 /// Sessions and the controlling terminal, POSIX 11.1.3, from userspace. The
