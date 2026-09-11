@@ -48,6 +48,12 @@ pub const Error = struct {
         ENOMEM,
         EPERM,
     };
+    pub const ioctl = error{
+        ENOTTY,
+        EINVAL,
+        EIO,
+        EPERM,
+    };
     pub const seek = error{
         EOVERFLOW,
         EINVAL,
@@ -97,6 +103,10 @@ pub const VTable = struct {
     readdir: ?*const fn (*Self, *DirEnt) Error.readdir!bool = null,
     seek: ?*const fn (self: *Self, offset: Off, whence: Seek) Error.seek!Off = null,
     write: ?*const fn (*Self, []const u8) Error.write!usize = null,
+
+    /// Device control. The terminal calls POSIX exposes as tcgetattr and the
+    /// like all end up here.
+    ioctl: ?*const fn (*Self, request: u32, arg: usize) Error.ioctl!usize = null,
 
     pub const Generic = struct {
         pub fn close(self: *Self) Error.close!void {
@@ -214,6 +224,13 @@ pub fn write(self: *Self, buffer: []const u8) Error.write!usize {
 
 pub fn readdir(self: *Self, dst: *DirEnt) Error.readdir!bool {
     return self.call_or_panic(.readdir, .{dst});
+}
+
+/// Not call_or_panic: answering no control request is ordinary, and POSIX
+/// names it ENOTTY.
+pub fn ioctl(self: *Self, request: u32, arg: usize) Error.ioctl!usize {
+    const f = self.vtable.ioctl orelse return error.ENOTTY;
+    return f(self, request, arg);
 }
 
 pub fn seek(self: *Self, offset: Off, whence: Seek) Error.seek!Off {

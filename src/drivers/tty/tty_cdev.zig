@@ -11,6 +11,8 @@ const types = @import("../../device/types.zig");
 
 const tty = @import("../../tty/tty.zig");
 const TtyStruct = @import("../../tty/TtyStruct.zig");
+const termios = @import("../../tty/termios.zig");
+const control = @import("../../tty/ioctl.zig");
 
 const log = std.log.scoped(.tty_cdev);
 
@@ -37,12 +39,33 @@ fn write(file: *File, data: []const u8) File.Error.write!usize {
     return terminal(file).write(data);
 }
 
+/// The control requests POSIX reaches through tcgetattr and tcsetattr. With no
+/// output queue, DRAIN and FLUSH apply at once like NOW.
+fn ioctl(file: *File, request: u32, arg: usize) File.Error.ioctl!usize {
+    const terminal_ = terminal(file);
+
+    switch (@as(control.Request, @enumFromInt(request))) {
+        .TCGETS => {
+            const out: *termios.abi.Termios = @ptrFromInt(arg);
+            out.* = termios.to_abi(terminal_.config);
+        },
+        .TCSETS, .TCSETSW, .TCSETSF => |request_| {
+            const new: *const termios.abi.Termios = @ptrFromInt(arg);
+            if (request_ == .TCSETSF) terminal_.input_buffer.clear();
+            terminal_.set_termios(termios.from_abi(new.*));
+        },
+        else => return error.EINVAL,
+    }
+    return 0;
+}
+
 pub const ops = char.Operations{ .open = &open };
 
 pub const file_vtable = File.VTable{
     .read = &read,
     .write = &write,
     .close = &File.VTable.Generic.close,
+    .ioctl = &ioctl,
 };
 
 pub fn init() void {
