@@ -62,6 +62,9 @@ pub const Code = enum(u32) {
     SI_USER,
     SEGV_ACCERR,
     SEGV_MAPERR,
+    /// Raised by the kernel rather than by a process: a terminal generating a
+    /// signal from a control character has no sender to name.
+    SI_KERNEL,
 };
 
 pub const siginfo_t = extern struct {
