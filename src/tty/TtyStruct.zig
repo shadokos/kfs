@@ -39,6 +39,14 @@ read_queue: wait_queue.WaitQueue(.{ .predicate = input_ready }) = .{},
 /// Raised when the VTIME timer fires, cleared when a read starts waiting again.
 read_timed_out: bool = false,
 
+/// The line dropped, POSIX 11.1.10. Reads report end of input and writes are
+/// refused until the last close.
+hung_up: bool = false,
+
+/// Descriptors open on this terminal. The last to go takes the line down,
+/// POSIX 11.1.11.
+open_count: usize = 0,
+
 /// Output suspended by the STOP character or by tcflow, POSIX 11.2.2. A writer
 /// waits rather than losing what it had to say.
 output_stopped: bool = false,
@@ -146,6 +154,16 @@ pub fn reader(self: *Self) Reader {
 
 // Reaching the hardware
 
+/// Wait for the hardware to have sent everything, for tcdrain.
+pub fn drain(self: *Self) void {
+    if (self.driver.drain) |f| f(self);
+}
+
+/// Drop what the hardware has not sent, for tcflush.
+pub fn flush_output(self: *Self) void {
+    if (self.driver.flush_output) |f| f(self);
+}
+
 pub fn driver_flush(self: *Self) void {
     if (self.driver.flush) |flush| flush(self);
 }
@@ -156,6 +174,48 @@ pub fn set_foreground_pgid(self: *Self, pgid: ?Pid) ?Pid {
     const previous = self.foreground_pgid;
     self.foreground_pgid = pgid;
     return previous;
+}
+
+/// The line dropped, POSIX 11.1.10. SIGHUP goes to the session leader and not
+/// to the foreground group: it is the session that loses its terminal. CLOCAL
+/// means there is no carrier to lose.
+pub fn hangup(self: *Self) void {
+    if (self.config.c_cflag.CLOCAL) return;
+
+    self.hung_up = true;
+
+    if (self.session) |session| {
+        if (@import("../task/task_set.zig").get_task_descriptor(session.sid)) |leader| {
+            leader.send_signal(.{
+                .si_signo = .{ .valid = .SIGHUP },
+                .si_code = .SI_KERNEL,
+                .si_pid = 0,
+            });
+        }
+    }
+
+    // A read that returns nothing, a write that is refused.
+    self.read_queue.try_unblock();
+    self.set_output_stopped(false);
+}
+
+pub fn opened(self: *Self) void {
+    self.open_count += 1;
+}
+
+/// POSIX 11.1.11: the last close sends what was written, throws away what was
+/// typed and not read, and drops the line if HUPCL says so.
+pub fn closed(self: *Self) void {
+    if (self.open_count > 0) self.open_count -= 1;
+    if (self.open_count != 0) return;
+
+    self.drain();
+    self.input_buffer.clear();
+
+    if (self.config.c_cflag.HUPCL) {
+        if (self.driver.hangup) |f| f(self);
+        self.hung_up = false;
+    }
 }
 
 /// Tell the driver whether this terminal is the one being shown.

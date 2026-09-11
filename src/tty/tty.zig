@@ -12,11 +12,20 @@ const vt_console = @import("../drivers/tty/vt_console.zig");
 const wait_queue = @import("../task/wait_queue.zig");
 const scheduler = @import("../task/scheduler.zig");
 
-/// Highest terminal index.
-pub const max_tty = 9;
+/// Terminals the screen can show, switched from the keyboard.
+pub const num_consoles = 8;
 
-pub var tty_array: [max_tty + 1]TtyStruct = blk: {
-    var array: [max_tty + 1]TtyStruct = undefined;
+/// Slots for lines that are not a screen, indexed after the consoles. A driver
+/// claims one with `attach`.
+pub const max_serial = 4;
+
+pub const num_ttys = num_consoles + max_serial;
+
+/// Highest terminal index.
+pub const max_tty = num_ttys - 1;
+
+pub var tty_array: [num_ttys]TtyStruct = blk: {
+    var array: [num_ttys]TtyStruct = undefined;
     for (&array, 0..) |*t, i| t.* = .{ .index = i };
     break :blk array;
 };
@@ -24,9 +33,15 @@ pub var tty_array: [max_tty + 1]TtyStruct = blk: {
 /// Which terminal the screen is showing.
 pub var current_tty: u8 = 0;
 
-/// The consoles behind the terminals. One screen between them, so only the
-/// displayed one paints, see vt_console.activate.
-var consoles: [max_tty + 1]vt_console = undefined;
+/// One screen between them all, so only the displayed one paints.
+var consoles: [num_consoles]vt_console = undefined;
+
+/// A free line slot, or null when they are all taken.
+pub fn claim_line(index: usize) ?*TtyStruct {
+    const slot = num_consoles + index;
+    if (slot >= num_ttys) return null;
+    return &tty_array[slot];
+}
 
 fn has_events(_: *void, _: ?*void) bool {
     for (&tty_array) |*t| if (t.events) return true;
@@ -75,9 +90,9 @@ pub fn get_tty() *TtyStruct {
     return &tty_array[current_tty];
 }
 
-/// Show another terminal.
+/// Show another terminal. Only a console can be shown; the rest are lines.
 pub fn set_tty(n: u8) !void {
-    if (n > max_tty)
+    if (n >= num_consoles)
         return error.InvalidTty;
     tty_array[current_tty].set_active(false);
     current_tty = n;
@@ -125,9 +140,10 @@ pub inline fn flush() void {
     ttyBufferWriter[current_tty].flush() catch {};
 }
 
-/// Give every terminal a console, and show the first one.
+/// Give the console terminals a console and show the first. The rest keep the
+/// no-op driver until something claims them.
 pub fn init() void {
-    for (&tty_array, &consoles) |*t, *console| {
+    for (tty_array[0..num_consoles], &consoles) |*t, *console| {
         console.* = .{};
         console.init(t);
     }
