@@ -142,6 +142,36 @@ pub const TaskDescriptor = struct {
         }
     }
 
+    /// What a blocking call should do about whatever signal is waiting.
+    pub const Disposition = enum { none, stop, interrupt };
+
+    pub fn pending_disposition(self: *Self) Disposition {
+        const id = self.signalManager.peek_pending(self.ucontext.uc_sigmask) orelse return .none;
+        // A handler runs, which is an interruption whatever the signal meant.
+        if (self.signalManager.get_action(id).sa_handler != signal.SIG_DFL) return .interrupt;
+
+        return switch (self.signalManager.get_defaultAction(id)) {
+            .Stop => .stop,
+            .Terminate => .interrupt,
+            .Ignore, .Continue => .none,
+        };
+    }
+
+    /// Stop on the caller's own stack rather than on the way out to userspace,
+    /// so a blocking call resumes instead of returning short.
+    pub fn stop_in_place(self: *Self) void {
+        const info = self.signalManager.get_pending_signal(self.ucontext.uc_sigmask) orelse return;
+
+        if (self.state == .Ready) ready_queue.remove(self);
+        self.state = .Stopped;
+        self.update_status(.{
+            .transition = .Stopped,
+            .signaled = true,
+            .siginfo = info,
+        });
+        scheduler.schedule();
+    }
+
     pub fn update_status(self: *Self, new_status_info: ?status_informations.Status) void {
         self.status_info = new_status_info;
         if (new_status_info) |s| {
@@ -204,6 +234,7 @@ pub const TaskDescriptor = struct {
     fn handle_default_action(self: *Self, sig: signal.siginfo_t) void {
         switch (self.signalManager.get_defaultAction(sig.si_signo.unwrap())) {
             .Ignore => {},
+            // Marks the task; not returning to userspace is decided in wrapper.
             .Terminate => {
                 if (self.state == .Ready)
                     ready_queue.remove(self);
@@ -291,11 +322,27 @@ pub const TaskDescriptor = struct {
         }
     }
 
+    /// Queue a signal, and decide here what it does to a task that is not
+    /// running: signals are only acted on when a task returns to userspace.
     pub fn send_signal(self: *Self, sig: signal.siginfo_t) void {
+        const id = sig.si_signo.safeUnwrap() orelse return;
+
+        // A stop and a continue cancel each other out, POSIX 2.4.3.
+        switch (self.signalManager.get_defaultAction(id)) {
+            .Continue => for ([_]signal.Id{ .SIGSTOP, .SIGTSTP, .SIGTTIN, .SIGTTOU }) |stop|
+                self.signalManager.discard(stop),
+            .Stop => self.signalManager.discard(.SIGCONT),
+            else => {},
+        }
+
         self.signalManager.queue_signal(sig);
-        if (sig.si_signo.safeUnwrap() == .SIGCONT and self.state == .Stopped) {
-            self.state = .Ready;
-            ready_queue.push(self);
+
+        if (self.state == .Stopped) {
+            // SIGKILL too: it can be neither blocked nor ignored.
+            if (id == .SIGCONT or id == .SIGKILL) {
+                self.state = .Ready;
+                ready_queue.push(self);
+            }
         } else if (self.state == .Blocked) {
             @import("wait_queue.zig").interrupt(self);
         }

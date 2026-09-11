@@ -273,6 +273,21 @@ export fn wrapper(
     if (!interrupt_enable)
         scheduler.lock_depth -|= 1;
 
+    // A task killed or stopped is still on this stack. Given up here and not
+    // where the signal was handled, so lock_depth is already back in balance. A
+    // continued task comes back past signal handling, hence the loop.
+    while (scheduler.is_initialized()) {
+        const state = scheduler.get_current_task().state;
+        if (state != .Zombie and state != .Stopped) break;
+
+        scheduler.schedule();
+
+        if (privilege_transition) {
+            setup_iret_frame(frame);
+            frame.* = scheduler.get_current_task().ucontext.uc_mcontext;
+        }
+    }
+
     ret_from_interrupt(frame);
 }
 

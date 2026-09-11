@@ -257,6 +257,26 @@ pub const SignalManager = struct {
         }
     }
 
+    /// Throw away everything queued for a signal, POSIX 2.4.3.
+    pub fn discard(self: *Self, id: Id) void {
+        self.mutex.acquire();
+        defer self.mutex.release();
+
+        const index: u32 = @intFromEnum(id);
+        while (self.queues[index].pop()) |_| {}
+        self.pending &= ~(@as(SigSet, 1) << @as(u5, @intCast(index)));
+    }
+
+    /// The signal a blocking call would be interrupted by, without consuming it.
+    pub fn peek_pending(self: *Self, mask: SigSet) ?Id {
+        self.mutex.acquire();
+        defer self.mutex.release();
+
+        const real_mask: SigSet = mask & ~non_maskable;
+        if (self.pending & ~real_mask == 0) return null;
+        return @enumFromInt(@ctz(self.pending & ~real_mask));
+    }
+
     pub fn get_pending_signal(self: *Self, mask: SigSet) ?siginfo_t {
         self.mutex.acquire();
         defer self.mutex.release();

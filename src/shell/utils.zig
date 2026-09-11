@@ -216,6 +216,24 @@ pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth:
 
 const SignalId = @import("../task/signal.zig").Id;
 
+/// Collect the children that have died since the last prompt: nothing removes a
+/// terminated task until its parent asks for it.
+pub fn reap_children(shell: anytype) void {
+    const wait = @import("../task/wait.zig");
+    const self_pid = @import("../task/scheduler.zig").get_current_task().pid;
+
+    while (true) {
+        var status: wait.Status = undefined;
+        const pid = wait.wait(self_pid, .CHILD, &status, null, .{
+            .WNOHANG = true,
+            .WCONTINUED = false,
+            .WUNTRACED = false,
+        }) catch return;
+        if (pid == 0) return;
+        print_status(shell, pid, status);
+    }
+}
+
 /// Wait for a job, with the terminal handed over to it for the duration.
 ///
 /// A job in the foreground is the one the control characters of the terminal
@@ -236,7 +254,7 @@ pub fn waitpid(shell: anytype, pid: i32) void {
         .{
             .WNOHANG = false,
             .WCONTINUED = false,
-            .WUNTRACED = false,
+            .WUNTRACED = true,
         },
     ) catch |e| {
         shell.print_error("waitpid: wait error: {s}", .{@errorName(e)});
