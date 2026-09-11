@@ -80,6 +80,32 @@ pub fn release(self: *Self) void {
     }
 }
 
+/// Put a name under `parent` without asking the filesystem for it.
+///
+/// Scaffolding: the root filesystem cannot hold entries, so a mount point has
+/// to be planted directly. Remove once rootfs can create directories.
+pub fn plant(parent: *Self, name: []const u8) !*Self {
+    const tnode = try create();
+    errdefer destroy(tnode);
+
+    const owned_name = try memory.smallAlloc.allocator().dupe(u8, name);
+    errdefer memory.smallAlloc.allocator().free(owned_name);
+
+    tnode.* = .{
+        .inode = parent.inode.get_ref(),
+        .name = owned_name,
+        .parent = parent.get_ref(),
+        .refs = 1,
+    };
+    parent.inode.type_specific.Directory.children.append(&tnode.sibling_node);
+    try tnodeCache.put(
+        memory.bigAlloc.allocator(),
+        .{ .inode = parent.inode, .name = owned_name },
+        tnode,
+    );
+    return tnode;
+}
+
 pub fn mount(self: *Self, inode: *Inode) void {
     logger.debug("mount tnode: {*}", .{self});
     if (self.mountpoint) |_| {

@@ -29,6 +29,8 @@ pub const Error = struct {
         EPERM,
         ENXIO,
         EINVAL,
+        /// A read cut short by a signal. Zero already means end of input.
+        EINTR,
     };
     pub const write = error{
         EBUSY,

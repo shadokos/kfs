@@ -5,6 +5,7 @@ const multiboot = @import("multiboot.zig");
 const builtin = std.builtin;
 const paging = @import("memory/paging.zig");
 const vfs = @import("fs/vfs.zig");
+const Tnode = @import("fs/tnode.zig");
 const CommandLine = @import("command_line.zig");
 const log = std.log;
 
@@ -103,6 +104,7 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     @import("device/block/registry.zig").init();
     @import("device/char/registry.zig").init();
     @import("drivers/char/mem.zig").init();
+    @import("drivers/tty/tty_cdev.zig").init();
 
     @import("drivers/pci/pci.zig").init() catch @panic("Failed to initialize PCI subsystem");
     @import("drivers/ide/ide.zig").init() catch @panic("Failed to initialize IDE subsystem");
@@ -123,6 +125,10 @@ export fn init(eax: u32, ebx: u32) callconv(.c) void {
     vfs.add_filesystem(@import("drivers/devfs/driver.zig").fs) catch @panic("Failed to initialize devfs.");
     @import("drivers/ext2/driver.zig").static_init() catch @panic("Failed to initialize ext2.");
     vfs.add_filesystem(@import("drivers/ext2/driver.zig").fs) catch @panic("Failed to initialize ext2.");
+
+    // /dev has to exist before anything can open a terminal by name.
+    const dev = Tnode.plant(vfs.get_hard_root(), "dev") catch @panic("Cannot create /dev");
+    vfs.mount(dev, .virtual, .{ .fs = "devfs" }) catch @panic("Cannot mount devfs");
 
     const root = CommandLine.get().root;
     if (root != .virtual) {
