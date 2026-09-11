@@ -6,6 +6,7 @@ const std = @import("std");
 
 const TaskDescriptor = @import("task.zig").TaskDescriptor;
 const TtyStruct = @import("../tty/TtyStruct.zig");
+const signal = @import("signal.zig");
 
 const allocator = @import("../memory.zig").smallAlloc.allocator();
 
@@ -57,11 +58,10 @@ pub fn hangup(self: *Self) void {
     const terminal = self.ctty orelse return;
 
     if (terminal.foreground_pgid) |pgid| {
-        _ = @import("task_set.zig").send_signal_to_group(pgid, .{
-            .si_signo = .{ .valid = .SIGHUP },
-            .si_code = .SI_KERNEL,
-            .si_pid = 0,
-        });
+        _ = @import("task_set.zig").send_signal_to_group(
+            pgid,
+            signal.siginfo_t.init(.{ .kernel = .SIGHUP }),
+        );
     }
     self.disown(terminal);
 }

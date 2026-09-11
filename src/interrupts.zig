@@ -343,18 +343,60 @@ pub const Handler = extern union {
     }
 };
 
+fn exception_to_cause(e: Exceptions) signal.Cause {
+    return switch (e) {
+        .DivisionError => .{ .fpe = .INTDIV },
+        .x87FloatingPointException,
+        .SIMDFloatingPointException,
+        .DeviceNotAvailable,
+        => .{ .kernel = .SIGFPE },
+        .Debug => .{ .trap = .TRACE },
+        .Breakpoint => .{ .trap = .BRKPT },
+        .InvalidOpcode => .{ .ill = .ILLOPN },
+        .AlignmentCheck => .{ .bus = .ADRALN },
+        .Overflow,
+        .BoundRangeExceeded,
+        .InvalidTSS,
+        .SegmentNotPresent,
+        .StackSegmentFault,
+        .GeneralProtectionFault,
+        .PageFault,
+        => .{ .kernel = .SIGSEGV },
+        else => .{ .kernel = .SIGILL },
+    };
+}
+
+fn user_exception(comptime id: u8, frame: InterruptFrame) bool {
+    if (frame.iret.cs.privilege != .User or !scheduler.is_initialized())
+        return false;
+
+    const e = @as(Exceptions, @enumFromInt(id));
+    const cause = exception_to_cause(e);
+    const task = scheduler.get_current_task();
+    std.log.warn("task {d}: exception {d} ({s}) at 0x{x:0>8}, sending {s}", .{
+        task.pid, id, @tagName(e), frame.iret.ip, @tagName(cause.signo()),
+    });
+    var info = signal.siginfo_t.init(cause);
+    info.si_pid = 0;
+    info.si_addr = @ptrFromInt(frame.iret.ip);
+    task.send_signal(info);
+    return true;
+}
+
 pub fn default_handler(
     comptime id: u8,
     comptime t: enum { except, except_err, irq, interrupt },
 ) Handler {
     const handlers = struct {
-        pub fn exception(_: InterruptFrame) void {
+        pub fn exception(frame: InterruptFrame) void {
+            if (user_exception(id, frame)) return;
             const e = @as(Exceptions, @enumFromInt(id));
             std.log.err("exception {d} ({s}) unhandled", .{ id, @tagName(e) });
         }
-        pub fn exception_err(_: InterruptFrame) void {
+        pub fn exception_err(frame: InterruptFrame) void {
+            if (user_exception(id, frame)) return;
             const e = @as(Exceptions, @enumFromInt(id));
-            std.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), 0 });
+            std.log.err("exception {d} ({s}) unhandled: 0x{x}", .{ id, @tagName(e), frame.code });
         }
         pub fn irq(_: InterruptFrame) void {
             const _id = pic.get_irq_from_interrupt_id(id);

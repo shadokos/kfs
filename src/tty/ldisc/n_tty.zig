@@ -54,11 +54,7 @@ fn raise_signal(tty: *TtyStruct, c: u8, id: signal.Id) void {
     if (!tty.config.c_lflag.NOFLSH) tty.input_buffer.clear();
 
     const pgid = tty.foreground_pgid orelse return;
-    _ = task_set.send_signal_to_group(pgid, .{
-        .si_signo = .{ .valid = id },
-        .si_code = .SI_KERNEL,
-        .si_pid = 0,
-    });
+    _ = task_set.send_signal_to_group(pgid, signal.siginfo_t.init(.{ .kernel = id }));
 }
 
 /// The START and STOP characters, POSIX 11.2.2 IXON. They control output and

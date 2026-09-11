@@ -58,24 +58,78 @@ pub const Id = enum(u32) {
     SIGXFSZ = 31,
 };
 
-pub const Code = enum(u32) {
-    SI_USER,
-    SEGV_ACCERR,
-    SEGV_MAPERR,
-    /// Raised by the kernel rather than by a process: a terminal generating a
-    /// signal from a control character has no sender to name.
-    SI_KERNEL,
+pub const Ill = enum(i32) {
+    ILLOPC = 1,
+    ILLOPN = 2,
+    ILLADR = 3,
+    ILLTRP = 4,
+    PRVOPC = 5,
+    PRVREG = 6,
+    COPROC = 7,
+    BADSTK = 8,
+};
+
+pub const Fpe = enum(i32) {
+    INTDIV = 1,
+    INTOVF = 2,
+    FLTDIV = 3,
+    FLTOVF = 4,
+    FLTUND = 5,
+    FLTRES = 6,
+    FLTINV = 7,
+    FLTSUB = 8,
+};
+
+pub const Segv = enum(i32) { MAPERR = 1, ACCERR = 2 };
+pub const Bus = enum(i32) { ADRALN = 1, ADRERR = 2, OBJERR = 3 };
+pub const Trap = enum(i32) { BRKPT = 1, TRACE = 2 };
+
+pub const Cause = union(enum) {
+    user: Id,
+    kernel: Id,
+    ill: Ill,
+    fpe: Fpe,
+    segv: Segv,
+    bus: Bus,
+    trap: Trap,
+
+    pub fn signo(self: Cause) Id {
+        return switch (self) {
+            .user, .kernel => |id| id,
+            .ill => .SIGILL,
+            .fpe => .SIGFPE,
+            .segv => .SIGSEGV,
+            .bus => .SIGBUS,
+            .trap => .SIGTRAP,
+        };
+    }
+
+    pub fn code(self: Cause) i32 {
+        return switch (self) {
+            .user => 0,
+            .kernel => 0x80,
+            inline .ill, .fpe, .segv, .bus, .trap => |c| @intFromEnum(c),
+        };
+    }
 };
 
 pub const siginfo_t = extern struct {
     si_signo: Signo = Signo.invalid,
-    si_code: Code = undefined,
+    si_code: i32 = undefined,
     si_errno: u32 = undefined,
     si_pid: TaskDescriptor.Pid = undefined, // todo pid type
     // si_uid
     si_addr: paging.VirtualPtr = undefined,
     si_status: u32 = undefined,
     // si_value : sigval
+
+    pub fn init(cause: Cause) siginfo_t {
+        return .{
+            .si_signo = Signo.make(cause.signo()),
+            .si_code = cause.code(),
+        };
+    }
+
     pub const Signo = packed union {
         valid: Id,
         null: Monostate(u32, 0),
