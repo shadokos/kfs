@@ -1,0 +1,92 @@
+#ifndef _THREADS_H
+#define _THREADS_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+#include <bits/ansi/timespec.h>
+#include <bits/pthread_sizes.h>
+#include <bits/threads.h>
+#include <bits/types.h>
+#include <time.h>
+
+#define ONCE_FLAG_INIT __MLIBC_THREAD_ONCE_INITIALIZER
+#define TSS_DTOR_ITERATIONS __MLIBC_THREAD_DESTRUCTOR_ITERATIONS
+
+enum {
+	mtx_plain,
+	mtx_recursive,
+	mtx_timed
+};
+
+enum {
+	thrd_success,
+	thrd_timedout,
+	thrd_busy,
+	thrd_error,
+	thrd_nomem
+};
+
+typedef struct {
+	int __opaque[__MLIBC_THREAD_ONCE_SIZE / sizeof(int)];
+} once_flag;
+
+typedef struct __mlibc_thread_data *thrd_t;
+
+typedef struct {
+	char __opaque[__MLIBC_THREAD_MUTEX_SIZE];
+} __attribute__((aligned(__INTPTR_WIDTH__ / 8))) mtx_t;
+
+typedef struct {
+	char __opaque[__MLIBC_THREAD_COND_SIZE];
+} __attribute__((aligned(__INTPTR_WIDTH__ / 8))) cnd_t;
+
+typedef __mlibc_uintptr tss_t;
+typedef void (*tss_dtor_t)(void *__val);
+typedef int (*thrd_start_t)(void* __arg);
+
+#ifndef __cplusplus
+#define thread_local _Thread_local
+#endif
+
+#ifndef __MLIBC_ABI_ONLY
+
+void call_once(once_flag *__flag, void (*__func)(void));
+
+int thrd_create(thrd_t *__thr, thrd_start_t __func, void *__arg);
+int thrd_equal(thrd_t __lhs, thrd_t __rhs);
+thrd_t thrd_current(void);
+int thrd_sleep(const struct timespec *__duration, struct timespec *__remaining);
+void thrd_yield(void);
+int thrd_detach(thrd_t __thr);
+int thrd_join(thrd_t __thr, int *__res);
+__attribute__((__noreturn__)) void thrd_exit(int __res);
+
+int mtx_init(mtx_t *__mtx, int __type);
+void mtx_destroy(mtx_t *__mtx);
+int mtx_lock(mtx_t *__mtx);
+int mtx_timedlock(mtx_t *__restrict __mtx, const struct timespec *__restrict __abstime);
+int mtx_trylock(mtx_t *__mtx);
+int mtx_unlock(mtx_t *__mtx);
+
+int cnd_init(cnd_t *__cond);
+void cnd_destroy(cnd_t *__cond);
+int cnd_broadcast(cnd_t *__cond);
+int cnd_signal(cnd_t *__cond);
+int cnd_wait(cnd_t *__cond, mtx_t *__mtx);
+int cnd_timedwait(cnd_t *__restrict __cond, mtx_t *__restrict __mutex, const struct timespec *__restrict __abstime);
+
+int tss_create(tss_t *__key, tss_dtor_t __dtor);
+void tss_delete(tss_t __key);
+void *tss_get(tss_t __key);
+int tss_set(tss_t __key, void *__val);
+
+#endif /* !__MLIBC_ABI_ONLY */
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* _THREADS_H */
+

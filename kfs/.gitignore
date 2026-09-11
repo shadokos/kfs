@@ -1,0 +1,14 @@
+.cache
+zig-out
+.zig-cache
+.zig-docker
+*.iso
+src/drivers/tty/themes
+.idea
+.optimize-*
+.bootloader-*
+themes
+zig-linux-x86_64-[0-9]*.[0-9]*.[0-9]*
+src/syscall_table.zig
+sysroot/
+mlibc-build/

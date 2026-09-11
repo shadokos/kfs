@@ -1,0 +1,24 @@
+name: BUILD
+
+on:
+  push:
+    branches: ['main', 'dev/**']
+  pull_request:
+    branches: ['main', 'dev/**']
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+      - name: Check Format
+        run: make BOOTLOADER=limine format
+      - name: Build Kernel (DEBUG)
+        run: make BOOTLOADER=limine debug
+      - name: Build Kernel (RELEASE SMALL)
+        run: make BOOTLOADER=limine small
+      - name: Build Kernel (RELEASE SAFE)
+        run: make BOOTLOADER=limine release
+      - name: Build Kernel (RELEASE FAST)
+        run: make BOOTLOADER=limine fast

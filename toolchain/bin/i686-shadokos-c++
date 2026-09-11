@@ -1,2 +1,0 @@
-#!/bin/sh
-exec zig c++ -target x86-freestanding-none -march=i686 "$@"

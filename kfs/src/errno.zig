@@ -1,0 +1,206 @@
+const std = @import("std");
+
+pub const Errno = error{
+    E2BIG,
+    EACCES,
+    EADDRINUSE,
+    EADDRNOTAVAIL,
+    EAFNOSUPPORT,
+    EAGAIN,
+    EALREADY,
+    EBADF,
+    EBADMSG,
+    EBUSY,
+    ECANCELED,
+    ECHILD,
+    ECONNABORTED,
+    ECONNREFUSED,
+    ECONNRESET,
+    EDEADLK,
+    EDESTADDRREQ,
+    EDOM,
+    EDQUOT,
+    EEXIST,
+    EFAULT,
+    EFBIG,
+    EHOSTUNREACH,
+    EIDRM,
+    EILSEQ,
+    EINPROGRESS,
+    EINTR,
+    EINVAL,
+    EIO,
+    EISCONN,
+    EISDIR,
+    ELOOP,
+    EMFILE,
+    EMLINK,
+    EMSGSIZE,
+    EMULTIHOP,
+    ENAMETOOLONG,
+    ENETDOWN,
+    ENETRESET,
+    ENETUNREACH,
+    ENFILE,
+    ENOBUFS,
+    ENODATA,
+    ENODEV,
+    ENOENT,
+    ENOEXEC,
+    ENOLCK,
+    ENOLINK,
+    ENOMEM,
+    ENOMSG,
+    ENOPROTOOPT,
+    ENOSPC,
+    ENOSR,
+    ENOSTR,
+    ENOSYS,
+    ENOTCONN,
+    ENOTDIR,
+    ENOTEMPTY,
+    ENOTRECOVERABLE,
+    ENOTSOCK,
+    ENOTSUP,
+    ENOTTY,
+    ENXIO,
+    EOPNOTSUPP,
+    EOVERFLOW,
+    EOWNERDEAD,
+    EPERM,
+    EPIPE,
+    EPROTO,
+    EPROTONOSUPPORT,
+    EPROTOTYPE,
+    ERANGE,
+    EROFS,
+    ESPIPE,
+    ESRCH,
+    ESTALE,
+    ETIME,
+    ETIMEDOUT,
+    ETXTBSY,
+    EWOULDBLOCK,
+    EXDEV,
+
+    // non-POSIX
+    ENOTBLK,
+};
+
+pub fn is_in_set(e: anytype, comptime s: type) bool {
+    @setEvalBranchQuota(10_000);
+    return switch (e) {
+        inline else => |ce| comptime b: {
+            const errors = @typeInfo(s).error_set orelse return false;
+            for (errors) |err| {
+                if (std.mem.eql(u8, err.name, @errorName(ce))) break :b true;
+            }
+            break :b false;
+        },
+    };
+}
+
+/// Translate a kernel error into the number userspace expects in ebx.
+///
+/// POSIX standardizes the names, not the values, so this table is part of our
+/// ABI. The values match mlibc's sysdeps/shadokos/include/abi-bits/errno.h,
+/// which is the other half of the contract: change one and you must change the
+/// other. They follow the generic Linux numbering, only because that is what
+/// the header was derived from.
+///
+/// Listed in the same order as the set above so both stay easy to compare. This
+/// mapping is deliberately explicit: it must never be derived from a position
+/// in the set, which reflects the whole compilation and shifts when an
+/// unrelated file starts returning a new error.
+pub fn error_num(e: Errno) usize {
+    return switch (e) {
+        Errno.E2BIG => 7,
+        Errno.EACCES => 13,
+        Errno.EADDRINUSE => 98,
+        Errno.EADDRNOTAVAIL => 99,
+        Errno.EAFNOSUPPORT => 97,
+        // EWOULDBLOCK is an alias of EAGAIN
+        Errno.EAGAIN, Errno.EWOULDBLOCK => 11,
+        Errno.EALREADY => 114,
+        Errno.EBADF => 9,
+        Errno.EBADMSG => 74,
+        Errno.EBUSY => 16,
+        Errno.ECANCELED => 125,
+        Errno.ECHILD => 10,
+        Errno.ECONNABORTED => 103,
+        Errno.ECONNREFUSED => 111,
+        Errno.ECONNRESET => 104,
+        Errno.EDEADLK => 35,
+        Errno.EDESTADDRREQ => 89,
+        Errno.EDOM => 33,
+        Errno.EDQUOT => 122,
+        Errno.EEXIST => 17,
+        Errno.EFAULT => 14,
+        Errno.EFBIG => 27,
+        Errno.EHOSTUNREACH => 113,
+        Errno.EIDRM => 43,
+        Errno.EILSEQ => 84,
+        Errno.EINPROGRESS => 115,
+        Errno.EINTR => 4,
+        Errno.EINVAL => 22,
+        Errno.EIO => 5,
+        Errno.EISCONN => 106,
+        Errno.EISDIR => 21,
+        Errno.ELOOP => 40,
+        Errno.EMFILE => 24,
+        Errno.EMLINK => 31,
+        Errno.EMSGSIZE => 90,
+        Errno.EMULTIHOP => 72,
+        Errno.ENAMETOOLONG => 36,
+        Errno.ENETDOWN => 100,
+        Errno.ENETRESET => 102,
+        Errno.ENETUNREACH => 101,
+        Errno.ENFILE => 23,
+        Errno.ENOBUFS => 105,
+        Errno.ENODATA => 61,
+        Errno.ENODEV => 19,
+        Errno.ENOENT => 2,
+        Errno.ENOEXEC => 8,
+        Errno.ENOLCK => 37,
+        Errno.ENOLINK => 67,
+        Errno.ENOMEM => 12,
+        Errno.ENOMSG => 42,
+        Errno.ENOPROTOOPT => 92,
+        Errno.ENOSPC => 28,
+        Errno.ENOSR => 63,
+        Errno.ENOSTR => 60,
+        Errno.ENOSYS => 38,
+        Errno.ENOTCONN => 107,
+        Errno.ENOTDIR => 20,
+        Errno.ENOTEMPTY => 39,
+        Errno.ENOTRECOVERABLE => 131,
+        Errno.ENOTSOCK => 88,
+        // ENOTSUP is an alias of EOPNOTSUPP
+        Errno.ENOTSUP, Errno.EOPNOTSUPP => 95,
+        Errno.ENOTTY => 25,
+        Errno.ENXIO => 6,
+        Errno.EOVERFLOW => 75,
+        Errno.EOWNERDEAD => 130,
+        Errno.EPERM => 1,
+        Errno.EPIPE => 32,
+        Errno.EPROTO => 71,
+        Errno.EPROTONOSUPPORT => 93,
+        Errno.EPROTOTYPE => 91,
+        Errno.ERANGE => 34,
+        Errno.EROFS => 30,
+        Errno.ESPIPE => 29,
+        Errno.ESRCH => 3,
+        Errno.ESTALE => 116,
+        Errno.ETIME => 62,
+        Errno.ETIMEDOUT => 110,
+        Errno.ETXTBSY => 26,
+        Errno.EXDEV => 18,
+
+        // non-POSIX
+        Errno.ENOTBLK => 15,
+    };
+}
+
+pub fn strerror(err: Errno) []const u8 {
+    return @errorName(err);
+}
