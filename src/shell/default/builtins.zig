@@ -817,8 +817,13 @@ pub fn mknod(shell: anytype, args: [][]u8) CmdError!void {
     };
 
     const inode = try translate_errno(shell, switch (args[2][0]) {
-        'b' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Block }, .{ .Block = .{ .major = major, .minor = minor } }),
-        'c' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Character }, .{ .Character = .{ .major = major, .minor = minor } }),
+        'b' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Block }, .{
+            .Block = .{ .major = major, .minor = minor },
+        }),
+        'c' => dir_tnode.inode.superblock.create_inode(0, 0, .{ .type = .Character }, .{ .Character = .{
+            .major = major,
+            .minor = minor,
+        } }),
         else => {
             utils.print_error(shell, "Invalid node type", .{});
             return CmdError.OtherError;
@@ -1080,4 +1085,113 @@ pub fn hangup(shell: anytype, args: [][]u8) CmdError!void {
 
     terminal.hangup();
     shell.print("tty{d} hung up: {}\n", .{ terminal.index, terminal.hung_up });
+}
+
+// test_load_entry is not a CLI builtin, it's used by test_elf to spawn a new task that loads an ELF file and
+// reports back the loaded regions and entrypoint. All shell printing happens back in test_elf, after waitpid()
+const RegionInfo = struct { begin: usize, end: usize, r: bool, w: bool };
+const TestLoadResult = union(enum) {
+    ok: struct { entry: usize, phdr_vaddr: usize, regions: []RegionInfo },
+    err: @import("../../task/elf.zig").Error,
+};
+const TestLoadRequest = struct { data: []u8, result: TestLoadResult = undefined };
+fn test_load_entry(data_ptr: usize) u8 {
+    const heapAlloc = @import("../../memory.zig").bigAlloc.allocator();
+    const smallAlloc = @import("../../memory.zig").smallAlloc.allocator();
+    const Elf = @import("../../task/elf.zig");
+    const RegionSet = @import("../../memory/region_set.zig").RegionSet;
+    const task = @import("../../task/task.zig");
+    const paging = @import("../../memory/paging.zig");
+
+    const req: *TestLoadRequest = @ptrFromInt(data_ptr);
+    const data = req.data;
+
+    const self = @import("../../task/scheduler.zig").get_current_task();
+    self.init_vm() catch {
+        heapAlloc.free(data);
+        req.result = .{ .err = error.LoadFailed };
+        task.exit(1);
+    };
+    const vm = self.vm.?;
+
+    const image = Elf.load(vm, data) catch |e| {
+        heapAlloc.free(data);
+        req.result = .{ .err = e };
+        task.exit(1);
+    };
+
+    heapAlloc.free(data); // fully consumed: load() already copied every PT_LOAD's bytes into vm
+
+    var count: usize = 0;
+    var it = vm.regions.list.first;
+    while (it) |node| : (it = node.next) count += 1;
+
+    const regions = smallAlloc.alloc(RegionInfo, count) catch @panic("oom collecting regions");
+    it = vm.regions.list.first;
+    var i: usize = 0;
+    while (it) |node| : ({
+        it = node.next;
+        i += 1;
+    }) {
+        const r = &@as(*RegionSet.ListNode, @fieldParentPtr("node", node)).data;
+        regions[i] = .{
+            .begin = r.begin * paging.page_size,
+            .end = (r.begin + r.len) * paging.page_size,
+            .r = r.flags.read,
+            .w = r.flags.write,
+        };
+    }
+
+    req.result = .{ .ok = .{ .entry = image.entry, .phdr_vaddr = image.phdr_vaddr, .regions = regions } };
+    task.exit(0);
+}
+
+pub fn test_elf(shell: anytype, args: [][]u8) CmdError!void {
+    const heapAlloc = @import("../../memory.zig").bigAlloc.allocator();
+    const smallAlloc = @import("../../memory.zig").smallAlloc.allocator();
+    const Elf = @import("../../task/elf.zig");
+    if (args.len < 2) return CmdError.InvalidNumberOfArguments;
+
+    const tnode = vfs.resolve(args[1]) catch return CmdError.OtherError;
+    defer tnode.release();
+    const data = heapAlloc.alloc(
+        u8,
+        std.math.cast(usize, tnode.inode.size) orelse return CmdError.OtherError,
+    ) catch return CmdError.OtherError;
+    errdefer heapAlloc.free(data);
+
+    const file = tnode.inode.open() catch return CmdError.OtherError;
+    defer file.close() catch {};
+
+    if ((file.pread(0, data) catch return CmdError.OtherError) != data.len)
+        return CmdError.OtherError;
+
+    Elf.validate(data) catch |e| {
+        utils.print_error(shell, "Invalid ELF file: {s}", .{@errorName(e)});
+        return CmdError.OtherError;
+    };
+
+    shell.writer.print("ELF file {s} is valid\n", .{args[1]}) catch {};
+
+    // Create a task to load the elf and print the mapped regions
+    const req = smallAlloc.create(TestLoadRequest) catch return CmdError.OtherError;
+    defer smallAlloc.destroy(req);
+    req.* = .{ .data = data };
+
+    const new_task = @import("../../task/task_set.zig").create_task() catch @panic("cannot create task");
+    new_task.spawn(&test_load_entry, @intFromPtr(req)) catch @panic("spawn failed");
+    utils.waitpid(shell, new_task.pid);
+
+    switch (req.result) {
+        .ok => |ok| {
+            defer smallAlloc.free(ok.regions);
+            shell.writer.print("entry=0x{x} phdr_vaddr=0x{x}\n", .{ ok.entry, ok.phdr_vaddr }) catch {};
+            for (ok.regions) |r| {
+                shell.writer.print("region [0x{x}, 0x{x}) r={} w={}\n", .{ r.begin, r.end, r.r, r.w }) catch {};
+            }
+        },
+        .err => |e| {
+            utils.print_error(shell, "load failed: {s}", .{@errorName(e)});
+        },
+    }
 }
