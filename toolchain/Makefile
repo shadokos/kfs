@@ -1,9 +1,9 @@
 MLIBC_SRC = mlibc
-MLIBC_BUILD = mlibc-build
+MLIBC_BUILD ?= mlibc-build
 MLIBC_CROSS_FILE = shadokos-i686.cross
 MESON ?= meson
 NINJA ?= ninja
-MLIBC_PATH = $(CURDIR)/toolchain/usr/bin:$(PATH)
+MLIBC_PATH = $(TOOLCHAIN_DIR)/usr/bin:$(PATH)
 
 $(MLIBC_BUILD)/headers/build.ninja:
 	PATH="$(MLIBC_PATH)" $(MESON) setup \

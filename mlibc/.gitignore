@@ -1,8 +1,0 @@
-/subprojects/*
-!/subprojects/*.wrap
-!/subprojects/packagefiles
-*.xbstrap
-# editor configs:
-.vscode
-compile_commands.json
-/linux-headers

@@ -1,1 +1,0 @@
-../../../../abis/zinnia/poll.h

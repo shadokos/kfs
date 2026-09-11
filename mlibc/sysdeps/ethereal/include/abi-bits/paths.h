@@ -1,1 +1,0 @@
-../../../../abis/ethereal/paths.h

@@ -46,6 +46,7 @@ build_binutils() (
 
 
 build_gcc() (
+	export PATH=$TOOLCHAIN_DIR/usr/bin:$PATH
 	download_and_patch $GCC_URL $GCC_BASE $GCC_PATCH
 	cd $GCC_BASE/
 	mkdir build
@@ -58,18 +59,12 @@ build_gcc() (
 		--enable-threads=posix \
 		--disable-multilib \
 		--enable-shared \
-		--enable-host-shared \
-		--with-gmp-lib=/nix/store/km81slwkcc82dbwywl10gpffjb78g6ni-gmp-with-cxx-6.3.0/lib \
-		--with-gmp-include=/nix/store/mml8yn060rz4krfdcqpqy435imx3x2k3-gmp-with-cxx-6.3.0-dev/include \
-		--with-mpfr-lib=/nix/store/d6n8cwsfwaas0x107zc3z1dzhyr3mca0-mpfr-4.2.2/lib \
-		--with-mpfr-include=/nix/store/yw6c77xnzb501c0j59g4r3gfvxcvjz1s-mpfr-4.2.2-dev/include \
-		--with-mpc=/nix/store/lihsv1sjl1xrpp7iwb4bf99alaqgr8dh-libmpc-1.3.1
+		--enable-host-shared 
 	make -j$(nproc) all-gcc all-target-libgcc
 	DESTDIR="${TOOLCHAIN_DIR}" make install-gcc install-target-libgcc
 )
 
-make libc-headers
-build_binutils
-build_gcc
-make libc
+export SYSROOT=$SYSROOT_DIR
+
+$@
 
