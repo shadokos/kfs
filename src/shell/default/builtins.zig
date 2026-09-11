@@ -369,6 +369,7 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
         "count",
         "fork",
         "io",
+        "ctty",
     };
 
     if (args.len != 2) {
@@ -386,6 +387,12 @@ pub fn demo(shell: anytype, args: [][]u8) CmdError!void {
             // A job of its own, so that the terminal can signal it without
             // reaching the shell that started it.
             new_task.pgid = new_task.pid;
+            utils.attach_standard_streams(new_task) catch |e|
+                utils.print_error(shell, "no standard streams: {s}", .{@errorName(e)});
+
+            const previous = utils.foreground(new_task);
+            defer utils.restore_foreground(previous);
+
             new_task.spawn(
                 &@import("../../task/userspace.zig").call_userspace,
                 @intFromPtr(@extern(?*fn () void, .{ .name = "userland_" ++ name }).?),
@@ -509,7 +516,6 @@ pub fn lschar(shell: anytype, args: [][]u8) CmdError!void {
     const filter: ?[]const u8 = if (args.len >= 2) args[1] else null;
     char_reg.show_lschar(shell.writer, filter);
 }
-
 
 pub fn pwd(shell: anytype, _: [][]u8) CmdError!void {
     shell.print("{s}\n", .{cwd.*});

@@ -216,6 +216,25 @@ pub fn pstree(shell: anytype, pid: task.TaskDescriptor.Pid, prefix: []u8, depth:
 
 const SignalId = @import("../task/signal.zig").Id;
 
+/// Give a job the shell's terminal as its standard streams. A task starts with
+/// no descriptors at all, and going through the file layer is what puts its
+/// reads and writes under the access control of POSIX 11.1.4.
+pub fn attach_standard_streams(job: *task.TaskDescriptor) !void {
+    const vfs = @import("../fs/vfs.zig");
+
+    var buffer: [16]u8 = undefined;
+    const path = try std.fmt.bufPrint(&buffer, "/dev/tty{d}", .{tty.current_tty});
+
+    const tnode = try vfs.resolve(path);
+    defer tnode.release();
+
+    const file = try tnode.inode.open();
+    // set() takes its own reference, so the one from open() is ours to drop.
+    defer file.close() catch {};
+
+    for (0..3) |fd| try job.files.set(@intCast(fd), file);
+}
+
 /// Collect the children that have died since the last prompt: nothing removes a
 /// terminated task until its parent asks for it.
 pub fn reap_children(shell: anytype) void {
@@ -234,17 +253,20 @@ pub fn reap_children(shell: anytype) void {
     }
 }
 
-/// Wait for a job, with the terminal handed over to it for the duration.
+/// Hand the terminal to a job, and say what to give it back to.
 ///
 /// A job in the foreground is the one the control characters of the terminal
-/// signal, POSIX 11.1.2. Doing it here is what a shell does with setpgid and
-/// tcsetpgrp; those do not exist yet, so the group is the job's own pid and the
-/// handover is hardcoded.
-pub fn waitpid(shell: anytype, pid: i32) void {
-    const terminal = tty.get_tty();
-    const previous = terminal.set_foreground_pgid(pid);
-    defer _ = terminal.set_foreground_pgid(previous);
+/// signal, POSIX 11.1.2. Before the job runs: a job claiming a terminal of its
+/// own would otherwise have its foreground group overwritten by the shell.
+pub fn foreground(job: *task.TaskDescriptor) ?i32 {
+    return tty.get_tty().set_foreground_pgid(job.pgid);
+}
 
+pub fn restore_foreground(previous: ?i32) void {
+    _ = tty.get_tty().set_foreground_pgid(previous);
+}
+
+pub fn waitpid(shell: anytype, pid: i32) void {
     var status: @import("../task/wait.zig").Status = undefined;
     const ret = @import("../task/wait.zig").wait(
         pid,
