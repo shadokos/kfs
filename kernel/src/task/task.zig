@@ -59,10 +59,10 @@ pub const TaskDescriptor = struct {
     /// Shared with every other task of the session, inherited across fork.
     session: *@import("session.zig"),
 
-    uid: u32 = 0,
-    euid: u32 = 0,
-    gid: u32 = 0,
-    egid: u32 = 0,
+    uid: u32,
+    euid: u32,
+    gid: u32,
+    egid: u32,
 
     cwd: *TNode,
     // cwd_str: []u8,
@@ -310,8 +310,8 @@ pub const TaskDescriptor = struct {
 
     /// The half that cannot fail, and does not come back: it resets the kernel stack
     /// the caller is running on.
-    pub fn commit_exec(self: *Self, req: *ExecRequest) void {
-        self.spawn(&exec_entry, @intFromPtr(req)) catch @panic("Failed to spawn exec task");
+    pub fn commit_exec(_: *Self, req: *ExecRequest) void {
+        _ = exec_entry(@intFromPtr(req));
     }
 
     fn load_image(
@@ -511,6 +511,7 @@ pub const TaskDescriptor = struct {
     }
 
     pub noinline fn spawn(self: *Self, function: *const fn (usize) u8, data: usize) !void {
+        std.log.debug("current pid: {}", .{scheduler.get_current_task().pid});
         scheduler.enter_critical();
         var is_parent: u8 = 0;
         asm volatile (
@@ -528,15 +529,15 @@ pub const TaskDescriptor = struct {
             \\ pop %[function]
             \\ movb (%[is_parent]), %[tmp:b]
             \\ cmpb $0, %[tmp:b]
-            \\ jne child
-            \\ parent:
+            \\ jne parent
+            \\ child:
             \\ movb $1, (%[is_parent])
             \\ mov %[new_stack], %esp
             \\ push %[data]
             \\ push %[function]
             \\ push %[self]
             \\ call start_task
-            \\ child:
+            \\ parent:
             :
             : [function] "r" (function),
               [data] "r" (data),
@@ -550,11 +551,17 @@ pub const TaskDescriptor = struct {
 
     pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.c) noreturn {
         const function: *const fn (usize) u8 = @ptrCast(function_ptr);
+        std.log.debug("start task pid: {}", .{self.pid});
         self.state = .Running;
+        self.parent.?.state = .Ready;
         scheduler.set_current_task(self);
         gdt.tss.esp0 = @as(usize, @intFromPtr(&self.stack)) + self.stack.len;
         gdt.flush();
         apply_tls(self);
+
+        // if (self.parent) |parent| {
+            // @import("ready_queue.zig").push(self.parent.?);
+        // }
         scheduler.exit_critical();
         exit(function(data));
     }

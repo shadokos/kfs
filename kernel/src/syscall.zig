@@ -104,6 +104,9 @@ fn call_syscall(comptime code: Code) void {
     const current_task = scheduler.get_current_task();
     const sys_struct = @field(syscall_table, @tagName(code));
     const syscall_type = comptime SyscallType(sys_struct);
+    if (current_task.rq_node.data) {
+        @panic("task in ready queue");
+    }
 
     switch (comptime syscall_type) {
         .do => {

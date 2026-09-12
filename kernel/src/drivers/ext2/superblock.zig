@@ -251,6 +251,12 @@ pub fn read_block(self: *Self, block: usize, buffer: []u8) ReadError!void {
 }
 
 pub fn read_bytes(self: *Self, dst: []u8, block: usize, offset: usize) ReadError!void {
+    if (dst.len % self.vfs.block_size == 0 and offset == 0) {
+        for (0..dst.len / self.vfs.block_size) |i| {
+            try self.read_block(block + i, dst[i * self.vfs.block_size..][0..self.vfs.block_size]);
+        }
+        return;
+    }
     var block_buffer: []u8 = self.allocator.alloc(u8, self.vfs.block_size) catch @panic("todo");
     defer self.allocator.free(block_buffer);
     var current_block = block;

@@ -27,6 +27,10 @@ pub fn create_task() !*TaskDescriptor {
             .root = hard_root,
             .cwd = hard_root,
             .session = try Session.create(pid),
+            .uid = 0,
+            .euid = 0,
+            .gid = 0,
+            .egid = 0,
         };
     } else {
         new_task.* = .{
@@ -37,6 +41,10 @@ pub fn create_task() !*TaskDescriptor {
             .cwd = parent.cwd,
             .root = parent.root,
             .session = parent.session.get_ref(),
+            .uid = parent.uid,
+            .euid = parent.euid,
+            .gid = parent.gid,
+            .egid = parent.egid,
         };
         new_task.next_sibling = parent.childs;
         parent.childs = new_task;

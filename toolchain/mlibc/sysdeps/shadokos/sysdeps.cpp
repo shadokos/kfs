@@ -330,5 +330,72 @@ int Sysdeps<SetSid>::operator()(pid_t *sid) {
 	return 0;
 }
 
+int Sysdeps<SetUid>::operator()(uid_t id) {
+	long ret;
+	return syscall(SYSCALL_SETUID, &ret, id);
+}
+
+int Sysdeps<SetGid>::operator()(gid_t id) {
+	long ret;
+	return syscall(SYSCALL_SETGID, &ret, id);
+}
+
+int Sysdeps<SetEuid>::operator()(uid_t id) {
+	long ret;
+	return syscall(SYSCALL_SETEUID, &ret, id);
+}
+
+int Sysdeps<SetEgid>::operator()(gid_t id) {
+	long ret;
+	return syscall(SYSCALL_SETEGID, &ret, id);
+}
+
+uid_t Sysdeps<GetUid>::operator()() {
+	uid_t r, e, s;
+	sysdep<GetResuid>(&r, &e, &s);
+
+	return r;
+}
+
+uid_t Sysdeps<GetEuid>::operator()() {
+	uid_t r, e, s;
+	sysdep<GetResuid>(&r, &e, &s);
+
+	return e;
+}
+
+gid_t Sysdeps<GetGid>::operator()() {
+	gid_t r, e, s;
+	sysdep<GetResgid>(&r, &e, &s);
+
+	return r;
+}
+
+gid_t Sysdeps<GetEgid>::operator()() {
+	gid_t r, e, s;
+	sysdep<GetResgid>(&r, &e, &s);
+
+	return e;
+}
+
+	int Sysdeps<SetResuid>::operator()(uid_t _ruid, uid_t _euid, uid_t _suid) {
+	long ret;
+	return syscall(SYSCALL_SETRESUID, &ret, _ruid, _euid, _suid);
+}
+
+	int Sysdeps<SetResgid>::operator()(gid_t _rgid, gid_t _egid, gid_t _sgid) {
+	long ret;
+	return syscall(SYSCALL_SETRESGID, &ret, _rgid, _egid, _sgid);
+}
+
+	int Sysdeps<GetResuid>::operator()(uid_t *ruid, uid_t *euid, uid_t *suid) {
+	long ret;
+	return syscall(SYSCALL_GETRESUID, &ret, (uint64_t)ruid, (uint64_t)euid, (uint64_t)suid);
+}
+
+	int Sysdeps<GetResgid>::operator()(gid_t *rgid, gid_t *egid, gid_t *sgid) {
+	long ret;
+	return syscall(SYSCALL_GETRESGID, &ret, (uint64_t)rgid, (uint64_t)egid, (uint64_t)sgid);
+}
 
 } // namespace mlibc

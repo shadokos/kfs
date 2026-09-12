@@ -46,6 +46,8 @@ pub fn do_raw() void {
     current_task.ucontext.uc_mcontext.eax = @bitCast(new_task.pid);
     current_task.ucontext.uc_mcontext.ebx = 0;
 
+    std.log.debug("parent pid: {}", .{current_task.pid});
+    std.log.debug("child pid: {}", .{new_task.pid});
     scheduler.enter_critical();
     new_task.spawn(&exec_child, undefined) catch @panic("todo errno");
     scheduler.exit_critical();
