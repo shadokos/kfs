@@ -5,7 +5,7 @@ cpu = 'i686'
 endian = 'little'
 
 [binaries]
-c = 'i686-shadokos-cc'
+c = 'i686-shadokos-gcc'
 cpp = 'i686-shadokos-c++'
 ar = 'i686-shadokos-ar'
 strip = 'strip'

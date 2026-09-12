@@ -30,7 +30,7 @@ struct alignas(4) FutexLockImpl {
 		while(true) {
 			if(!expected) {
 				// Try to take the mutex here.
-				if(__atomic_compare_exchange_n(&_state,
+					if(__atomic_compare_exchange_n(&_state,
 						&expected, this_tid, false, __ATOMIC_ACQUIRE, __ATOMIC_ACQUIRE)) {
 					if constexpr (Recursive) {
 						__ensure(!_recursion);
