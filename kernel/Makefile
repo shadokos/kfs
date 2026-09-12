@@ -6,7 +6,7 @@ OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo ReleaseSafe) | 
 
 BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
 QEMU_BOOT_DRIVE ?= -hda kfs.iso
-QEMU_DRIVE ?=
+QEMU_DRIVE ?= -hdb fs.iso
 
 # COM1 on the terminal. signal=off keeps Ctrl-C for the guest instead of
 # letting it kill qemu, which is what makes /dev/ttyS0 usable as a terminal.
@@ -24,17 +24,16 @@ all: build
 -include build/Makefiles/Mlibc.mk
 
 .PHONY: run
-run: build
+run: build fs.iso
 	qemu-system-i386 $(QEMU_BOOT_DRIVE) $(QEMU_DRIVE) $(QEMU_SERIAL)
 
-iso/bin/dash: libc
-	make -C ../dash && cp ../dash/src/dash iso/bin/dash
 
-fs.iso: iso/ iso/bin/dash
-	mkfs -F -t ext2 -U 8581277f-6f63-447a-8d0c-347e180d2466 -d iso $@
+fs.iso: iso/# iso/bin/dash
+	dd if=/dev/zero of=fs.iso bs=1024 count=100000
+	mkfs -F -t ext2 -U 8581277f-6f63-447a-8d0c-347e180d2466 -d iso $@ || rm fs.iso
 
 .PHONY: build
-build: .optimize-$(OPTIMIZE) .bootloader-$(BOOTLOADER) fs.iso
+build: .optimize-$(OPTIMIZE) .bootloader-$(BOOTLOADER)
 	$(ZIG) build -Doptimize=$(OPTIMIZE) $(BUILD_ARGS)
 
 .PHONY: debug

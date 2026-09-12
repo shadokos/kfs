@@ -40,7 +40,9 @@ pub fn has_uuid(partition: *block.Partition, uuid: u128) ?*FileSystem {
 pub fn scan_for_uuid(uuid: u128) ?struct { *FileSystem, *block.Partition } {
     var it = registry.partitions.inorderIterator();
     while (it.next()) |entry| {
+        std.log.debug("{s}", .{entry.key.name});
         if (has_uuid(entry.key, uuid)) |fs| {
+            std.log.debug("uuid match", .{});
             return .{ fs, entry.key };
         }
     }

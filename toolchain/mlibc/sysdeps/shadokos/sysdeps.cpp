@@ -227,12 +227,100 @@ int Sysdeps<Dup2>::operator()(int fd, int, int newfd) {
 	return 0;
 }
 
+
+int Sysdeps<Fork>::operator()(pid_t *child) {
+	auto ret = sc(SYS_FORK);
+	if (int e = sc_error(ret); e)
+			return e;
+	*child = ret;
+	return 0;
+}
+
+int Sysdeps<Execve>::operator()(const char *path, char *const argv[], char *const envp[]) {
+	auto ret = sc(SYS_EXECVE, path, argv, envp);
+	if (int e = sc_error(ret); e)
+		return e;
+	return 0;
+}
+
 int Sysdeps<Ioctl>::operator()(int fd, unsigned long request, void *arg, int *result) {
 	auto ret = sc(SYS_IOCTL, fd, request, arg);
 	if (int e = sc_error(ret); e)
 		return e;
 	if (result)
 		*result = ret;
+	return 0;
+}
+
+int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int fd, const char *path, int flags, struct stat *statbuf) {
+	__ensure(!flags);
+	__ensure(fsfdt == fsfd_target::path);
+	auto ret = sc(SYS_STAT, path, statbuf);
+	if (int e = sc_error(ret); e)
+		return e;
+	return 0;
+}
+
+int Sysdeps<Waitpid>::operator()(pid_t pid, int *status, int flags, struct rusage *ru, pid_t *ret_pid) {
+	__ensure(!ru);
+	auto ret = sc(SYS_WAITPID, pid, status, flags);
+	if (int e = sc_error(ret); e)
+			return e;
+	*ret_pid = ret;
+	return 0;
+}
+
+int Sysdeps<Tcgetattr>::operator()(int fd, struct termios *attr) {
+	auto ret = sc(SYS_TCGETATTR, fd, attr);
+	if (int e = sc_error(ret); e)
+		return e;
+	return 0;
+}
+
+int Sysdeps<Tcsetattr>::operator()(int fd, int optional_action, const struct termios *attr) {
+	__ensure(optional_action);
+
+	auto ret = sc(SYS_TCSETATTR, fd, 0, attr);
+	if (int e = sc_error(ret); e)
+		return e;
+	return 0;
+}
+
+
+// int Sysdeps<Tcsendbreak>::operator()(int fd, int) {
+// 	auto ret = sc(SYS_IOCTL, fd, TCSBRK, 0);
+// 	if (int e = sc_error(ret); e)
+// 		return e;
+// 	return 0;
+// }
+//
+// int Sysdeps<Tcflow>::operator()(int fd, int action) {
+// 	auto ret = sc(SYS_IOCTL, fd, TCXONC, action);
+// 	if (int e = sc_error(ret); e)
+// 		return e;
+// 	return 0;
+// }
+//
+// int Sysdeps<Tcflush>::operator()(int fd, int queue) {
+// 	auto ret = sc(SYS_IOCTL, fd, TCFLSH, queue);
+// 	if (int e = sc_error(ret); e)
+// 		return e;
+// 	return 0;
+// }
+//
+// int Sysdeps<Tcdrain>::operator()(int fd) {
+// 	auto ret = sc(SYS_IOCTL, fd, TCSBRK, 1);
+// 	if (int e = sc_error(ret); e)
+// 		return e;
+// 	return 0;
+// }
+
+
+int Sysdeps<SetSid>::operator()(pid_t *sid) {
+	auto ret = sc(SYS_SETSID);
+	if (int e = sc_error(ret); e)
+		return e;
+	*sid = ret;
 	return 0;
 }
 

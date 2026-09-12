@@ -101,7 +101,7 @@ fn get_params(comptime proto: std.builtin.Type.Fn, fr: interrupts.InterruptFrame
 }
 
 fn call_syscall(comptime code: Code) void {
-    // syscall_logger.debug("{} called", .{code});
+    syscall_logger.debug("{} called", .{code});
     const current_task = scheduler.get_current_task();
     const sys_struct = @field(syscall_table, @tagName(code));
     const syscall_type = comptime SyscallType(sys_struct);
@@ -128,6 +128,7 @@ fn call_syscall(comptime code: Code) void {
         },
         .do_raw => @call(.auto, sys_struct.do_raw, .{}),
     }
+    
 }
 
 pub fn syscall_handler(_: interrupts.InterruptFrame) void {

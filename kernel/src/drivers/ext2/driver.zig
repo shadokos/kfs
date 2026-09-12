@@ -16,6 +16,7 @@ pub fn identify(part: *Partition) bool {
     part.read(2, 2, buffer[0..]) catch return false;
 
     const superblock: *align(1) ext2.Superblock = @ptrCast(&buffer);
+    std.log.debug("signature: {x}", .{superblock.signature});
     return superblock.signature == 0xEF53;
 }
 
@@ -26,6 +27,7 @@ pub fn uuid(part: *Partition) ?u128 {
     part.read(2, 2, buffer[0..]) catch return null;
 
     const superblock: *align(1) ext2.Superblock = @ptrCast(&buffer);
+    std.log.debug("uuid: {?x}", .{if (superblock.version_major == 1) @byteSwap(superblock.extended.uuid) else null});
     return if (superblock.version_major == 1) @byteSwap(superblock.extended.uuid) else null;
 }
 

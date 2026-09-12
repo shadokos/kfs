@@ -136,9 +136,9 @@ void input_init(void)
 	int istty;
 
 	istty = tcgetattr(0, &tios) + 1;
-	stdin_istty = istty;
+	stdin_istty = 1;
 	if (istty)
-		st->bufferable = tios.c_lflag & ICANON;
+		st->bufferable = 1;
 	else {
 		st->seekable = lseek(0, 0, SEEK_CUR) + 1;
 		st->bufferable = !!st->seekable;

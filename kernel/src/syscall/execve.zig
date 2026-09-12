@@ -57,9 +57,11 @@ fn get_interpreter_args(tnode : *TNode, buffer : []u8, path : [*:0]const u8, bas
 }
 
 pub fn do(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) Errno!void {
+    std.log.debug("a", .{});
     var buffer :[100]u8 = undefined;
     const tnode = try vfs.resolve(std.mem.span(path));
     errdefer tnode.release();
+    std.log.debug("b", .{});
 
     var argv_slices = try collect(argv);
     errdefer allocator.free(argv_slices);
@@ -68,13 +70,18 @@ pub fn do(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null
 
     var inode = tnode.inode.get_ref();
     if (try is_interpreted(tnode)) {
+        std.log.debug("c", .{});
         argv_slices = try get_interpreter_args(tnode, buffer[0..], path, argv_slices,);
+        std.log.debug("d", .{});
         const interpreter_tnode = try vfs.resolve(argv_slices[0]);
+        std.log.debug("e", .{});
         inode = interpreter_tnode.inode.get_ref();
         interpreter_tnode.release();
     }
 
+    std.log.debug("f", .{});
     const req = try TaskDescriptor.prepare_exec(inode, argv_slices, envp_slices);
+    std.log.debug("g", .{});
 
     // Nothing can fail past this point, and commit_exec does not come back: it resets the
     // kernel stack this frame lives on. Release what we own now, no defer would ever run.

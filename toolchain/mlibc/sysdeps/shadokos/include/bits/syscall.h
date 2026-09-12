@@ -54,6 +54,7 @@ done | sort -k3 -g
 #define SYS_CHDIR 52
 #define SYS_PIPE 53
 #define SYS_FCNTL 54
+#define SYS_STAT 57
 
 
 

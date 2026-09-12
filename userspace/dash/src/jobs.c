@@ -1205,11 +1205,11 @@ waitproc(int block, int *status)
 	do {
 		gotsigchld = 0;
 		do
-#ifdef HAVE_WAIT3
-			err = wait3(status, flags, NULL);
-#else
-			err = waitpid((pid_t)-1, status, flags, NULL);
-#endif
+// #ifdef HAVE_WAIT3
+// 			err = wait3(status, flags, NULL);
+// #else
+			err = waitpid((pid_t)-1, status, flags);
+// #endif
 		while (err < 0 && errno == EINTR);
 
 		if (err || (err = -!block))

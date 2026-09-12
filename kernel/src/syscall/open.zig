@@ -88,8 +88,8 @@ fn create_file(path_slice: []const u8, flags: Flags, mode: Mode) Errno!*TNode {
 }
 
 pub fn do(path: [*:0]const u8, flags: Flags, mode: Mode) Errno!FileSet.Fd {
-    std.log.debug("begin open", .{});
-    defer std.log.debug("end open", .{});
+//    std.log.debug("begin open {s}", .{path});
+//    defer std.log.debug("end open", .{});
     const tnode = if (flags.create) try create_file(std.mem.span(path), flags, mode) else try vfs.resolve(std.mem.span(path));
     defer tnode.release();
     const inode = tnode.inode;

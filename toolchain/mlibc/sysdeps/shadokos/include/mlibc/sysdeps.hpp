@@ -35,11 +35,22 @@ struct ShadokosSysdepTags :
 	Pipe,
 	Fcntl,
 	Ioctl,
+	Stat,
+	Dup2,
+	Dup,
+	Execve,
+	Fork,
+	Waitpid,
+	Tcgetattr,
+	Tcsetattr,
+    SetSid,
+    // Tcdrain,
+    // Tcflush,
+    // Tcflow,
+    // Tcsendbreak,
 	// Not implemented (ENOSYS), but the posix/bsd sources dispatch to
 	// them at compile time so the tags have to exist.
-	Recvfrom,
-	Dup2,
-	Dup
+	Recvfrom
 
 
 //	GetEuid,
