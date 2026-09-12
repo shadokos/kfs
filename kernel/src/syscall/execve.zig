@@ -63,6 +63,10 @@ pub fn do(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null
     errdefer tnode.release();
     std.log.debug("b", .{});
 
+    if (tnode.inode.mode.type != .Regular) {
+        return Errno.EACCES;
+    }
+
     var argv_slices = try collect(argv);
     errdefer allocator.free(argv_slices);
     const envp_slices = try collect(envp);
