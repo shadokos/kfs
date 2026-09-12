@@ -337,6 +337,10 @@ pub const TaskDescriptor = struct {
 
         self.deinit_vm();
         self.vm = new_vm;
+        for (self.files.files[0..], 0..) |f,i| {
+            if (f) |g|
+                std.log.debug("fork: opened fd: {} {}", .{i, g.inode.ino});
+        }
         return entry;
     }
 

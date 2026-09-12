@@ -151,7 +151,7 @@ shcmd(union node *cmd, FILE *fp)
 }
 
 
-
+#include <stdlib.h>
 static void
 sharg(union node *arg, FILE *fp)
 {
@@ -351,6 +351,8 @@ trargs(char **ap)
 void
 opentrace(void)
 {
+	tracefile = stderr;
+	return;
 	char s[100];
 #ifdef O_APPEND
 	int flags;

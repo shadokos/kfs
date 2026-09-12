@@ -93,15 +93,13 @@ pub fn do(path: [*:0]const u8, flags: Flags, mode: Mode) Errno!FileSet.Fd {
     const tnode = if (flags.create) try create_file(std.mem.span(path), flags, mode) else try vfs.resolve(std.mem.span(path));
     defer tnode.release();
     const inode = tnode.inode;
-    if (flags.append or
-        flags.close_on_exec or
+    if (flags.close_on_exec or
         flags.close_on_fork or
         flags.directory or
         flags.no_follow or
         flags.non_blocking or
-        flags.tty_init)
-    {
-        @panic("not implemented");
+        flags.tty_init) {
+        std.log.warn("Open: Some flags are not implemented: {}", .{flags});
     }
     const file = try inode.open();
     errdefer file.close() catch {};
@@ -109,5 +107,5 @@ pub fn do(path: [*:0]const u8, flags: Flags, mode: Mode) Errno!FileSet.Fd {
         try inode.truncate(0);
     }
     @import("../tty/tty.zig").acquire_controlling(file, flags.no_controlling_tty);
-    return try scheduler.get_current_task().files.add(file);
+    return try scheduler.get_current_task().files.add(file, 0);
 }

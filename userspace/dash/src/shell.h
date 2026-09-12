@@ -51,6 +51,7 @@
 
 #include <sys/param.h>
 
+// #define DEBUG 2
 #ifndef JOBS
 #define JOBS 1
 #endif

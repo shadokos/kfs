@@ -72,6 +72,12 @@ pub fn do(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null
     const envp_slices = try collect(envp);
     errdefer allocator.free(envp_slices);
 
+
+    for (scheduler.get_current_task().files.files[0..], 0..) |f,i| {
+        if (f) |g|
+            std.log.debug("fork: opened fd: {} {}", .{i, g.inode.ino});
+    }
+
     var inode = tnode.inode.get_ref();
     if (try is_interpreted(tnode)) {
         std.log.debug("c", .{});
@@ -87,6 +93,11 @@ pub fn do(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null
     const req = try TaskDescriptor.prepare_exec(inode, argv_slices, envp_slices);
     std.log.debug("g", .{});
 
+
+    for (scheduler.get_current_task().files.files[0..], 0..) |f,i| {
+        if (f) |g|
+            std.log.debug("fork: opened fd: {} {}", .{i, g.inode.ino});
+    }
     // Nothing can fail past this point, and commit_exec does not come back: it resets the
     // kernel stack this frame lives on. Release what we own now, no defer would ever run.
     allocator.free(envp_slices);

@@ -466,12 +466,11 @@ savefd(int from, int ofd)
 	int newfd;
 	int err;
 
-	newfd = dup(from);
-#if HAVE_F_DUPFD_CLOEXEC
-//	newfd = fcntl(from, F_DUPFD_CLOEXEC, 10);
-#else
-//	newfd = fcntl(from, F_DUPFD, 10);
-#endif
+// #if HAVE_F_DUPFD_CLOEXEC
+// 	newfd = fcntl(from, F_DUPFD_CLOEXEC, 10);
+// #else
+	newfd = fcntl(from, F_DUPFD, 10);
+// #endif
 
 	err = newfd < 0 ? errno : 0;
 	if (err != EBADF) {

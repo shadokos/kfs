@@ -101,7 +101,6 @@ fn get_params(comptime proto: std.builtin.Type.Fn, fr: interrupts.InterruptFrame
 }
 
 fn call_syscall(comptime code: Code) void {
-    syscall_logger.debug("{} called", .{code});
     const current_task = scheduler.get_current_task();
     const sys_struct = @field(syscall_table, @tagName(code));
     const syscall_type = comptime SyscallType(sys_struct);
@@ -112,10 +111,19 @@ fn call_syscall(comptime code: Code) void {
                 if (@typeInfo(return_type) == .error_union) return_type else errno.Errno!return_type
             else
                 errno.Errno!void;
-            const ret: ret_type = @call(.auto, sys_struct.do, get_params(
+
+            syscall_logger.debug("{} called ebx={} ecx={} edx={} esi={} edi={}", .{code,
+                current_task.ucontext.uc_mcontext.ebx,
+                current_task.ucontext.uc_mcontext.ecx,
+                current_task.ucontext.uc_mcontext.edx,
+                current_task.ucontext.uc_mcontext.esi,
+                current_task.ucontext.uc_mcontext.edi,
+            });
+            const params = get_params(
                 @typeInfo(@TypeOf(sys_struct.do)).@"fn",
                 current_task.ucontext.uc_mcontext,
-            ));
+            );
+            const ret: ret_type = @call(.auto, sys_struct.do, params);
             if (ret) |v| {
                 current_task.ucontext.uc_mcontext.eax = if (comptime @TypeOf(v) != void)
                     convert_ret(@TypeOf(v), v)

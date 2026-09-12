@@ -34,8 +34,8 @@ pub fn get(self: *Self, fd: Fd) !*File {
     return self.files[@intCast(fd)] orelse return error.EBADF;
 }
 
-pub fn add(self: *Self, file: *File) !Fd {
-    for (self.files[0..], 0..) |*f, fd| {
+pub fn add(self: *Self, file: *File, start : Fd) !Fd {
+    for (self.files[@intCast(start)..], @intCast(start)..) |*f, fd| {
         if (f.* == null) {
             f.* = file;
             return @intCast(fd);

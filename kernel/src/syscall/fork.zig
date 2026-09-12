@@ -1,3 +1,4 @@
+const std = @import("std");
 const task = @import("../task/task.zig");
 const scheduler = @import("../task/scheduler.zig");
 const task_set = @import("../task/task_set.zig");
@@ -16,6 +17,10 @@ fn exec_child(_: usize) u8 {
         vm.transfer();
     const frame = current_task.ucontext.uc_mcontext;
     scheduler.exit_critical();
+    for (current_task.files.files[0..], 0..) |f,i| {
+        if (f) |g|
+        std.log.debug("fork: opened fd: {} {}", .{i, g.inode.ino});
+    }
     interrupts.ret_from_interrupt(&frame);
 }
 

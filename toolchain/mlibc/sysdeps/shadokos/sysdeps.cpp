@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "include/abi-bits/fcntl.h"
+
 namespace {
 
 inline long sc(long n) { return __shadokos_syscall0(n); }
@@ -203,8 +205,12 @@ int Sysdeps<Pipe>::operator()(int *fds, int) {
 	return 0;
 }
 
-int Sysdeps<Fcntl>::operator()(int fd, int request, va_list , int *result) {
-	auto ret = sc(SYS_FCNTL, fd, request);
+int Sysdeps<Fcntl>::operator()(int fd, int request, va_list args , int *result) {
+	size_t arg = 0;
+	if (request == F_DUPFD) {
+		arg = va_arg(args, size_t);
+	}
+	auto ret = sc(SYS_FCNTL, fd, request, arg);
 	if (int e = sc_error(ret); e)
 		return e;
 	*result = ret;
@@ -252,7 +258,7 @@ int Sysdeps<Ioctl>::operator()(int fd, unsigned long request, void *arg, int *re
 	return 0;
 }
 
-int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int fd, const char *path, int flags, struct stat *statbuf) {
+int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int , const char *path, int flags, struct stat *statbuf) {
 	__ensure(!flags);
 	__ensure(fsfdt == fsfd_target::path);
 	auto ret = sc(SYS_STAT, path, statbuf);
@@ -323,5 +329,6 @@ int Sysdeps<SetSid>::operator()(pid_t *sid) {
 	*sid = ret;
 	return 0;
 }
+
 
 } // namespace mlibc
