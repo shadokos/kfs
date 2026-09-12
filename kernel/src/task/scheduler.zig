@@ -44,6 +44,9 @@ pub fn schedule() void {
         next_task = idle_task;
     }
 
+    if (next_task == current_task)
+        @import("std").log.scoped(.sched).debug("self-pop: task {d} state {s}", .{ current_task.pid, @tagName(current_task.state) });
+
     if (next_task) |next| {
         const prev = current_task;
         current_task = next;

@@ -330,5 +330,12 @@ int Sysdeps<SetSid>::operator()(pid_t *sid) {
 	return 0;
 }
 
+int	Sysdeps<GetPgid>::operator()(pid_t pid, pid_t *pgid) {
+	auto ret = sc(SYS_GETPGID, pid);
+	if (int e = sc_error(ret); e)
+		return e;
+	*pgid = ret;
+	return 0;
+}
 
 } // namespace mlibc

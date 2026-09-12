@@ -44,6 +44,7 @@ struct ShadokosSysdepTags :
 	Tcgetattr,
 	Tcsetattr,
     SetSid,
+	GetPgid,
     // Tcdrain,
     // Tcflush,
     // Tcflow,

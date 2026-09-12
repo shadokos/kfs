@@ -34,7 +34,7 @@ pub var tty_array: [num_ttys]TtyStruct = blk: {
 pub var current_tty: u8 = 0;
 
 /// One screen between them all, so only the displayed one paints.
-var consoles: [num_consoles]vt_console = undefined;
+pub var consoles: [num_consoles]vt_console = undefined;
 
 /// A free line slot, or null when they are all taken.
 pub fn claim_line(index: usize) ?*TtyStruct {

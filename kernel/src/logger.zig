@@ -1,5 +1,6 @@
 const log = @import("std").log;
 const tty = @import("tty/tty.zig");
+const serial = @import("drivers/tty/serial.zig");
 const colors = @import("colors");
 const screen_of_death = @import("screen_of_death.zig").screen_of_death;
 const scheduler = @import("task/scheduler.zig");
@@ -20,12 +21,19 @@ pub fn kernel_log(
     };
     const padding = 7 - level_str.len;
 
-    tty.printk(
-        "[" ++ color ++ level_str ++ colors.reset ++ "] " ++
-            (" " ** padding) ++ scope_str ++ format ++ "\n",
-        args,
-    );
-    tty.flush();
+    const line = "[" ++ color ++ level_str ++ colors.reset ++ "] " ++
+        (" " ** padding) ++ scope_str ++ format ++ "\n";
+
+    const to_serial = message_level == .debug and
+        !@import("build_options").ci and
+        serial.first_line() != null;
+
+    if (to_serial) {
+        serial.first_line().?.writer().print(line, args) catch {};
+    } else {
+        tty.printk(line, args);
+        tty.flush();
+    }
     if (message_level == .err and scope == .default) {
         scheduler.enter_critical();
         if (@import("build_options").ci) {

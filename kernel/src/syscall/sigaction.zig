@@ -8,6 +8,7 @@ pub fn do(id: signal.Id, act: ?*signal.Sigaction, oldact: ?*signal.Sigaction) !v
         oldact_ptr.* = scheduler.get_current_task().signalManager.get_action(id);
     }
     if (act) |act_ptr| {
-        scheduler.get_current_task().signalManager.change_action(id, act_ptr.*) catch @panic("todo");
+        // EINVAL for SIGKILL and SIGSTOP, which no process may catch.
+        try scheduler.get_current_task().signalManager.change_action(id, act_ptr.*);
     }
 }

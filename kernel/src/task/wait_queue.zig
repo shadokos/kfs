@@ -92,6 +92,7 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
                 ready_queue.push(task);
                 self.queue.remove(n);
                 if (arg.unblock_callback) |callback| callback(@ptrCast(@alignCast(task)), wait_queue_node.data.data);
+                // task.wq_node.data.queue = null;
                 node = next;
             }
         }

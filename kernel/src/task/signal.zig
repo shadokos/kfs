@@ -251,6 +251,12 @@ pub const SignalManager = struct {
 
     pub fn init() Self {
         var self = Self{};
+
+        // Every slot first, then the ones with something else to say. A slot
+        // left out keeps whatever the stack had: an empty-looking queue that
+        // is not one, and an `ignorable` that decides sigaction at random.
+        for (&self.queues) |*queue| queue.* = SignalQueue.init(.Terminate, true);
+
         self.init_queue(.SIGABRT, .Terminate, true);
         self.init_queue(.SIGALRM, .Terminate, true);
         self.init_queue(.SIGBUS, .Terminate, true);
@@ -276,6 +282,9 @@ pub const SignalManager = struct {
         self.init_queue(.SIGSYS, .Terminate, true);
         self.init_queue(.SIGTRAP, .Terminate, true);
         self.init_queue(.SIGURG, .Ignore, true);
+        self.init_queue(.SIGWINCH, .Ignore, true);
+        self.init_queue(.SIGPWR, .Terminate, true);
+        self.init_queue(.SIGEMT, .Terminate, true);
         self.init_queue(.SIGVTALRM, .Terminate, true);
         self.init_queue(.SIGXCPU, .Terminate, true);
         self.init_queue(.SIGXFSZ, .Terminate, true);
@@ -302,7 +311,7 @@ pub const SignalManager = struct {
         defer self.mutex.release();
 
         const index: u32 = @intFromEnum(signal.si_signo.unwrap());
-        if (index > self.queues.len) {
+        if (index >= self.queues.len) {
             @panic("todo");
         }
         self.queues[index].queue_signal(signal);

@@ -550,6 +550,9 @@ pub const TaskDescriptor = struct {
 
     pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.c) noreturn {
         const function: *const fn (usize) u8 = @ptrCast(function_ptr);
+
+        ready_queue.push(scheduler.get_current_task());
+
         self.state = .Running;
         scheduler.set_current_task(self);
         gdt.tss.esp0 = @as(usize, @intFromPtr(&self.stack)) + self.stack.len;
@@ -605,7 +608,7 @@ pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     scheduler.enter_critical();
     defer scheduler.exit_critical();
 
-    if (prev.state == .Running) {
+    if (prev.state == .Running and prev != next) {
         ready_queue.push(prev);
     }
     next.state = .Running;
