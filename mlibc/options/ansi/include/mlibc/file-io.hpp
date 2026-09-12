@@ -1,0 +1,152 @@
+#ifndef MLIBC_FILE_IO_HPP
+#define MLIBC_FILE_IO_HPP
+
+#include <bits/mbstate.h>
+#include <stdio.h>
+
+#include <mlibc/lock.hpp>
+#include <mlibc/allocator.hpp>
+#include <frg/list.hpp>
+
+namespace mlibc {
+
+enum class stream_type {
+	unknown,
+	file_like,
+	pipe_like
+};
+
+enum class buffer_mode {
+	unknown,
+	no_buffer,
+	line_buffer,
+	full_buffer
+};
+
+enum class stream_orientation : int {
+	byte = -1,
+	none = 0,
+	wide = 1,
+};
+
+struct StdioLock {
+	bool uselock = true;
+	RecursiveFutexLock futexlock;
+	void lock() {
+		if (uselock) {
+			futexlock.lock();
+		}
+
+	}
+	void unlock() {
+		if (uselock) {
+			futexlock.unlock();
+		}
+	}
+	bool try_lock() {
+		if (uselock) {
+			return futexlock.try_lock();
+		}
+		return true;
+	}
+};
+struct abstract_file : __mlibc_file_base {
+public:
+	abstract_file(void (*do_dispose)(abstract_file *) = nullptr);
+
+	abstract_file(const abstract_file &) = delete;
+
+	abstract_file &operator= (const abstract_file &) = delete;
+
+	virtual ~abstract_file();
+
+	void dispose();
+
+	virtual int close() = 0;
+	virtual int reopen(const char *path, const char *mode) = 0;
+
+	int read(char *buffer, size_t max_size, size_t *actual_size);
+	int write(const char *buffer, size_t max_size, size_t *actual_size);
+	int unget(char c);
+
+	int update_bufmode(buffer_mode mode);
+
+	void purge();
+	int flush();
+
+	int tell(off_t *current_offset);
+	int seek(off_t offset, int whence);
+
+	// Checks if the current stream orientation is compatible with the passed-in stream orientation
+	// If the stream has no associated stream orientation yet, it is set.
+	// If the stream orientation is not permitted, the function returns false, otherwise true.
+	bool check_orientation(stream_orientation orientation);
+
+protected:
+	virtual int determine_type(stream_type *type) = 0;
+	virtual int determine_bufmode(buffer_mode *mode) = 0;
+	virtual int io_read(char *buffer, size_t max_size, size_t *actual_size) = 0;
+	virtual int io_write(const char *buffer, size_t max_size, size_t *actual_size) = 0;
+	virtual int io_seek(off_t offset, int whence, off_t *new_offset) = 0;
+	virtual int post_flush();
+
+	int _reset();
+private:
+	int _init_type();
+	int _init_bufmode();
+
+	int _write_back();
+	int _save_pos();
+
+	void _ensure_allocation();
+
+	stream_type _type;
+	buffer_mode _bufmode;
+	void (*_do_dispose)(abstract_file *);
+
+public:
+	buffer_mode bufmode() const {
+		return _bufmode;
+	}
+
+	// lock for file operations
+	StdioLock _lock;
+	// All files are stored in a global linked list, so that they can be flushed at exit().
+	frg::default_list_hook<abstract_file> _list_hook;
+
+	stream_orientation _orientation = stream_orientation::none;
+	mbstate_t _mbstate = {};
+};
+
+struct fd_file : abstract_file {
+	fd_file(int fd, void (*do_dispose)(abstract_file *) = nullptr, bool force_unbuffered = false);
+
+	int fd();
+
+	int close() override;
+	int reopen(const char *path, const char *mode) override;
+
+	static int parse_modestring(const char *mode);
+
+protected:
+	int determine_type(stream_type *type) override;
+	int determine_bufmode(buffer_mode *mode) override;
+
+	int io_read(char *buffer, size_t max_size, size_t *actual_size) override;
+	int io_write(const char *buffer, size_t max_size, size_t *actual_size) override;
+	int io_seek(off_t offset, int whence, off_t *new_offset) override;
+
+private:
+	// Underlying file descriptor.
+	int _fd;
+	bool _force_unbuffered;
+};
+
+template <typename T>
+void file_dispose_cb(abstract_file *base) {
+	frg::destruct(getAllocator(), static_cast<T *>(base));
+}
+
+} // namespace mlibc
+
+#endif // MLIBC_FILE_IO_HPP
