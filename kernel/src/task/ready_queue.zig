@@ -17,30 +17,36 @@ pub const QueueNode = struct {
 
 pub var ready_queue = Queue{};
 
+fn unlink(node: *Queue.Node) void {
+    ready_queue.remove(node);
+    node.prev = null;
+    node.next = null;
+}
+
 pub fn push(new_node: *TaskDescriptor) void {
     scheduler.enter_critical();
     defer scheduler.exit_critical();
+
+    new_node.state = .Ready;
 
     // For performance reasons, the idle task should never be in the ready_queue.
     // The scheduler will switch to the idle task only if there is no task to run.
     if (new_node.pid == 0) return;
 
-    if (new_node.rq_node.data == false)
+    if (new_node.rq_node.data == false) {
         ready_queue.append(&new_node.rq_node.node);
-
-    new_node.rq_node.data = true;
-    new_node.state = .Ready;
+        new_node.rq_node.data = true;
+    }
 }
 
 pub fn pop() ?*Queue.Node {
     scheduler.enter_critical();
     defer scheduler.exit_critical();
 
-    const node = ready_queue.popFirst();
-    if (node) |n| {
-        const queue_node_data: *QueueNode = @fieldParentPtr("node", n);
-        queue_node_data.data = false;
-    }
+    const node = ready_queue.first orelse return null;
+    const queue_node_data: *QueueNode = @fieldParentPtr("node", node);
+    unlink(node);
+    queue_node_data.data = false;
     return node;
 }
 
@@ -50,12 +56,8 @@ pub fn remove(t: *TaskDescriptor) void {
 
     if (t.rq_node.data == false) return;
 
-    ready_queue.remove(&t.rq_node.node);
+    unlink(&t.rq_node.node);
     t.rq_node.data = false;
-
-    // Should we set the task to a different state here ???
-    // Not sure, as this method is called during an exit, right after setting it to .Zombie state.
-    // TODO: Maybe we should discuss it together.
 }
 
 pub fn init() void {

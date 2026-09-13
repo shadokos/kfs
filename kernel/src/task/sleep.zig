@@ -1,3 +1,4 @@
+const std = @import("std");
 const task = @import("task.zig");
 const scheduler = @import("scheduler.zig");
 const ready_queue = @import("ready_queue.zig");
@@ -26,7 +27,6 @@ pub fn usleep(micro: u64) !void {
             .task = t,
         }) catch return error.ENOMEM;
 
-        ready_queue.remove(t);
         t.state = .Blocked;
         scheduler.schedule();
 

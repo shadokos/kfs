@@ -1,3 +1,4 @@
+const std = @import("std");
 const task = @import("task.zig");
 const task_set = @import("task_set.zig");
 const ready_queue = @import("ready_queue.zig");
@@ -30,37 +31,51 @@ pub fn is_initialized() bool {
     return idle_task != null;
 }
 
+fn pick_next() ?*task.TaskDescriptor {
+    if (ready_queue.pop()) |node| {
+        const rq_node: *ready_queue.QueueNode = @alignCast(@fieldParentPtr("node", node));
+        return @alignCast(@fieldParentPtr("rq_node", rq_node));
+    }
+    if (current_task.state != .Running and
+        current_task.state != .Ready and
+        current_task != idle_task)
+        return idle_task;
+    return null;
+}
+
 pub fn schedule() void {
     if (!is_initialized()) return;
 
     @This().enter_critical();
     defer @This().exit_critical();
 
-    var next_task: ?*task.TaskDescriptor = null;
-    if (ready_queue.pop()) |node| {
-        const rq_node: *ready_queue.QueueNode = @alignCast(@fieldParentPtr("node", node));
-        next_task = @alignCast(@fieldParentPtr("rq_node", rq_node));
-    } else if (current_task.state != .Running and current_task.state != .Ready and current_task != idle_task) {
-        next_task = idle_task;
-    }
+    const prev = current_task;
+    const next = pick_next() orelse return;
 
-    if (next_task) |next| {
-        const prev = current_task;
-        current_task = next;
-        task.switch_to_task(prev, next);
-    }
+    if (prev.state == .Running) ready_queue.push(prev);
+
+    next.state = .Running;
+    current_task = next;
+    task.switch_to_task(prev, next);
 }
 
 pub export fn checkpoint() void {
     @This().enter_critical();
-    task.switch_to_task(current_task, current_task);
-    @This().exit_critical();
+    defer @This().exit_critical();
+
+    task.save_context(current_task);
 }
 
-pub inline fn set_current_task(new_task: *task.TaskDescriptor) void {
+pub fn take_over(new_task: *task.TaskDescriptor) void {
     @This().enter_critical();
-    current_task = new_task;
-    @This().exit_critical();
+    defer @This().exit_critical();
+
+    const prev = current_task;
+    if (prev != new_task) {
+        if (prev.state == .Running) ready_queue.push(prev);
+        current_task = new_task;
+    }
+    new_task.state = .Running;
 }
 
 pub fn get_current_task() *task.TaskDescriptor {

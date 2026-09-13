@@ -18,6 +18,12 @@ const Queue = std.DoublyLinkedList;
 
 pub const Node = Queue.Node;
 
+fn unlink(queue: *Queue, node: *Node) void {
+    queue.remove(node);
+    node.prev = null;
+    node.next = null;
+}
+
 // todo: change *void to *TaskDescriptor when https://github.com/ziglang/zig/issues/14353 is fixed
 const WaitQueueArg = struct {
     /// Callback to be called when a task is added to the wait queue.
@@ -70,11 +76,11 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
                 const task: *TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", wait_queue_node));
                 const next = n.next;
                 if (arg.predicate(@ptrCast(@alignCast(task)), wait_queue_node.data.data)) {
+                    unlink(&self.queue, n);
+                    task.wq_node.data.queue = null;
                     ready_queue.push(task);
-                    self.queue.remove(n);
                     if (arg.unblock_callback) |callback|
                         callback(@ptrCast(@alignCast(task)), wait_queue_node.data.data);
-                    task.wq_node.data.queue = null;
                 }
                 node = next;
             }
@@ -89,8 +95,9 @@ pub fn WaitQueue(arg: WaitQueueArg) type {
                 const wait_queue_node: *WaitQueueNode = @fieldParentPtr("node", n);
                 const task: *TaskDescriptor = @alignCast(@fieldParentPtr("wq_node", wait_queue_node));
                 const next = n.next;
+                unlink(&self.queue, n);
+                task.wq_node.data.queue = null;
                 ready_queue.push(task);
-                self.queue.remove(n);
                 if (arg.unblock_callback) |callback| callback(@ptrCast(@alignCast(task)), wait_queue_node.data.data);
                 node = next;
             }
@@ -104,7 +111,7 @@ fn remove_from_queue(task: *TaskDescriptor) void {
     //  a blocking task is not guaranteed to be in a wait queue.
     //  Thus, we check if the task is in a wait queue before removing it.
     if (task.wq_node.data.queue) |q| {
-        q.remove(&task.wq_node.node);
+        unlink(q, &task.wq_node.node);
         task.wq_node.data.queue = null;
     }
 }

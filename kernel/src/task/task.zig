@@ -59,10 +59,10 @@ pub const TaskDescriptor = struct {
     /// Shared with every other task of the session, inherited across fork.
     session: *@import("session.zig"),
 
-    uid: u32,
-    euid: u32,
-    gid: u32,
-    egid: u32,
+    uid: u32 = 0,
+    euid: u32 = 0,
+    gid: u32 = 0,
+    egid: u32 = 0,
 
     cwd: *TNode,
     // cwd_str: []u8,
@@ -92,7 +92,7 @@ pub const TaskDescriptor = struct {
 
     // scheduling
     rq_node: ready_queue.QueueNode = .{ .data = false },
-    wq_node: wait_queue.WaitQueueNode = .{ .data = undefined },
+    wq_node: wait_queue.WaitQueueNode = .{ .data = .{ .data = null, .queue = null } },
 
     pub const State = enum(u8) {
         Running,
@@ -310,8 +310,8 @@ pub const TaskDescriptor = struct {
 
     /// The half that cannot fail, and does not come back: it resets the kernel stack
     /// the caller is running on.
-    pub fn commit_exec(_: *Self, req: *ExecRequest) void {
-        _ = exec_entry(@intFromPtr(req));
+    pub fn commit_exec(self: *Self, req: *ExecRequest) void {
+        self.spawn(&exec_entry, @intFromPtr(req)) catch @panic("Failed to spawn exec task");
     }
 
     fn load_image(
@@ -337,9 +337,9 @@ pub const TaskDescriptor = struct {
 
         self.deinit_vm();
         self.vm = new_vm;
-        for (self.files.files[0..], 0..) |f,i| {
+        for (self.files.files[0..], 0..) |f, i| {
             if (f) |g|
-                std.log.debug("fork: opened fd: {} {}", .{i, g.inode.ino});
+                std.log.debug("fork: opened fd: {} {}", .{ i, g.inode.ino });
         }
         return entry;
     }
@@ -511,7 +511,6 @@ pub const TaskDescriptor = struct {
     }
 
     pub noinline fn spawn(self: *Self, function: *const fn (usize) u8, data: usize) !void {
-        std.log.debug("current pid: {}", .{scheduler.get_current_task().pid});
         scheduler.enter_critical();
         var is_parent: u8 = 0;
         asm volatile (
@@ -529,15 +528,15 @@ pub const TaskDescriptor = struct {
             \\ pop %[function]
             \\ movb (%[is_parent]), %[tmp:b]
             \\ cmpb $0, %[tmp:b]
-            \\ jne parent
-            \\ child:
+            \\ jne child
+            \\ parent:
             \\ movb $1, (%[is_parent])
             \\ mov %[new_stack], %esp
             \\ push %[data]
             \\ push %[function]
             \\ push %[self]
             \\ call start_task
-            \\ parent:
+            \\ child:
             :
             : [function] "r" (function),
               [data] "r" (data),
@@ -551,17 +550,11 @@ pub const TaskDescriptor = struct {
 
     pub export fn start_task(self: *Self, function_ptr: *void, data: usize) callconv(.c) noreturn {
         const function: *const fn (usize) u8 = @ptrCast(function_ptr);
-        std.log.debug("start task pid: {}", .{self.pid});
-        self.state = .Running;
-        self.parent.?.state = .Ready;
-        scheduler.set_current_task(self);
+
+        scheduler.take_over(self);
         gdt.tss.esp0 = @as(usize, @intFromPtr(&self.stack)) + self.stack.len;
         gdt.flush();
         apply_tls(self);
-
-        // if (self.parent) |parent| {
-            // @import("ready_queue.zig").push(self.parent.?);
-        // }
         scheduler.exit_critical();
         exit(function(data));
     }
@@ -612,16 +605,15 @@ pub fn switch_to_task(prev: *TaskDescriptor, next: *TaskDescriptor) void {
     scheduler.enter_critical();
     defer scheduler.exit_critical();
 
-    if (prev.state == .Running) {
-        ready_queue.push(prev);
-    }
-    next.state = .Running;
-
     gdt.tss.esp0 = @as(usize, @intFromPtr(&next.stack)) + next.stack.len;
     gdt.flush();
     apply_tls(next);
 
     return switch_to_task_opts(prev, next);
+}
+
+pub fn save_context(t: *TaskDescriptor) void {
+    return switch_to_task_opts(t, t);
 }
 
 pub fn init_vm(t: *TaskDescriptor) !void {
