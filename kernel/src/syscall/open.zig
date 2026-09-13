@@ -103,7 +103,7 @@ pub fn do(path: [*:0]const u8, flags: Flags, mode: Mode) Errno!FileSet.Fd {
     }
     const file = try inode.open();
     errdefer file.close() catch {};
-    if (flags.truncate) {
+    if (flags.truncate and inode.mode.type == .Regular) {
         try inode.truncate(0);
     }
     @import("../tty/tty.zig").acquire_controlling(file, flags.no_controlling_tty);

@@ -1,7 +1,6 @@
 #!/bin/dash
 
-exec </dev/tty0 >>/dev/tty0 2>>/dev/tty0
-
-echo bonjour
-
-exec dash
+exec <$1 >>$1 2>>$1
+stty cooked
+echo $1 "($$)"
+exec dash -i

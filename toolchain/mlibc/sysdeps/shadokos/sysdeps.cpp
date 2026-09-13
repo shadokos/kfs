@@ -278,14 +278,12 @@ namespace mlibc {
 		return 0;
 	}
 
-	int Sysdeps<Tcsetattr>::operator()(int fd, int optional_action, const struct termios *attr) {
-		__ensure(optional_action);
-
-		auto ret = sc(SYS_TCSETATTR, fd, 0, attr);
-		if (int e = sc_error(ret); e)
-			return e;
-		return 0;
-	}
+int Sysdeps<Tcsetattr>::operator()(int fd, int optional_action, const struct termios *attr) {
+	auto ret = sc(SYS_TCSETATTR, fd, optional_action, attr);
+	if (int e = sc_error(ret); e)
+		return e;
+	return 0;
+}
 
 
 	// int Sysdeps<Tcsendbreak>::operator()(int fd, int) {
@@ -385,8 +383,6 @@ namespace mlibc {
 			return e;
 		return 0;
 	}
-
-
 
 	uid_t Sysdeps<GetUid>::operator()() {
 		uid_t ruid, euid, suid;
