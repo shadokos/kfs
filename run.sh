@@ -1,5 +1,10 @@
 #!/bin/sh -e
 
+if ! docker image exists shadokos-toolchain
+then
+	docker build -t shadokos-toolchain toolchain
+fi
+
 make -C kernel build
 make -C userspace
 
