@@ -3,6 +3,7 @@ DOCKER=docker run -v .:/mount -it shadok
 
 
 all: bin/dash bin/mount bin/su bin/cat bin/setsid bin/whoami
+	strip $^
 
 dash/Makefile:
 	$(DOCKER) bash -c "cd dash; ./autogen.sh ; CC=/toolchain/usr/bin/i686-shadokos-gcc ./configure --host=/toolchain/usr/bin/i686-shadokos-gcc"

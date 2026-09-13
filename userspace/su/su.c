@@ -9,11 +9,16 @@
 #define MAX_ATTEMPT 3
 #define PASSWORD_FILE "/etc/passwd"
 
-void spawn(struct passwd *pwd) {
+void spawn(struct passwd *pwd, char **av) {
 	setenv("USER", pwd->pw_name, 1);
-	setreuid(pwd->pw_uid, pwd->pw_uid);
-	setuid(pwd->pw_uid);
-	execvp(pwd->pw_shell, (char*[]){pwd->pw_shell, NULL});
+	setenv("HOME", pwd->pw_dir, 1);
+	if (setreuid(pwd->pw_uid, pwd->pw_uid) == -1 ||
+		setregid(pwd->pw_gid, pwd->pw_gid) == -1) {
+		perror("su");
+		exit(1);
+	}
+	av[0] = pwd->pw_shell;
+	execvp(pwd->pw_shell, av);
 	perror("su: Failed to spawn shell");
 	exit(1);
 }
@@ -28,7 +33,7 @@ bool prompt(char *dst, size_t size) {
 }
 
 int main(int ac, char **av) {
-	if (ac != 2) {
+	if (ac < 2) {
 		fprintf(stderr, "Invalid number of argument\n");
 		return 1;
 	}
@@ -43,7 +48,7 @@ int main(int ac, char **av) {
 	
 	while (prompt(password, sizeof(password))) {
 		if (!strcmp(password, pwd->pw_passwd)) {
-			spawn(pwd);
+			spawn(pwd, av + 1);
 		}
 		if (++attempt == MAX_ATTEMPT) {
 			fprintf(stderr, "Too many attempts\n");

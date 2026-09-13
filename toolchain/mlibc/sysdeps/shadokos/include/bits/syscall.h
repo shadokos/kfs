@@ -5,8 +5,8 @@
 /* ShadokOS syscall numbers
 for f in src/syscall/*
 do
-NAME=$(basename -s.zig $f)
-echo "#define SYS_$(echo $NAME | tr 'a-z' 'A-Z') "
+NAME=$(basename -s.zig $f); ID=$(cat $f | grep -E 'pub const Id = ' | tr -dc '0-9')
+echo "#define SYS_$(echo $NAME | tr 'a-z' 'A-Z') $ID"
 done | sort -k3 -g
 */
 #define SYS_SLEEP 1
@@ -22,7 +22,7 @@ done | sort -k3 -g
 #define SYS_MMAP 12
 #define SYS_MUNMAP 13
 #define SYS_MPROTECT 14
-#define SYS_GETUID 15
+#define SYS_GETRESUID 15
 #define SYS_WAIT 16
 #define SYS_WAITPID 17
 #define SYS_OPEN 18
@@ -46,16 +46,23 @@ done | sort -k3 -g
 #define SYS_TCFLOW 44
 #define SYS_TCDRAIN 45
 #define SYS_TCSENDBREAK 46
-#define SYS_GETEUID 47
-#define SYS_GETGID 48
-#define SYS_GETEGID 49
+#define SYS_GETRESGID 47
 #define SYS_GETPPID 50
 #define SYS_GETCWD 51
 #define SYS_CHDIR 52
 #define SYS_PIPE 53
 #define SYS_FCNTL 54
+#define SYS_MOUNT 55
+#define SYS_UNMOUNT 56
 #define SYS_STAT 57
-
+#define SYS_SETUID 59
+#define SYS_SETEUID 60
+#define SYS_SETEGID 61
+#define SYS_SETREUID 62
+#define SYS_SETREGID 63
+#define SYS_SETRESUID 64
+#define SYS_SETRESGID 65
+#define SYS_SETGID 66
 
 
 

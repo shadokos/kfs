@@ -59,10 +59,12 @@ pub const TaskDescriptor = struct {
     /// Shared with every other task of the session, inherited across fork.
     session: *@import("session.zig"),
 
-    uid: u32,
-    euid: u32,
-    gid: u32,
-    egid: u32,
+    uid: Uid,
+    euid: Uid,
+    suid: Uid,
+    gid: Gid,
+    egid: Gid,
+    sgid: Gid,
 
     cwd: *TNode,
     // cwd_str: []u8,
@@ -103,6 +105,8 @@ pub const TaskDescriptor = struct {
         Zombie,
     };
     pub const Pid = i32;
+    pub const Uid = i32;
+    pub const Gid = i32;
     pub const Self = @This();
 
     pub var cache: *Cache = undefined;
@@ -261,6 +265,7 @@ pub const TaskDescriptor = struct {
         data: []const u8,
         argv: []const [:0]const u8,
         envp: []const [:0]const u8,
+        suid : ?Uid = null,
     };
 
     /// Everything about an exec that can fail: read the image, validate it, and copy
@@ -278,9 +283,6 @@ pub const TaskDescriptor = struct {
         var magic: [2]u8 = undefined;
         if (try file.pread(0, magic[0..]) != magic.len) {
             return Errno.EINVAL;
-        }
-        if (std.mem.eql(u8, magic[0..], "#!")) {
-            @panic("Must implement shebang");
         }
 
         const data = heapAlloc.alloc(u8, std.math.cast(usize, inode.size) orelse return Errno.E2BIG) catch
@@ -303,8 +305,10 @@ pub const TaskDescriptor = struct {
         const envp_z = try dupe_strings_z(envp);
         errdefer free_strings_z(envp_z);
 
+        const suid : ?TaskDescriptor.Uid = if (inode.mode.suid) @intCast(inode.uid) else null;
+
         const req = smallAlloc.create(ExecRequest) catch return Errno.ENOMEM;
-        req.* = .{ .data = data, .argv = argv_z, .envp = envp_z };
+        req.* = .{ .data = data, .argv = argv_z, .envp = envp_z, .suid = suid };
         return req;
     }
 
@@ -355,6 +359,11 @@ pub const TaskDescriptor = struct {
         // defer/errdefer run, only the ring-3 jump below is noreturn, and by then
         // there is nothing left to release.
         const entry = load_image(file_data, argv_z, envp_z) catch exit(1);
+
+        if (request.suid) |suid| {
+            scheduler.get_current_task().euid = suid;
+        }
+
         userspace.iret_to(entry);
     }
 

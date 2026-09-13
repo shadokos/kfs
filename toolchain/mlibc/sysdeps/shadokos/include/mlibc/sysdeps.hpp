@@ -46,6 +46,8 @@ struct ShadokosSysdepTags :
     SetSid,
 	GetResgid,
 	GetResuid,
+	SetRegid,
+	SetReuid,
 	SetResgid,
 	SetResuid,
 	SetEgid,

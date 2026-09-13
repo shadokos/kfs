@@ -57,345 +57,377 @@ long translate_map_flags(int flags) {
 } // namespace
 
 namespace mlibc {
-
-void Sysdeps<Exit>::operator()(int status) {
-	sc(SYS_EXIT, status);
-	__builtin_unreachable();
-}
-
-void Sysdeps<LibcLog>::operator()(const char *msg) {
-	sc(SYS_WRITE, 2, msg, strlen(msg));
-	sc(SYS_WRITE, 2, "\n", 1);
-}
-
-void Sysdeps<LibcPanic>::operator()() {
-	sysdep<LibcLog>("!!! mlibc panic !!!");
-	sysdep<Exit>(-1);
-	__builtin_trap();
-}
-
-int Sysdeps<Isatty>::operator()(int) {
-	// No file descriptor layer yet: everything is the tty.
-	return 0;
-}
-
-int Sysdeps<Write>::operator()(int fd, void const *buf, size_t size, ssize_t *bytes_written) {
-	long r = sc(SYS_WRITE, fd, buf, size);
-	if (int e = sc_error(r))
-		return e;
-	*bytes_written = r;
-	return 0;
-}
-
-int Sysdeps<TcbSet>::operator()(void *pointer) {
-	long r = sc(SYS_SET_THREAD_AREA, pointer);
-	if (int e = sc_error(r))
-		return e;
-	return 0;
-}
-
-int Sysdeps<AnonAllocate>::operator()(size_t size, void **pointer) {
-	long r = sc(SYS_MMAP, nullptr, size, PROT_READ | PROT_WRITE, kMapAnonymous | kMapPrivate, -1, 0);
-	if (int e = sc_error(r))
-		return e;
-	*pointer = reinterpret_cast<void *>(r);
-	return 0;
-}
-
-int Sysdeps<AnonFree>::operator()(void *pointer, size_t size) {
-	return sc_error(sc(SYS_MUNMAP, pointer, size));
-}
-
-int Sysdeps<VmMap>::operator()(void *hint, size_t size, int prot, int flags, int fd, off_t offset, void **window) {
-	long r = sc(SYS_MMAP, hint, size, prot, translate_map_flags(flags), fd, offset);
-	if (int e = sc_error(r))
-		return e;
-	*window = reinterpret_cast<void *>(r);
-	return 0;
-}
-
-int Sysdeps<VmUnmap>::operator()(void *pointer, size_t size) {
-	return sc_error(sc(SYS_MUNMAP, pointer, size));
-}
-
-int Sysdeps<VmProtect>::operator()(void *pointer, size_t size, int prot) {
-	return sc_error(sc(SYS_MPROTECT, pointer, size, prot));
-}
-
-int Sysdeps<Seek>::operator()(int, off_t, int, off_t *) {
-	// No file descriptor layer yet, nothing is seekable.
-	return ESPIPE;
-}
-
-int Sysdeps<Close>::operator()(int fd) {
-	auto ret = sc(SYS_CLOSE, fd);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
-}
-
-int Sysdeps<Open>::operator()(const char *path, int flags, unsigned int mode, int *result)
-{
-	auto ret = sc(SYS_OPEN, path, flags, mode);
-	if (int e = sc_error(ret); e)
-		return e;
-	*result = ret;
-	return 0;
-}
-
-int Sysdeps<Read>::operator()(int fd, void *buffer, size_t size, ssize_t *result)
-{
-	auto ret = sc(SYS_READ, fd, buffer, size);
-	if (int e = sc_error(ret); e)
-		return e;
-	*result  = ret;
-	return 0;
-}
-
-int Sysdeps<Recvfrom>::operator()(int, void *, size_t, int, struct sockaddr *, socklen_t *, ssize_t *) {
-	return ENOSYS;
-}
-
-int Sysdeps<ClockGet>::operator()(int, time_t *secs, long *nanos) {
-	// No clock syscall yet
-	*secs = 0;
-	*nanos = 0;
-	return 0;
-}
-
-// Single-threaded for now: report a spurious wake-up instead of blocking
-int Sysdeps<FutexWait>::operator()(int *, int, timespec const *) { return 0; }
-
-int Sysdeps<FutexWake>::operator()(int *, bool) { return 0; }
-
-uid_t Sysdeps<GetUid>::operator()() { return sc_error(sc(SYS_GETUID)); }
-uid_t Sysdeps<GetEuid>::operator()() { return sc_error(sc(SYS_GETEUID)); }
-gid_t Sysdeps<GetGid>::operator()() { return sc_error(sc(SYS_GETGID)); }
-gid_t Sysdeps<GetEgid>::operator()() { return sc_error(sc(SYS_GETEGID)); }
-pid_t Sysdeps<GetPid>::operator()() { return sc_error(sc(SYS_GETPID)); }
-pid_t Sysdeps<GetPpid>::operator()() { return sc_error(sc(SYS_GETPPID)); }
-
-int Sysdeps<GetCwd>::operator()(char *buf, size_t size) {
-	auto ret = sc(SYS_GETCWD, buf, size);
-	if (int e = sc_error(ret); e) {
-		return e;
+	void Sysdeps<Exit>::operator()(int status) {
+		sc(SYS_EXIT, status);
+		__builtin_unreachable();
 	}
-	return 0;
-}
 
-int Sysdeps<Chdir>::operator()(const char *path) {
-	auto ret = sc(SYS_CHDIR, path);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
-}
-
-int Sysdeps<Sigaction>::operator()(int signum, const struct sigaction *act,
-struct sigaction *oldact) {
-	auto ret = sc(SYS_SIGACTION, signum, act, oldact);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
-}
-
-int Sysdeps<Pipe>::operator()(int *fds, int) {
-	auto ret = sc(SYS_PIPE, fds);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
-}
-
-int Sysdeps<Fcntl>::operator()(int fd, int request, va_list args , int *result) {
-	size_t arg = 0;
-	if (request == F_DUPFD) {
-		arg = va_arg(args, size_t);
+	void Sysdeps<LibcLog>::operator()(const char *msg) {
+		sc(SYS_WRITE, 2, msg, strlen(msg));
+		sc(SYS_WRITE, 2, "\n", 1);
 	}
-	auto ret = sc(SYS_FCNTL, fd, request, arg);
-	if (int e = sc_error(ret); e)
-		return e;
-	*result = ret;
-	return 0;
-}
 
-int Sysdeps<Dup>::operator()(int fd, int flags, int *newfd) {
-	__ensure(!flags);
-	auto ret = sc(SYS_DUP, fd);
-	if (int e = sc_error(ret); e)
-		return e;
-	*newfd = ret;
-	return 0;
-}
+	void Sysdeps<LibcPanic>::operator()() {
+		sysdep<LibcLog>("!!! mlibc panic !!!");
+		sysdep<Exit>(-1);
+		__builtin_trap();
+	}
 
-int Sysdeps<Dup2>::operator()(int fd, int, int newfd) {
-	auto ret = sc(SYS_DUP2, fd, newfd);
-	if(int e = sc_error(ret); e)
-		return e;
-	return 0;
-}
+	int Sysdeps<Isatty>::operator()(int) {
+		// No file descriptor layer yet: everything is the tty.
+		return 0;
+	}
 
-
-int Sysdeps<Fork>::operator()(pid_t *child) {
-	auto ret = sc(SYS_FORK);
-	if (int e = sc_error(ret); e)
+	int Sysdeps<Write>::operator()(int fd, void const *buf, size_t size, ssize_t *bytes_written) {
+		long r = sc(SYS_WRITE, fd, buf, size);
+		if (int e = sc_error(r))
 			return e;
-	*child = ret;
-	return 0;
-}
+		*bytes_written = r;
+		return 0;
+	}
 
-int Sysdeps<Execve>::operator()(const char *path, char *const argv[], char *const envp[]) {
-	auto ret = sc(SYS_EXECVE, path, argv, envp);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
-}
+	int Sysdeps<TcbSet>::operator()(void *pointer) {
+		long r = sc(SYS_SET_THREAD_AREA, pointer);
+		if (int e = sc_error(r))
+			return e;
+		return 0;
+	}
 
-int Sysdeps<Ioctl>::operator()(int fd, unsigned long request, void *arg, int *result) {
-	auto ret = sc(SYS_IOCTL, fd, request, arg);
-	if (int e = sc_error(ret); e)
-		return e;
-	if (result)
+	int Sysdeps<AnonAllocate>::operator()(size_t size, void **pointer) {
+		long r = sc(SYS_MMAP, nullptr, size, PROT_READ | PROT_WRITE, kMapAnonymous | kMapPrivate, -1, 0);
+		if (int e = sc_error(r))
+			return e;
+		*pointer = reinterpret_cast<void *>(r);
+		return 0;
+	}
+
+	int Sysdeps<AnonFree>::operator()(void *pointer, size_t size) {
+		return sc_error(sc(SYS_MUNMAP, pointer, size));
+	}
+
+	int Sysdeps<VmMap>::operator()(void *hint, size_t size, int prot, int flags, int fd, off_t offset, void **window) {
+		long r = sc(SYS_MMAP, hint, size, prot, translate_map_flags(flags), fd, offset);
+		if (int e = sc_error(r))
+			return e;
+		*window = reinterpret_cast<void *>(r);
+		return 0;
+	}
+
+	int Sysdeps<VmUnmap>::operator()(void *pointer, size_t size) {
+		return sc_error(sc(SYS_MUNMAP, pointer, size));
+	}
+
+	int Sysdeps<VmProtect>::operator()(void *pointer, size_t size, int prot) {
+		return sc_error(sc(SYS_MPROTECT, pointer, size, prot));
+	}
+
+	int Sysdeps<Seek>::operator()(int, off_t, int, off_t *) {
+		// No file descriptor layer yet, nothing is seekable.
+		return ESPIPE;
+	}
+
+	int Sysdeps<Close>::operator()(int fd) {
+		auto ret = sc(SYS_CLOSE, fd);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<Open>::operator()(const char *path, int flags, unsigned int mode, int *result)
+	{
+		auto ret = sc(SYS_OPEN, path, flags, mode);
+		if (int e = sc_error(ret); e)
+			return e;
 		*result = ret;
-	return 0;
-}
+		return 0;
+	}
 
-int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int , const char *path, int flags, struct stat *statbuf) {
-	__ensure(!flags);
-	__ensure(fsfdt == fsfd_target::path);
-	auto ret = sc(SYS_STAT, path, statbuf);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
-}
-
-int Sysdeps<Waitpid>::operator()(pid_t pid, int *status, int flags, struct rusage *ru, pid_t *ret_pid) {
-	__ensure(!ru);
-	auto ret = sc(SYS_WAITPID, pid, status, flags);
-	if (int e = sc_error(ret); e)
+	int Sysdeps<Read>::operator()(int fd, void *buffer, size_t size, ssize_t *result)
+	{
+		auto ret = sc(SYS_READ, fd, buffer, size);
+		if (int e = sc_error(ret); e)
 			return e;
-	*ret_pid = ret;
-	return 0;
-}
+		*result  = ret;
+		return 0;
+	}
 
-int Sysdeps<Tcgetattr>::operator()(int fd, struct termios *attr) {
-	auto ret = sc(SYS_TCGETATTR, fd, attr);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
-}
+	int Sysdeps<Recvfrom>::operator()(int, void *, size_t, int, struct sockaddr *, socklen_t *, ssize_t *) {
+		return ENOSYS;
+	}
 
-int Sysdeps<Tcsetattr>::operator()(int fd, int optional_action, const struct termios *attr) {
-	__ensure(optional_action);
+	int Sysdeps<ClockGet>::operator()(int, time_t *secs, long *nanos) {
+		// No clock syscall yet
+		*secs = 0;
+		*nanos = 0;
+		return 0;
+	}
 
-	auto ret = sc(SYS_TCSETATTR, fd, 0, attr);
-	if (int e = sc_error(ret); e)
-		return e;
-	return 0;
-}
+	// Single-threaded for now: report a spurious wake-up instead of blocking
+	int Sysdeps<FutexWait>::operator()(int *, int, timespec const *) { return 0; }
+
+	int Sysdeps<FutexWake>::operator()(int *, bool) { return 0; }
+
+	pid_t Sysdeps<GetPid>::operator()() { return sc(SYS_GETPID); }
+	pid_t Sysdeps<GetPpid>::operator()() { return sc(SYS_GETPPID); }
+
+	int Sysdeps<GetCwd>::operator()(char *buf, size_t size) {
+		auto ret = sc(SYS_GETCWD, buf, size);
+		if (int e = sc_error(ret); e) {
+			return e;
+		}
+		return 0;
+	}
+
+	int Sysdeps<Chdir>::operator()(const char *path) {
+		auto ret = sc(SYS_CHDIR, path);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<Sigaction>::operator()(int signum, const struct sigaction *act,
+	struct sigaction *oldact) {
+		auto ret = sc(SYS_SIGACTION, signum, act, oldact);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<Pipe>::operator()(int *fds, int) {
+		auto ret = sc(SYS_PIPE, fds);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<Fcntl>::operator()(int fd, int request, va_list args , int *result) {
+		size_t arg = 0;
+		if (request == F_DUPFD) {
+			arg = va_arg(args, size_t);
+		}
+		auto ret = sc(SYS_FCNTL, fd, request, arg);
+		if (int e = sc_error(ret); e)
+			return e;
+		*result = ret;
+		return 0;
+	}
+
+	int Sysdeps<Dup>::operator()(int fd, int flags, int *newfd) {
+		__ensure(!flags);
+		auto ret = sc(SYS_DUP, fd);
+		if (int e = sc_error(ret); e)
+			return e;
+		*newfd = ret;
+		return 0;
+	}
+
+	int Sysdeps<Dup2>::operator()(int fd, int, int newfd) {
+		auto ret = sc(SYS_DUP2, fd, newfd);
+		if(int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
 
 
-// int Sysdeps<Tcsendbreak>::operator()(int fd, int) {
-// 	auto ret = sc(SYS_IOCTL, fd, TCSBRK, 0);
-// 	if (int e = sc_error(ret); e)
-// 		return e;
-// 	return 0;
-// }
-//
-// int Sysdeps<Tcflow>::operator()(int fd, int action) {
-// 	auto ret = sc(SYS_IOCTL, fd, TCXONC, action);
-// 	if (int e = sc_error(ret); e)
-// 		return e;
-// 	return 0;
-// }
-//
-// int Sysdeps<Tcflush>::operator()(int fd, int queue) {
-// 	auto ret = sc(SYS_IOCTL, fd, TCFLSH, queue);
-// 	if (int e = sc_error(ret); e)
-// 		return e;
-// 	return 0;
-// }
-//
-// int Sysdeps<Tcdrain>::operator()(int fd) {
-// 	auto ret = sc(SYS_IOCTL, fd, TCSBRK, 1);
-// 	if (int e = sc_error(ret); e)
-// 		return e;
-// 	return 0;
-// }
+	int Sysdeps<Fork>::operator()(pid_t *child) {
+		auto ret = sc(SYS_FORK);
+		if (int e = sc_error(ret); e)
+			return e;
+		*child = ret;
+		return 0;
+	}
+
+	int Sysdeps<Execve>::operator()(const char *path, char *const argv[], char *const envp[]) {
+		auto ret = sc(SYS_EXECVE, path, argv, envp);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<Ioctl>::operator()(int fd, unsigned long request, void *arg, int *result) {
+		auto ret = sc(SYS_IOCTL, fd, request, arg);
+		if (int e = sc_error(ret); e)
+			return e;
+		if (result)
+			*result = ret;
+		return 0;
+	}
+
+	int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int , const char *path, int flags, struct stat *statbuf) {
+		__ensure(!flags);
+		__ensure(fsfdt == fsfd_target::path);
+		auto ret = sc(SYS_STAT, path, statbuf);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<Waitpid>::operator()(pid_t pid, int *status, int flags, struct rusage *ru, pid_t *ret_pid) {
+		__ensure(!ru);
+		auto ret = sc(SYS_WAITPID, pid, status, flags);
+		if (int e = sc_error(ret); e)
+			return e;
+		*ret_pid = ret;
+		return 0;
+	}
+
+	int Sysdeps<Tcgetattr>::operator()(int fd, struct termios *attr) {
+		auto ret = sc(SYS_TCGETATTR, fd, attr);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<Tcsetattr>::operator()(int fd, int optional_action, const struct termios *attr) {
+		__ensure(optional_action);
+
+		auto ret = sc(SYS_TCSETATTR, fd, 0, attr);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
 
 
-int Sysdeps<SetSid>::operator()(pid_t *sid) {
-	auto ret = sc(SYS_SETSID);
-	if (int e = sc_error(ret); e)
-		return e;
-	*sid = ret;
-	return 0;
-}
+	// int Sysdeps<Tcsendbreak>::operator()(int fd, int) {
+	// 	auto ret = sc(SYS_IOCTL, fd, TCSBRK, 0);
+	// 	if (int e = sc_error(ret); e)
+	// 		return e;
+	// 	return 0;
+	// }
+	//
+	// int Sysdeps<Tcflow>::operator()(int fd, int action) {
+	// 	auto ret = sc(SYS_IOCTL, fd, TCXONC, action);
+	// 	if (int e = sc_error(ret); e)
+	// 		return e;
+	// 	return 0;
+	// }
+	//
+	// int Sysdeps<Tcflush>::operator()(int fd, int queue) {
+	// 	auto ret = sc(SYS_IOCTL, fd, TCFLSH, queue);
+	// 	if (int e = sc_error(ret); e)
+	// 		return e;
+	// 	return 0;
+	// }
+	//
+	// int Sysdeps<Tcdrain>::operator()(int fd) {
+	// 	auto ret = sc(SYS_IOCTL, fd, TCSBRK, 1);
+	// 	if (int e = sc_error(ret); e)
+	// 		return e;
+	// 	return 0;
+	// }
 
-int Sysdeps<SetUid>::operator()(uid_t id) {
-	long ret;
-	return syscall(SYSCALL_SETUID, &ret, id);
-}
 
-int Sysdeps<SetGid>::operator()(gid_t id) {
-	long ret;
-	return syscall(SYSCALL_SETGID, &ret, id);
-}
+	int Sysdeps<SetSid>::operator()(pid_t *sid) {
+		auto ret = sc(SYS_SETSID);
+		if (int e = sc_error(ret); e)
+			return e;
+		*sid = ret;
+		return 0;
+	}
 
-int Sysdeps<SetEuid>::operator()(uid_t id) {
-	long ret;
-	return syscall(SYSCALL_SETEUID, &ret, id);
-}
 
-int Sysdeps<SetEgid>::operator()(gid_t id) {
-	long ret;
-	return syscall(SYSCALL_SETEGID, &ret, id);
-}
 
-uid_t Sysdeps<GetUid>::operator()() {
-	uid_t r, e, s;
-	sysdep<GetResuid>(&r, &e, &s);
 
-	return r;
-}
 
-uid_t Sysdeps<GetEuid>::operator()() {
-	uid_t r, e, s;
-	sysdep<GetResuid>(&r, &e, &s);
+	int Sysdeps<SetUid>::operator()(uid_t id) {
+		auto ret = sc(SYS_SETUID, id);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
 
-	return e;
-}
+	int Sysdeps<SetEuid>::operator()(uid_t id) {
+		auto ret = sc(SYS_SETEUID, id);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
 
-gid_t Sysdeps<GetGid>::operator()() {
-	gid_t r, e, s;
-	sysdep<GetResgid>(&r, &e, &s);
+	int Sysdeps<SetReuid>::operator()(uid_t ruid, uid_t euid) {
+		auto ret = sc(SYS_SETREUID, ruid, euid);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
 
-	return r;
-}
+	int Sysdeps<SetResuid>::operator()(uid_t ruid, uid_t euid, uid_t suid) {
+		auto ret = sc(SYS_SETRESUID, ruid, euid, suid);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
 
-gid_t Sysdeps<GetEgid>::operator()() {
-	gid_t r, e, s;
-	sysdep<GetResgid>(&r, &e, &s);
 
-	return e;
-}
+	int Sysdeps<SetGid>::operator()(gid_t id) {
+		auto ret = sc(SYS_SETGID, id);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
 
-	int Sysdeps<SetResuid>::operator()(uid_t _ruid, uid_t _euid, uid_t _suid) {
-	long ret;
-	return syscall(SYSCALL_SETRESUID, &ret, _ruid, _euid, _suid);
-}
+	int Sysdeps<SetEgid>::operator()(gid_t id) {
+		auto ret = sc(SYS_SETEGID, id);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
 
-	int Sysdeps<SetResgid>::operator()(gid_t _rgid, gid_t _egid, gid_t _sgid) {
-	long ret;
-	return syscall(SYSCALL_SETRESGID, &ret, _rgid, _egid, _sgid);
-}
+	int Sysdeps<SetRegid>::operator()(gid_t rgid, gid_t egid) {
+		auto ret = sc(SYS_SETREGID, rgid, egid);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<SetResgid>::operator()(gid_t rgid, gid_t egid, gid_t sgid) {
+		auto ret = sc(SYS_SETRESGID, rgid, egid, sgid);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+
+
+	uid_t Sysdeps<GetUid>::operator()() {
+		uid_t ruid, euid, suid;
+		auto ret = sc(SYS_GETRESUID, &ruid, &euid, &suid);
+		__ensure(!sc_error(ret));
+		return ruid;
+	}
+
+	uid_t Sysdeps<GetEuid>::operator()() {
+		uid_t ruid, euid, suid;
+		auto ret = sc(SYS_GETRESUID, &ruid, &euid, &suid);
+		__ensure(!sc_error(ret));
+		return euid;
+	}
 
 	int Sysdeps<GetResuid>::operator()(uid_t *ruid, uid_t *euid, uid_t *suid) {
-	long ret;
-	return syscall(SYSCALL_GETRESUID, &ret, (uint64_t)ruid, (uint64_t)euid, (uint64_t)suid);
-}
+		auto ret = sc(SYS_GETRESUID, ruid, euid, suid);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+
+	gid_t Sysdeps<GetGid>::operator()() {
+		gid_t rgid, egid, sgid;
+		auto ret = sc(SYS_GETRESGID, &rgid, &egid, &sgid);
+		__ensure(!sc_error(ret));
+		return rgid;
+	}
+
+	gid_t Sysdeps<GetEgid>::operator()() {
+		gid_t rgid, egid, sgid;
+		auto ret = sc(SYS_GETRESGID, &rgid, &egid, &sgid);
+		__ensure(!sc_error(ret));
+		return egid;
+	}
 
 	int Sysdeps<GetResgid>::operator()(gid_t *rgid, gid_t *egid, gid_t *sgid) {
-	long ret;
-	return syscall(SYSCALL_GETRESGID, &ret, (uint64_t)rgid, (uint64_t)egid, (uint64_t)sgid);
+		auto ret = sc(SYS_GETRESGID, rgid, egid, sgid);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
 }
-
-} // namespace mlibc
