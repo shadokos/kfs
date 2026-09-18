@@ -254,7 +254,7 @@ namespace mlibc {
 	}
 
 	int Sysdeps<Stat>::operator()(fsfd_target fsfdt, int , const char *path, int flags, struct stat *statbuf) {
-		__ensure(!flags);
+		__ensure(!flags); // todo
 		__ensure(fsfdt == fsfd_target::path);
 		auto ret = sc(SYS_STAT, path, statbuf);
 		if (int e = sc_error(ret); e)
@@ -422,6 +422,20 @@ int Sysdeps<Tcsetattr>::operator()(int fd, int optional_action, const struct ter
 
 	int Sysdeps<GetResgid>::operator()(gid_t *rgid, gid_t *egid, gid_t *sgid) {
 		auto ret = sc(SYS_GETRESGID, rgid, egid, sgid);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<Link>::operator()(const char *old_path, const char *new_path) {
+		auto ret = sc(SYS_LINK, old_path, new_path);
+		if (int e = sc_error(ret); e)
+			return e;
+		return 0;
+	}
+
+	int Sysdeps<Symlink>::operator()(const char *target_path, const char *link_path) {
+		auto ret = sc(SYS_SYMLINK, target_path, link_path);
 		if (int e = sc_error(ret); e)
 			return e;
 		return 0;

@@ -84,6 +84,7 @@ pub fn fetch(self: *Self) (Superblock.ReadError || error{ENOMEM})!void {
     self.vfs.hard_links = ext2_ino.hard_links;
     self.vfs.uid = ext2_ino.uid;
     self.vfs.gid = ext2_ino.uid;
+    self.vfs.blocks = ext2_ino.sectors;
     self.vfs.mode = ext2_ino.mode.to_vfs() orelse return error.EIO;
     self.vfs.type_specific = switch (self.vfs.mode.type) {
         .Regular => try self.fetch_regular(ext2_ino),
@@ -101,6 +102,7 @@ pub fn flush(self: *Self) (Superblock.ReadError || Superblock.WriteError)!void {
     ext2_ino.lower_size = @truncate(self.vfs.size);
     ext2_ino.upper_file_size = @intCast(self.vfs.size >> 32);
     ext2_ino.hard_links = self.vfs.hard_links;
+    ext2_ino.sectors = self.vfs.blocks;
     ext2_ino.uid = self.vfs.uid;
     ext2_ino.gid = self.vfs.gid;
     ext2_ino.mode = ext2.Inode.Mode.from_vfs(self.vfs.mode) orelse @panic("todo");
@@ -192,7 +194,7 @@ fn truncate_table(self: *Self, file_block: usize, table_address: ext2.BlockAddre
         }
     }
     if (file_block == 0) {
-        try self.superblock().free_block(table_address);
+        try self.free_block(table_address);
     }
 }
 
@@ -250,7 +252,7 @@ fn expand_table(self: *Self, first_data_block: usize, last_data_block: usize, ta
             const next_first_data_block = if (i == 0) first_data_block % pointer_per_table else 0;
             const next_last_data_block = if (i == last_index - 1) last_data_block % pointer_per_table else pointer_per_table;
             if (address.* == 0) {
-                address.* = try self.superblock().alloc_block(self.vfs.ino);
+                address.* = try self.alloc_block();
             }
             try self.expand_table(
                 next_first_data_block,
@@ -273,7 +275,7 @@ fn truncate_expand(self: *Self, new_block_count: u32) Superblock.AllocationError
     if (first_data_block < 12) {
         for (first_data_block..@min(12, last_data_block)) |data_block| {
             if (self.direct_block_pointer[data_block] == 0) {
-                self.direct_block_pointer[data_block] = try self.superblock().alloc_block(self.vfs.ino);
+                self.direct_block_pointer[data_block] = try self.alloc_block();
             }
         }
     }
@@ -282,7 +284,7 @@ fn truncate_expand(self: *Self, new_block_count: u32) Superblock.AllocationError
     last_data_block -|= 12;
     if (first_data_block < pointer_per_block and last_data_block > 0) {
         if (self.singly_indirect_pointer == 0) {
-            self.singly_indirect_pointer = try self.superblock().alloc_block(self.vfs.ino);
+            self.singly_indirect_pointer = try self.alloc_block();
         }
         try self.expand_table(first_data_block, last_data_block, self.singly_indirect_pointer, 1);
     }
@@ -290,7 +292,7 @@ fn truncate_expand(self: *Self, new_block_count: u32) Superblock.AllocationError
     last_data_block -|= pointer_per_block;
     if (first_data_block < pointer_per_double_block and last_data_block > 0) {
         if (self.doubly_indirect_pointer == 0) {
-            self.doubly_indirect_pointer = try self.superblock().alloc_block(self.vfs.ino);
+            self.doubly_indirect_pointer = try self.alloc_block();
         }
         try self.expand_table(first_data_block, last_data_block, self.doubly_indirect_pointer, 2);
     }
@@ -298,10 +300,21 @@ fn truncate_expand(self: *Self, new_block_count: u32) Superblock.AllocationError
     last_data_block -|= pointer_per_double_block;
     if (last_data_block > 0) {
         if (self.triply_indirect_pointer == 0) {
-            self.triply_indirect_pointer = try self.superblock().alloc_block(self.vfs.ino);
+            self.triply_indirect_pointer = try self.alloc_block();
         }
         try self.expand_table(first_data_block, last_data_block, self.triply_indirect_pointer, 3);
     }
+}
+
+pub fn alloc_block(self: *Self) Superblock.AllocationError!ext2.BlockAddress {
+    const ret = try self.superblock().alloc_block(self.vfs.ino);
+    self.vfs.blocks += self.superblock().vfs.block_size / 512;
+    return ret;
+}
+
+pub fn free_block(self: *Self, block: ext2.BlockAddress) Superblock.AllocationError!void {
+    try self.superblock().free_block(block);
+    self.vfs.blocks -= self.superblock().vfs.block_size / 512;
 }
 
 pub fn truncate(self: *Self, new_size: u64) Superblock.AllocationError!void {

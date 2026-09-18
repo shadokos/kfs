@@ -228,7 +228,7 @@ pub fn attach_standard_streams(job: *task.TaskDescriptor) !void {
     const tnode = try vfs.resolve(path);
     defer tnode.release();
 
-    const file = try tnode.inode.open();
+    const file = try tnode.inode.open(.{});
     // set() takes its own reference, so the one from open() is ours to drop.
     defer file.close() catch {};
 

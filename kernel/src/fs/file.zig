@@ -6,6 +6,7 @@ const Cache = @import("../memory/object_allocators/slab/cache.zig").Cache;
 const memory = @import("../memory.zig");
 
 inode: *Inode,
+options : Options,
 refs: usize = 0,
 pos: Pos = 0,
 data: ?*anyopaque = null,
@@ -15,6 +16,8 @@ pub const Options = struct {
     read: bool = false,
     write: bool = false,
     append: bool = false,
+    close_on_exec: bool = false,
+    close_on_fork: bool = false,
 };
 
 const Self = @This();
@@ -190,6 +193,12 @@ fn call_or_panic(self: *Self, comptime method: std.meta.FieldEnum(VTable), args:
     } else {
         @panic(@tagName(method) ++ " not implemented");
     }
+}
+
+pub fn clone(self : Self) !*Self {
+    const ret = try create();
+    ret.* = self;
+    ret.inode.get_ref();
 }
 
 pub fn flush(self: *Self) Error.flush!void {

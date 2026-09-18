@@ -4,7 +4,7 @@ const File = @import("file.zig");
 const Partition = @import("../device/block/partition.zig");
 const dev_t = @import("../device/types.zig").dev_t;
 
-block_size: usize,
+block_size: BlockSize,
 fragment_size: usize,
 blocks: BlockCount,
 free_blocks: BlockCount,
@@ -24,6 +24,7 @@ cache: InodeCache,
 
 pub const FileCount = usize;
 pub const BlockCount = usize;
+pub const BlockSize = usize;
 pub const Flags = struct {
     read_only: bool,
     no_suid: bool,
@@ -112,7 +113,7 @@ pub fn create_inode(
 pub fn flush_all(self: *Self) (File.Error.flush || Inode.Error.open)!void {
     var it = self.cache.iterator();
     while (it.next()) |entry| {
-        const file = try entry.value_ptr.*.open();
+        const file = try entry.value_ptr.*.open(.{});
         defer file.close() catch {};
         try file.flush();
     }

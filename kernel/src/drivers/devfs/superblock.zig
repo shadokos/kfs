@@ -64,6 +64,7 @@ pub fn load_inode(superblock: *Superblock, vfs_ino: VfsInode.Ino) Superblock.Err
         .uid = 0,
         .gid = 0,
         .hard_links = 1,
+        .blocks = 0,
         .ino = vfs_ino,
         .mode = .{
             .type = switch (ino.type) {

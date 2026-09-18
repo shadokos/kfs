@@ -10,6 +10,7 @@ $(MLIBC_BUILD)/headers/build.ninja:
 		--cross-file $(MLIBC_CROSS_FILE) \
 		--prefix=/usr \
 		-Dheaders_only=true \
+		 -Dposix_option=enabled \
 		$(MLIBC_BUILD)/headers $(MLIBC_SRC)
 
 .PHONY: libc-headers
@@ -23,6 +24,7 @@ $(MLIBC_BUILD)/libc/build.ninja:
 		-Ddefault_library=static \
 		-Dno_headers=true \
 		-Dlibgcc_dependency=false \
+		 -Dposix_option=enabled \
 		$(MLIBC_BUILD)/libc $(MLIBC_SRC)
 
 .PHONY: libc

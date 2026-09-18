@@ -277,7 +277,7 @@ pub const TaskDescriptor = struct {
         argv: []const []const u8,
         envp: []const []const u8,
     ) Errno!*ExecRequest {
-        const file = try inode.open();
+        const file = try inode.open(.{});
         defer file.close() catch {};
 
         var magic: [2]u8 = undefined;
@@ -360,9 +360,13 @@ pub const TaskDescriptor = struct {
         // there is nothing left to release.
         const entry = load_image(file_data, argv_z, envp_z) catch exit(1);
 
+        const task = scheduler.get_current_task();
+
         if (request.suid) |suid| {
-            scheduler.get_current_task().euid = suid;
+            task.euid = suid;
         }
+
+        task.files.exec();
 
         userspace.iret_to(entry);
     }

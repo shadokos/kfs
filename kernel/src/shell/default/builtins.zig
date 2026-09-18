@@ -545,7 +545,7 @@ pub fn ls(shell: anytype, args: [][]u8) CmdError!void {
         return CmdError.OtherError;
     };
 
-    const file = try translate_errno(shell, tnode.inode.open());
+    const file = try translate_errno(shell, tnode.inode.open(.{}));
     defer file.close() catch {};
 
     var ent: @import("../../fs/file.zig").DirEnt = undefined;
@@ -587,7 +587,7 @@ pub fn cat(shell: anytype, args: [][]u8) CmdError!void {
         return CmdError.OtherError;
     }
 
-    const file = try translate_errno(shell, file_tnode.inode.open());
+    const file = try translate_errno(shell, file_tnode.inode.open(.{}));
     defer file.close() catch {};
     var buffer: [512]u8 = undefined;
     var read_size: usize = undefined;
@@ -632,7 +632,7 @@ pub fn write(shell: anytype, args: [][]u8) CmdError!void {
         },
     }
 
-    const file = try translate_errno(shell, file_tnode.inode.open());
+    const file = try translate_errno(shell, file_tnode.inode.open(.{}));
     defer file.close() catch {};
     shell.print("{} bytes written\n", .{try translate_errno(shell, file.write(data))});
 }
@@ -655,7 +655,7 @@ pub fn pwrite(shell: anytype, args: [][]u8) CmdError!void {
         return CmdError.OtherError;
     }
 
-    const file = try translate_errno(shell, file_tnode.inode.open());
+    const file = try translate_errno(shell, file_tnode.inode.open(.{}));
     defer file.close() catch {};
     shell.print("{} bytes written\n", .{try translate_errno(shell, file.pwrite(offset, data))});
 }
@@ -932,7 +932,7 @@ pub fn stty(shell: anytype, args: [][]u8) CmdError!void {
     };
     defer tnode.release();
 
-    const file = try translate_errno(shell, tnode.inode.open());
+    const file = try translate_errno(shell, tnode.inode.open(.{}));
     defer file.close() catch {};
 
     var attr: termios.abi.Termios = undefined;
@@ -1051,7 +1051,7 @@ pub fn tioctl(shell: anytype, args: [][]u8) CmdError!void {
     };
     defer tnode.release();
 
-    const file = try translate_errno(shell, tnode.inode.open());
+    const file = try translate_errno(shell, tnode.inode.open(.{}));
     defer file.close() catch {};
 
     var sid: i32 = -1;
@@ -1082,7 +1082,7 @@ pub fn hangup(shell: anytype, args: [][]u8) CmdError!void {
     };
     defer tnode.release();
 
-    const file = try translate_errno(shell, tnode.inode.open());
+    const file = try translate_errno(shell, tnode.inode.open(.{}));
     defer file.close() catch {};
 
     const terminal = @import("../../drivers/tty/tty_cdev.zig").terminal_of(file) orelse {
@@ -1168,7 +1168,7 @@ pub fn test_elf(shell: anytype, args: [][]u8) CmdError!void {
     ) catch return CmdError.OtherError;
     errdefer heapAlloc.free(data);
 
-    const file = tnode.inode.open() catch return CmdError.OtherError;
+    const file = tnode.inode.open(.{}) catch return CmdError.OtherError;
     defer file.close() catch {};
 
     if ((file.pread(0, data) catch return CmdError.OtherError) != data.len)

@@ -90,13 +90,9 @@ pub fn vtable_truncate(base: *Inode, new_size: u64) Inode.Error.truncate!void {
     return Ext2Inode.FromVfs(base).truncate(new_size);
 }
 
-pub fn vtable_open(base: *Inode, file: *File) Inode.Error.open!void {
-    file.* = .{
-        .inode = base.get_ref(),
-        .pos = 0,
-        .vtable = &file_vtable,
-        .refs = 1,
-    };
+pub fn vtable_open(_: *Inode, file: *File) Inode.Error.open!void {
+    file.vtable = &file_vtable;
+    file.pos = 0;
 }
 
 pub const inode_vtable: Inode.VTable = .{

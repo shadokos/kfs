@@ -83,7 +83,7 @@ pub fn on_init(shell: *Shell) void {
         return std.log.err("CI: cannot resolve " ++ path, .{});
     defer tnode.release();
 
-    line.file = tnode.inode.open() catch
+    line.file = tnode.inode.open(.{}) catch
         return std.log.err("CI: cannot open " ++ path, .{});
 
     const terminal = tty_cdev.terminal_of(line.file.?) orelse

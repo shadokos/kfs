@@ -115,18 +115,18 @@ pub fn init() !void {
     try @import("file.zig").init_cache();
 }
 
-fn resolve_max_symlink(cwd: *Tnode, path: []const u8, max_symlink: usize) !*Tnode {
+fn resolve_max_symlink(cwd: *Tnode, path: []const u8, max_symlink: usize, resolve_final_component : bool) !*Tnode {
     var it = std.fs.path.componentIterator(path) catch unreachable;
     var current_dentry = (if (it.root() == null) cwd else scheduler.get_current_task().root).get_ref();
     errdefer current_dentry.release();
     while (it.next()) |component| {
         const next = current_dentry.lookup(component.name) orelse return Errno.ENOENT;
         errdefer next.release();
-        if (it.peekNext() != null and next.inode.mode.type == .Link) {
+        if ((it.peekNext() != null or resolve_final_component) and next.inode.mode.type == .Link) {
             if (max_symlink == 0) {
                 return Errno.ELOOP;
             }
-            const resolved_link = try resolve_max_symlink(current_dentry, next.inode.type_specific.Link, max_symlink - 1);
+            const resolved_link = try resolve_max_symlink(current_dentry, next.inode.type_specific.Link, max_symlink - 1, true);
             current_dentry.release();
             next.release();
             current_dentry = resolved_link;
@@ -139,9 +139,18 @@ fn resolve_max_symlink(cwd: *Tnode, path: []const u8, max_symlink: usize) !*Tnod
 }
 
 pub fn resolve_at(cwd: *Tnode, path: []const u8) !*Tnode {
-    return resolve_max_symlink(cwd, path, 5); // todo: remove magic number
+    return resolve_max_symlink(cwd, path, 5, false); // todo: remove magic number
 }
 
 pub fn resolve(path: []const u8) !*Tnode {
     return resolve_at(scheduler.get_current_task().cwd, path);
+}
+
+
+pub fn resolve_final_at(cwd: *Tnode, path: []const u8) !*Tnode {
+    return resolve_max_symlink(cwd, path, 5, true); // todo: remove magic number
+}
+
+pub fn resolve_final(path: []const u8) !*Tnode {
+    return resolve_final_at(scheduler.get_current_task().cwd, path);
 }

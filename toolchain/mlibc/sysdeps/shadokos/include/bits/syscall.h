@@ -63,6 +63,7 @@ done | sort -k3 -g
 #define SYS_SETRESUID 64
 #define SYS_SETRESGID 65
 #define SYS_SETGID 66
+#define SYS_LINK 67
 
 
 

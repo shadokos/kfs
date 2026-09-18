@@ -6,12 +6,8 @@ const registry = @import("../device/block/registry.zig");
 const block_core = @import("../device/block/block.zig");
 
 pub fn open(base: *Inode, file: *File) Inode.Error.open!void {
-    file.* = .{
-        .inode = base.get_ref(),
-        .vtable = &file_vtable,
-        .refs = 1,
-        .data = registry.get_partition(base.type_specific.Block) orelse return error.ENXIO,
-    };
+    file.vtable = &file_vtable;
+    file.data = registry.get_partition(base.type_specific.Block) orelse return error.ENXIO;
 }
 
 fn pread(file: *File, pos: u64, buffer: []u8) File.Error.pread!usize {

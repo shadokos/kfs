@@ -3,12 +3,8 @@ const Inode = @import("inode.zig");
 const File = @import("file.zig");
 const memory = @import("../memory.zig");
 
-pub fn open(base: *Inode, file: *File) Inode.Error.open!void {
-    file.* = .{
-        .inode = base.get_ref(),
-        .vtable = &file_vtable,
-        .refs = 1,
-    };
+pub fn open(_: *Inode, file: *File) Inode.Error.open!void {
+    file.vtable = &file_vtable;
     if (file.inode.type_specific.Fifo == null) {
         file.inode.type_specific.Fifo = .{
             .buffer = memory.smallAlloc.alloc(u8, 1024) catch return error.ENOMEM,

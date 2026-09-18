@@ -85,36 +85,96 @@ char *strsignal(int sig) {
 	#define CASE_FOR(sigconst) case sigconst: s = #sigconst; break;
 	const char *s;
 	switch(sig) {
-	CASE_FOR(SIGABRT)
-	CASE_FOR(SIGFPE)
-	CASE_FOR(SIGILL)
-	CASE_FOR(SIGINT)
-	CASE_FOR(SIGSEGV)
-	CASE_FOR(SIGTERM)
-	CASE_FOR(SIGPROF)
-	CASE_FOR(SIGIO)
-	CASE_FOR(SIGPWR)
-	CASE_FOR(SIGALRM)
-	CASE_FOR(SIGBUS)
-	CASE_FOR(SIGCHLD)
-	CASE_FOR(SIGCONT)
-	CASE_FOR(SIGHUP)
-	CASE_FOR(SIGKILL)
-	CASE_FOR(SIGPIPE)
-	CASE_FOR(SIGQUIT)
-	CASE_FOR(SIGSTOP)
-	CASE_FOR(SIGTSTP)
-	CASE_FOR(SIGTTIN)
-	CASE_FOR(SIGTTOU)
-	CASE_FOR(SIGUSR1)
-	CASE_FOR(SIGUSR2)
-	CASE_FOR(SIGSYS)
-	CASE_FOR(SIGTRAP)
-	CASE_FOR(SIGURG)
-	CASE_FOR(SIGVTALRM)
-	CASE_FOR(SIGXCPU)
-	CASE_FOR(SIGXFSZ)
-	CASE_FOR(SIGWINCH)
+#ifdef SIGABRT
+		CASE_FOR(SIGABRT)
+#endif
+#ifdef SIGFPE
+		CASE_FOR(SIGFPE)
+#endif
+#ifdef SIGILL
+		CASE_FOR(SIGILL)
+#endif
+#ifdef SIGINT
+		CASE_FOR(SIGINT)
+#endif
+#ifdef SIGSEGV
+		CASE_FOR(SIGSEGV)
+#endif
+#ifdef SIGTERM
+		CASE_FOR(SIGTERM)
+#endif
+#ifdef SIGPROF
+		CASE_FOR(SIGPROF)
+#endif
+#ifdef SIGIO
+		CASE_FOR(SIGIO)
+#endif
+#ifdef SIGPWR
+		CASE_FOR(SIGPWR)
+#endif
+#ifdef SIGALRM
+		CASE_FOR(SIGALRM)
+#endif
+#ifdef SIGBUS
+		CASE_FOR(SIGBUS)
+#endif
+#ifdef SIGCHLD
+		CASE_FOR(SIGCHLD)
+#endif
+#ifdef SIGCONT
+		CASE_FOR(SIGCONT)
+#endif
+#ifdef SIGHUP
+		CASE_FOR(SIGHUP)
+#endif
+#ifdef SIGKILL
+		CASE_FOR(SIGKILL)
+#endif
+#ifdef SIGPIPE
+		CASE_FOR(SIGPIPE)
+#endif
+#ifdef SIGQUIT
+		CASE_FOR(SIGQUIT)
+#endif
+#ifdef SIGSTOP
+		CASE_FOR(SIGSTOP)
+#endif
+#ifdef SIGTSTP
+		CASE_FOR(SIGTSTP)
+#endif
+#ifdef SIGTTIN
+		CASE_FOR(SIGTTIN)
+#endif
+#ifdef SIGTTOU
+		CASE_FOR(SIGTTOU)
+#endif
+#ifdef SIGUSR1
+		CASE_FOR(SIGUSR1)
+#endif
+#ifdef SIGUSR2
+		CASE_FOR(SIGUSR2)
+#endif
+#ifdef SIGSYS
+		CASE_FOR(SIGSYS)
+#endif
+#ifdef SIGTRAP
+		CASE_FOR(SIGTRAP)
+#endif
+#ifdef SIGURG
+		CASE_FOR(SIGURG)
+#endif
+#ifdef SIGVTALRM
+		CASE_FOR(SIGVTALRM)
+#endif
+#ifdef SIGXCPU
+		CASE_FOR(SIGXCPU)
+#endif
+#ifdef SIGXFSZ
+		CASE_FOR(SIGXFSZ)
+#endif
+#ifdef SIGWINCH
+		CASE_FOR(SIGWINCH)
+	#endif
 	default:
 		mlibc::infoLogger() << "mlibc: Unknown signal number " << sig << frg::endlog;
 		s = "Unknown signal number";

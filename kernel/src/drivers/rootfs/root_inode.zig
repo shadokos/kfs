@@ -10,6 +10,7 @@ pub var instance: Inode = .{
     .superblock = &Superblock.instance,
     .ino = 0,
     .hard_links = 0,
+    .blocks = 0,
     .size = 0,
     .uid = 0,
     .gid = 0,

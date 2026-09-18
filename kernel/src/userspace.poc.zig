@@ -304,7 +304,7 @@ export fn userland_io() linksection(".userspace") void {
     const fd = syscall(.open, .{
         "/bonjour".ptr,
         open.Flags{
-            .openMode = .wronly,
+            .openMode = .write_only,
             .create = true,
             .exclusive = true,
         },

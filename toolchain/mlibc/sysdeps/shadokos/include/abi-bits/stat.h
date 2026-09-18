@@ -54,7 +54,7 @@ struct stat {
 	uint32_t st_nlink;
 	uint32_t st_uid;
 	uint32_t st_gid;
-	//	dev_t st_rdev;
+	dev_t st_rdev;
 	//	dev_t __pad1;
 	uint64_t st_size;
 	//	blksize_t st_blksize;
@@ -63,6 +63,8 @@ struct stat {
 	struct timespec st_atim;
 	struct timespec st_mtim;
 	struct timespec st_ctim;
+	blksize_t st_blksize;
+	blkcnt_t st_blocks;
 	//	int __pad3[2];
 };
 

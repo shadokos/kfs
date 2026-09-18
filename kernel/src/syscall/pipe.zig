@@ -19,7 +19,7 @@ pub fn do(pair: *[2]FileSet.Fd) !void {
         .Fifo = {},
     },);
     defer inode.release();
-    pair[0] = try task.files.add(try inode.open(), 0);
+    pair[0] = try task.files.add(try inode.open(.{.read = true}), 0);
     errdefer task.files.remove(pair[0]) catch @panic("todo");
-    pair[1] = try task.files.add(try inode.open(), 0);
+    pair[1] = try task.files.add(try inode.open(.{.write = true}), 0);
 }

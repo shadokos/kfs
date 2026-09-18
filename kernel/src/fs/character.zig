@@ -7,12 +7,7 @@ const CharDevice = @import("../device/char/cdev.zig");
 
 pub fn open(base: *Inode, file: *File) Inode.Error.open!void {
     const device = registry.get_device(base.type_specific.Character) orelse return error.ENXIO;
-    file.* = .{
-        .vtable = undefined,
-        .inode = base.get_ref(),
-        .refs = 1,
-        .data = device,
-    };
+    file.data = device;
     // /dev/tty without a controlling terminal has to reach the caller as ENXIO.
     device.open(file) catch |err| return switch (err) {
         error.DeviceNotFound => error.ENXIO,

@@ -18,6 +18,7 @@ pub var instance: Inode = .{
     .ino = 0,
     .hard_links = 0,
     .size = 0,
+    .blocks = 0,
     .uid = 0,
     .gid = 0,
     .mode = .{
@@ -32,12 +33,8 @@ pub var instance: Inode = .{
     .vtable = &root_vtable,
 };
 
-fn root_open(inode: *Inode, file: *File) Inode.Error.open!void {
-    file.* = .{
-        .inode = inode,
-        .refs = 1,
-        .vtable = &root_file_vtable,
-    };
+fn root_open(_: *Inode, file: *File) Inode.Error.open!void {
+    file.vtable = &root_file_vtable;
 }
 
 fn root_lookup(inode: *Inode, name: []const u8) Inode.Error.lookup!?*Inode {

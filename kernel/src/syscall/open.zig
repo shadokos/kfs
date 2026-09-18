@@ -28,7 +28,7 @@ pub const Flags = packed struct(u32) {
         read_only,
         read_write,
         search,
-        wronly,
+        write_only,
     };
 };
 
@@ -88,20 +88,22 @@ fn create_file(path_slice: []const u8, flags: Flags, mode: Mode) Errno!*TNode {
 }
 
 pub fn do(path: [*:0]const u8, flags: Flags, mode: Mode) Errno!FileSet.Fd {
-//    std.log.debug("begin open {s}", .{path});
-//    defer std.log.debug("end open", .{});
-    const tnode = if (flags.create) try create_file(std.mem.span(path), flags, mode) else try vfs.resolve(std.mem.span(path));
+    const tnode = if (flags.create) try create_file(std.mem.span(path), flags, mode) else try vfs.resolve_final(std.mem.span(path));
     defer tnode.release();
     const inode = tnode.inode;
-    if (flags.close_on_exec or
-        flags.close_on_fork or
-        flags.directory or
+    if (flags.directory or
         flags.no_follow or
         flags.non_blocking or
         flags.tty_init) {
         std.log.warn("Open: Some flags are not implemented: {}", .{flags});
     }
-    const file = try inode.open();
+    const file = try inode.open(.{
+        .read = flags.openMode == .read_only or flags.openMode == .read_write,
+        .write = flags.openMode == .write_only or flags.openMode == .read_write,
+        .append = flags.append,
+        .close_on_exec = flags.close_on_exec,
+        .close_on_fork = flags.close_on_fork,
+    });
     errdefer file.close() catch {};
     if (flags.truncate and inode.mode.type == .Regular) {
         try inode.truncate(0);

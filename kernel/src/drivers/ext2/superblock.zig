@@ -341,6 +341,7 @@ pub fn create_inode(
         .superblock = self.ToVfs(),
         .ino = ino,
         .hard_links = 0,
+        .blocks = 0,
         .size = 0,
         .uid = uid,
         .gid = gid,

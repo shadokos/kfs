@@ -1,0 +1,12 @@
+# If job control is disabled, skip the test
+test "`type jobs`" = "jobs is a shell builtin" || exit 77
+
+exec 2>&1
+
+$THIS_SH -c 'kill -9 $$'
+echo 137:$?
+
+! $THIS_SH -c 'kill -9 $$'
+echo 0:$?
+
+echo Done

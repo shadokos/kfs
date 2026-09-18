@@ -21,10 +21,23 @@ pub fn clone(self: Self) Self {
 
     for (self.files[0..], ret.files[0..]) |old, *new| {
         if (old) |f| {
-            new.* = f.get_ref();
+            if (!f.options.close_on_fork) {
+                new.* = f.get_ref();
+            }
         }
     }
     return ret;
+}
+
+pub fn exec(self: *Self) void {
+    for (self.files[0..]) |*e| {
+        if (e.*) |f| {
+            if (f.options.close_on_exec) {
+                f.close() catch {}; // todo
+                e.* = null;
+            }
+        }
+    }
 }
 
 pub fn get(self: *Self, fd: Fd) !*File {

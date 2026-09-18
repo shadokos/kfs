@@ -28,9 +28,9 @@ fn collect(arr: [*:null]const ?[*:0]const u8) Errno![]const []const u8 {
     return out;
 }
 
-fn is_interpreted(tnode : *TNode) Errno!bool {
+fn is_interpreted(inode : *INode) Errno!bool {
     var buffer : [2]u8 = undefined;
-    var file = try tnode.inode.open();
+    var file = try inode.open(.{.read = true});
     const ret = try file.pread(0, buffer[0..2]) == 2 and
         std.mem.eql(u8, buffer[0..2], "#!");
     try file.close();
@@ -38,7 +38,7 @@ fn is_interpreted(tnode : *TNode) Errno!bool {
 }
 
 fn get_interpreter_args(tnode : *TNode, buffer : []u8, path : [*:0]const u8, base_argv : []const []const u8) Errno![][]const u8 {
-    const file = try tnode.inode.open();
+    const file = try tnode.inode.open(.{.read = true});
     const size = try file.pread(2, buffer[0..]);
     const slice = buffer[0..size];
     const line = std.mem.sliceTo(slice, '\n');
@@ -57,11 +57,9 @@ fn get_interpreter_args(tnode : *TNode, buffer : []u8, path : [*:0]const u8, bas
 }
 
 pub fn do(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null]const ?[*:0]const u8) Errno!void {
-    std.log.debug("a", .{});
     var buffer :[100]u8 = undefined;
-    const tnode = try vfs.resolve(std.mem.span(path));
+    const tnode = try vfs.resolve_final(std.mem.span(path));
     errdefer tnode.release();
-    std.log.debug("b", .{});
 
     if (tnode.inode.mode.type != .Regular) {
         return Errno.EACCES;
@@ -72,32 +70,26 @@ pub fn do(path: [*:0]const u8, argv: [*:null]const ?[*:0]const u8, envp: [*:null
     const envp_slices = try collect(envp);
     errdefer allocator.free(envp_slices);
 
+    const task = scheduler.get_current_task();
 
-    for (scheduler.get_current_task().files.files[0..], 0..) |f,i| {
-        if (f) |g|
-            std.log.debug("fork: opened fd: {} {}", .{i, g.inode.ino});
+    for (task.files.files[0..], 0..) |opt_f,i| {
+        if (opt_f) |f| {
+            if (f.options.close_on_exec) {
+                try task.files.remove(@intCast(i));
+            }
+        }
     }
 
     var inode = tnode.inode.get_ref();
-    if (try is_interpreted(tnode)) {
-        std.log.debug("c", .{});
+    if (try is_interpreted(tnode.inode)) {
         argv_slices = try get_interpreter_args(tnode, buffer[0..], path, argv_slices,);
-        std.log.debug("d", .{});
         const interpreter_tnode = try vfs.resolve(argv_slices[0]);
-        std.log.debug("e", .{});
         inode = interpreter_tnode.inode.get_ref();
         interpreter_tnode.release();
     }
 
-    std.log.debug("f", .{});
     const req = try TaskDescriptor.prepare_exec(inode, argv_slices, envp_slices);
-    std.log.debug("g", .{});
 
-
-    for (scheduler.get_current_task().files.files[0..], 0..) |f,i| {
-        if (f) |g|
-            std.log.debug("fork: opened fd: {} {}", .{i, g.inode.ino});
-    }
     // Nothing can fail past this point, and commit_exec does not come back: it resets the
     // kernel stack this frame lives on. Release what we own now, no defer would ever run.
     allocator.free(envp_slices);

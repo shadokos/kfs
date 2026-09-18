@@ -15,6 +15,7 @@ size: u64,
 uid: Uid,
 gid: Gid,
 mode: Mode,
+blocks : SuperBlock.BlockCount,
 type_specific: TypeSpecificData,
 refs: usize = 0,
 
@@ -96,7 +97,7 @@ pub const VTable = struct {
             if (self.mode.type != .Directory) {
                 return error.ENOTDIR;
             }
-            var file = self.open() catch |e| return @errorCast(e);
+            var file = self.open(.{}) catch |e| return @errorCast(e);
             var dirent: File.DirEnt = undefined;
             while (try file.readdir(&dirent)) {
                 if (std.mem.eql(u8, dirent.name[0..dirent.name_len], name)) {
@@ -166,9 +167,17 @@ pub fn destroy(self: *Self) void {
     cache.allocator().destroy(self);
 }
 
-pub fn open(self: *Self) Error.open!*File {
+pub fn open(self: *Self, options : File.Options) Error.open!*File {
     const ret = try File.create();
     errdefer ret.destroy();
+    ret.* = .{
+        .inode = self.get_ref(),
+        .vtable = undefined,
+        .options = options,
+        .data = null,
+    };
+    errdefer self.release();
+
     if (self.mode.type == .Fifo) {
         try @import("pipe.zig").open(self, ret);
     } else if (self.mode.type == .Block) {
@@ -178,7 +187,7 @@ pub fn open(self: *Self) Error.open!*File {
     } else {
         try self.call_or_panic(.open, .{ret});
     }
-    return ret;
+    return ret.get_ref();
 }
 
 pub fn lookup(self: *Self, name: []const u8) Error.lookup!?*Self {

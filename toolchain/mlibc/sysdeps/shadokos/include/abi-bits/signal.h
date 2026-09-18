@@ -118,50 +118,49 @@ typedef void (*__sighandler) (int);
 #define SIG_DFL ((__sighandler)(void *)(0))
 #define SIG_IGN ((__sighandler)(void *)(1))
 
-#define SIGABRT 6
-#define SIGFPE 8
-#define SIGILL 4
-#define SIGINT 2
-#define SIGSEGV 11
-#define SIGTERM 15
-#define SIGPROF 27
-#define SIGIO 29
-#define SIGPWR 30
-#define SIGRTMIN 35
-#define SIGRTMAX 64
 
 /* constants for sigprocmask() */
 #define SIG_BLOCK 0
 #define SIG_UNBLOCK 1
 #define SIG_SETMASK 2
 
-#define SIGHUP    1
-#define SIGQUIT   3
-#define SIGTRAP   5
-#define SIGIOT    SIGABRT
-#define SIGBUS    7
-#define SIGKILL   9
-#define SIGUSR1   10
-#define SIGUSR2   12
-#define SIGPIPE   13
-#define SIGALRM   14
-#define SIGSTKFLT 16
-#define SIGCHLD   17
-#define SIGCONT   18
-#define SIGSTOP   19
-#define SIGTSTP   20
-#define SIGTTIN   21
-#define SIGTTOU   22
-#define SIGURG    23
-#define SIGXCPU   24
-#define SIGXFSZ   25
-#define SIGVTALRM 26
-#define SIGWINCH  28
-#define SIGPOLL   29
-#define SIGSYS    31
-#define SIGUNUSED SIGSYS
-#define SIGCANCEL 32
-#define SIGTIMER  33
+#define SIGHUP 1
+#define SIGINT 2
+#define SIGQUIT 3
+#define SIGILL 4
+#define SIGTRAP 5
+#define SIGABRT 6
+#define SIGEMT 7
+#define SIGFPE 8
+#define SIGKILL 9
+#define SIGBUS 10
+#define SIGSEGV 11
+#define SIGSYS 12
+#define SIGPIPE 13
+#define SIGALRM 14
+#define SIGTERM 15
+#define SIGUSR1 16
+#define SIGUSR2 17
+#define SIGCHLD 18
+#define SIGPWR 19
+#define SIGWINCH 20
+#define SIGURG 21
+#define SIGPOLL 22
+#define SIGSTOP 23
+#define SIGTSTP 24
+#define SIGCONT 25
+#define SIGTTIN 26
+#define SIGTTOU 27
+#define SIGVTALRM 28
+#define SIGPROF 29
+#define SIGXCPU 30
+#define SIGXFSZ 31
+
+#define SIGRTMIN 32
+#define SIGRTMAX 63
+
+// todo: remove this
+#define SIGCANCEL (SIGRTMIN+1)
 
 #if __MLIBC_XOPEN
 
@@ -250,32 +249,6 @@ struct sigaction {
 #	define __pollution(n) n
 #else
 #	define __pollution(n) __ ## n
-#endif
-
-#if defined(_GNU_SOURCE)
-#define REG_R8 0
-#define REG_R9 1
-#define REG_R10 2
-#define REG_R11 3
-#define REG_R12 4
-#define REG_R13 5
-#define REG_R14 6
-#define REG_R15 7
-#define REG_RDI 8
-#define REG_RSI 9
-#define REG_RBP 10
-#define REG_RBX 11
-#define REG_RDX 12
-#define REG_RAX 13
-#define REG_RCX 14
-#define REG_RSP 15
-#define REG_RIP 16
-#define REG_EFL 17
-#define REG_CSGSFS 18
-#define REG_ERR 19
-#define REG_TRAPNO 20
-#define REG_OLDMASK 21
-#define REG_CR2 22
 #endif
 
 #define __NGREG 23

@@ -14,6 +14,8 @@ pub fn do(path1: [*:0]const u8, path2: [*:0]const u8) Errno!void {
     const dir_path = std.fs.path.dirnamePosix(path_slice) orelse if (std.fs.path.isAbsolutePosix(path_slice)) "/" else ".";
     const name = std.fs.path.basenamePosix(path_slice);
 
+    std.log.debug("symlink: {s}", .{dir_path});
+    std.log.debug("symlink: {s}", .{name});
     const dir_tnode = try vfs.resolve(dir_path);
     defer dir_tnode.release();
 

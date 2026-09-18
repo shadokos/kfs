@@ -1,7 +1,7 @@
 FROM debian
 
 RUN apt update -y && apt upgrade -y 
-RUN apt install -y libmpfr-dev libgmp-dev libmpc-dev make curl autoconf meson git wget 
+RUN apt install -y libmpfr-dev libgmp-dev libmpc-dev make curl autoconf meson git wget autoconf2.69
 
 ENV ZIG_ARCHIVE=zig-x86_64-linux-0.17.0-dev.2085+5e36170b5
 RUN wget https://ziglang.org/builds/$ZIG_ARCHIVE.tar.xz
@@ -26,6 +26,8 @@ RUN ./make_toolchain.sh build_gcc
 ENV PATH=$TOOLCHAIN_DIR/usr/bin:$PATH
 
 RUN make libc
+
+RUN ./make_toolchain.sh build_gcc_cpp
 
 RUN mkdir /mount
 

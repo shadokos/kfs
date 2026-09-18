@@ -64,6 +64,17 @@ build_gcc() (
 	DESTDIR="${TOOLCHAIN_DIR}" make install-gcc install-target-libgcc
 )
 
+
+build_gcc_cpp() (
+	export PATH=$TOOLCHAIN_DIR/usr/bin:$PATH
+	(cd $GCC_BASE/libstdc++-v3; autoconf2.69)
+	cd $GCC_BASE/build
+	make -j$(nproc) all-target-libstdc++-v3
+	DESTDIR="${TOOLCHAIN_DIR}" make install-target-libstdc++-v3
+)
+
+
+
 export SYSROOT=$SYSROOT_DIR
 
 $@

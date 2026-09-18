@@ -56,6 +56,9 @@ pub const Id = enum(u32) {
     SIGPROF = 29,
     SIGXCPU = 30,
     SIGXFSZ = 31,
+    SIGRTMIN = 32,
+    SIGRTMAX = 63,
+    _,
 };
 
 pub const Ill = enum(i32) {
@@ -237,7 +240,7 @@ pub const SignalQueue = struct {
 };
 
 pub const SignalManager = struct {
-    queues: [32]SignalQueue = undefined,
+    queues: [@intFromEnum(Id.SIGRTMAX) + 1]SignalQueue = undefined,
     pending: SigSet = 0,
     mutex: Mutex = .{},
     const Self = @This();
@@ -279,6 +282,9 @@ pub const SignalManager = struct {
         self.init_queue(.SIGVTALRM, .Terminate, true);
         self.init_queue(.SIGXCPU, .Terminate, true);
         self.init_queue(.SIGXFSZ, .Terminate, true);
+        for (@intFromEnum(Id.SIGRTMIN)..@intFromEnum(Id.SIGRTMAX)) |id| {
+            self.init_queue(@enumFromInt(id), .Ignore, true);
+        }
         return self;
     }
 

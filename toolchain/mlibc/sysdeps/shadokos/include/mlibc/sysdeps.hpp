@@ -54,6 +54,20 @@ struct ShadokosSysdepTags :
 	SetEuid,
 	SetGid,
 	SetUid,
+	Link,
+	Symlink,
+	// todo:
+	// Readlink,
+	// SigProcMask,
+	// Utimensat,
+	// Sleep,
+	// Unlinkat,
+	// Mkfifoat,
+	// Mkdir,
+	// Rename,
+	// Poll,
+	// OpenDir
+	// ReadEntries
     // Tcdrain,
     // Tcflush,
     // Tcflow,
@@ -61,29 +75,6 @@ struct ShadokosSysdepTags :
 	// Not implemented (ENOSYS), but the posix/bsd sources dispatch to
 	// them at compile time so the tags have to exist.
 	Recvfrom
-
-
-//	GetEuid,
-//	GetResuid,
-//	SetResuid,
-//	GetGid,
-//	GetEgid,
-//	GetResgid,
-//	SetResgid,
-//	SetReuid,
-//	SetRegid,
-//	SetUid,
-//	SetEuid,
-//	SetGid,
-//	SetEgid,
-//	SetGroups,
-//	GetGroups,
-//	GetTid,
-//	GetPpid,
-//	GetPgid,
-//	SetPgid,
-//	SetSid,
-//	GetSid,
 {};
 
 template<typename Tag>
