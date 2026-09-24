@@ -17,6 +17,7 @@ pub const Cache = struct {
     const Self = @This();
     pub const Error = error{ InitializationFailed, AllocationFailed };
     pub const AllocError = Error || Slab.Error || PageAllocator.Error;
+    pub const DestroyError = error{CacheNotEmpty};
 
     next: ?*Cache = null,
     prev: ?*Cache = null,
@@ -165,6 +166,15 @@ pub const Cache = struct {
         while (empty) |e| : (empty = e.next()) {
             ret += self.obj_per_slab;
         }
+        return ret;
+    }
+
+    fn unsafe_allocated_chunks(self: *Cache) usize {
+        var ret: usize = 0;
+        var full = self.slab_full;
+        while (full) |s| : (full = s.next()) ret += s.in_use();
+        var partial = self.slab_partial;
+        while (partial) |s| : (partial = s.next()) ret += s.in_use();
         return ret;
     }
 
@@ -466,9 +476,12 @@ pub const GlobalCache = struct {
         return cache;
     }
 
-    pub fn destroy(self: *Self, cache: *Cache) void {
+    pub fn destroy(self: *Self, cache: *Cache, force: bool) !void {
         self.lock.acquire();
         defer self.lock.release();
+
+        if (!force and cache.unsafe_allocated_chunks() != 0)
+            return Cache.DestroyError.CacheNotEmpty;
 
         cache.shrink();
         var lst: ?Slab = cache.slab_full;

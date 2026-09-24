@@ -124,6 +124,9 @@ pub fn BuddyAllocator(comptime max_order: order_t) type {
                 std.mem.alignBackward(idx_t, page_idx, @as(idx_t, 1) << order),
             );
 
+            if (frame.state != .other)
+                @panic("lst_add: page frame state is not .other");
+
             frame.state = .{ .buddy = .{ .prev = null, .next = self.free_lists[order] } };
             if (frame.state.buddy.next) |next| next.state.buddy.prev = frame;
             self.free_lists[order] = frame;
