@@ -223,12 +223,20 @@ pub fn cache_create(_: anytype, args: [][]u8) CmdError!void {
 // // TODO: Remove this builtin
 // ... For debugging purposes only
 pub fn cache_destroy(_: anytype, args: [][]u8) CmdError!void {
-    if (args.len != 2) return CmdError.InvalidNumberOfArguments;
+    if (args.len < 2 or args.len > 3) return CmdError.InvalidNumberOfArguments;
 
     const globalCache = &@import("../../memory.zig").globalCache;
     const addr = std.fmt.parseInt(usize, args[1], 0) catch return CmdError.InvalidParameter;
 
-    globalCache.destroy(@ptrFromInt(addr));
+    const force = if (args.len == 3) blk: {
+        if (!std.mem.eql(u8, args[2], "force")) return CmdError.InvalidParameter;
+        break :blk true;
+    } else false;
+
+    globalCache.destroy(@ptrFromInt(addr), force) catch {
+        printk("cache still has allocated objects, pass `force` to destroy it anyway\n", .{});
+        return CmdError.OtherError;
+    };
 }
 
 // TODO: Remove this builtin
