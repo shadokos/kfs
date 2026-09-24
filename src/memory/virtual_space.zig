@@ -48,6 +48,7 @@ pub const VirtualSpace = struct {
             @sizeOf(Self),
             @alignOf(Self),
             5,
+            .{},
         );
     }
 
