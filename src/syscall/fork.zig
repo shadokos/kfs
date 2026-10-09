@@ -30,6 +30,7 @@ pub fn do_raw() void {
         return;
     };
 
+    new_task.files = current_task.files.clone();
     new_task.clone_vm(current_task) catch @panic("todo errno");
     new_task.ucontext = current_task.ucontext;
 

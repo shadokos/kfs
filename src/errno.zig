@@ -82,6 +82,9 @@ pub const Errno = error{
     ETXTBSY,
     EWOULDBLOCK,
     EXDEV,
+
+    // non-POSIX
+    ENOTBLK,
 };
 
 pub fn is_in_set(e: anytype, comptime s: type) bool {
@@ -192,5 +195,12 @@ pub fn error_num(e: Errno) usize {
         Errno.ETIMEDOUT => 110,
         Errno.ETXTBSY => 26,
         Errno.EXDEV => 18,
+
+        // non-POSIX
+        Errno.ENOTBLK => 15,
     };
+}
+
+pub fn strerror(err: Errno) []const u8 {
+    return @errorName(err);
 }
