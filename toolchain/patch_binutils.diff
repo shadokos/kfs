@@ -1,0 +1,58 @@
+diff --color -ru a/bfd/config.bfd b/bfd/config.bfd
+--- a/bfd/config.bfd	2026-09-08 15:32:58.616529003 +0200
++++ b/bfd/config.bfd	2026-09-08 15:32:38.928661634 +0200
+@@ -596,7 +596,7 @@
+ 	targ_cflags=-DOLD_FREEBSD_ABI_LABEL ;;
+     esac
+     ;;
+-  i[3-7]86-*-linux-*)
++  i[3-7]86-*-linux-* | i[3-7]86-*-shadokos*)
+     targ_defvec=i386_elf32_vec
+     targ_selvecs="i386_pei_vec"
+     targ64_selvecs="x86_64_elf64_vec x86_64_elf32_vec x86_64_pe_vec x86_64_pei_vec"
+diff --color -ru a/config.sub b/config.sub
+--- a/config.sub	2026-09-08 15:32:58.592530419 +0200
++++ b/config.sub	2026-09-08 15:32:38.959659901 +0200
+@@ -2110,6 +2110,7 @@
+ 	| sei* \
+ 	| serenity* \
+ 	| sim* \
++        | shadokos* \
+ 	| skyos* \
+ 	| solaris* \
+ 	| solidbsd* \
+diff --color -ru a/gas/config.in b/gas/config.in
+--- a/gas/config.in	2026-09-08 15:32:58.980507533 +0200
++++ b/gas/config.in	2026-09-08 15:32:39.456632043 +0200
+@@ -219,7 +219,7 @@
+ #undef OBJ_MAYBE_ECOFF
+ 
+ /* ELF support? */
+-#undef OBJ_MAYBE_ELF
++#define OBJ_MAYBE_ELF yes
+ 
+ /* generic support? */
+ #undef OBJ_MAYBE_GENERIC
+diff --color -ru a/gas/configure.tgt b/gas/configure.tgt
+--- a/gas/configure.tgt	2026-09-08 15:32:59.003506176 +0200
++++ b/gas/configure.tgt	2026-09-08 15:32:39.527628062 +0200
+@@ -237,6 +237,7 @@
+   i386-*-knetbsd*-gnu | \
+   i386-*-netbsd* | \
+   i386-*-openbsd*)			fmt=elf em=nbsd ;;
++  i386-*-shadokos*)			fmt=elf em=linux ;;
+   i386-*-linux-*)			fmt=elf em=linux
+     case ${cpu}-${os} in
+       x86_64*-linux-gnux32)		arch=x86_64:32 ;;
+diff --color -ru a/ld/configure.tgt b/ld/configure.tgt
+--- a/ld/configure.tgt	2026-09-08 15:32:58.623528590 +0200
++++ b/ld/configure.tgt	2026-09-08 15:32:38.960659846 +0200
+@@ -357,6 +357,7 @@
+ i[3-7]86-*-bsdi*)	targ_emul=i386bsd
+ 			targ_extra_ofiles=
+ 			;;
++i[3-7]86-*-shadokos*)	targ_emul=elf_i386 ;;
+ i[3-7]86-*-linux-*)	targ_emul=elf_i386
+ 			targ64_extra_libpath="elf_x86_64 elf32_x86_64"
+ 			;;
+
