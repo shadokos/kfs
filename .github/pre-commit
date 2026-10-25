@@ -1,4 +1,4 @@
-#!/usr/bin/sh
+#!/bin/sh
 
 # Get the list of added or modified files
 # --cached: only check staged changes

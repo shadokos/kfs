@@ -66,4 +66,4 @@ fclean: clean
 
 .PHONY: format
 format:
-	ZIG="$(ZIG)" .github/pre-commit
+	ZIG="$(ZIG)" ../.github/pre-commit

@@ -13,12 +13,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
       - name: Check Format
-        run: make BOOTLOADER=limine format
+        run: make -C kernel BOOTLOADER=limine format
       - name: Build Kernel (DEBUG)
-        run: make BOOTLOADER=limine debug
+        run: make -C kernel BOOTLOADER=limine debug
       - name: Build Kernel (RELEASE SMALL)
-        run: make BOOTLOADER=limine small
+        run: make -C kernel BOOTLOADER=limine small
       - name: Build Kernel (RELEASE SAFE)
-        run: make BOOTLOADER=limine release
+        run: make -C kernel BOOTLOADER=limine release
       - name: Build Kernel (RELEASE FAST)
-        run: make BOOTLOADER=limine fast
+        run: make -C kernel BOOTLOADER=limine fast
