@@ -53,6 +53,6 @@ pub fn build_executable(context: *BuildContext) *Step.InstallArtifact {
     kernel.entry = .{ .symbol_name = "_entry" };
 
     return context.builder.addInstallArtifact(kernel, .{
-        .dest_dir = .{ .override = .{ .custom = "iso/boot/bin" } },
+        .dest_dir = .{ .override = .{ .custom = "esp" } },
     });
 }

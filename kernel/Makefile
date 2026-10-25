@@ -4,7 +4,7 @@ BOOTLOADER ?= $(shell echo $$(ls ".bootloader-"* 2>/dev/null || echo limine) | c
 # get the last optimize option
 OPTIMIZE ?= $(shell echo $$(ls ".optimize-"* 2>/dev/null || echo ReleaseSafe) | cut -d'-' -f2)
 
-BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER)
+BUILD_ARGS ?= --summary all --verbose -Dbootloader=$(BOOTLOADER) esp
 QEMU_BOOT_DRIVE ?= -hda kfs.iso
 QEMU_DRIVE ?=
 
@@ -66,4 +66,4 @@ fclean: clean
 
 .PHONY: format
 format:
-	ZIG="$(ZIG)" .github/pre-commit
+	ZIG="$(ZIG)" ../.github/pre-commit

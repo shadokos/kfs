@@ -1,7 +1,7 @@
 CI ?= false
 
 ifeq ($(CI),true)
-    BUILD_ARGS := -Dci=true -Diso_dir=./CI/iso $(BUILD_ARGS)
+    BUILD_ARGS := -Dci=true -Desp_dir=./CI/esp $(BUILD_ARGS)
 endif
 
 .PHONY: ci

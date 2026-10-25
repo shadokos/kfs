@@ -6,9 +6,9 @@ const addDirectoryDependency = @import("../Step/DirectoryDependency.zig").addDir
 
 pub fn install_iso_folder(context: *BuildContext) *Step.InstallDir {
     return context.builder.addInstallDirectory(.{
-        .source_dir = .{ .cwd_relative = context.iso_source_dir },
+        .source_dir = .{ .cwd_relative = context.esp_source_dir },
         .install_dir = .prefix,
-        .install_subdir = "iso",
+        .install_subdir = "esp",
     });
 }
 
@@ -25,7 +25,7 @@ pub fn build_disk_image(context: *BuildContext, kernel: *Step.InstallArtifact) *
 
     const directory_step = addDirectoryDependency(
         grub,
-        .{ .cwd_relative = context.iso_source_dir },
+        .{ .cwd_relative = context.esp_source_dir },
     );
 
     directory_step.step.dependOn(&install_iso_folder(context).step);
