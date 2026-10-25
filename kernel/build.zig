@@ -5,7 +5,7 @@ const Builder = @import("std").Build;
 pub const BuildContext = struct {
     builder: *Builder,
     optimize: std.builtin.OptimizeMode = undefined,
-    iso_source_dir: []const u8 = undefined,
+    esp_source_dir: []const u8 = undefined,
     name: []const u8 = undefined,
     bootloader: enum { grub, limine } = .grub,
     posix: bool = false,
@@ -15,11 +15,11 @@ pub const BuildContext = struct {
 pub fn build(b: *Builder) !void {
     var context = BuildContext{ .builder = b };
 
-    context.iso_source_dir = b.option(
+    context.esp_source_dir = b.option(
         []const u8,
-        "iso_dir",
-        "Specify the iso directory source",
-    ) orelse "iso";
+        "esp_dir",
+        "Specify the esp directory source",
+    ) orelse "esp";
 
     context.name = b.option(
         []const u8,
@@ -52,10 +52,12 @@ pub fn build(b: *Builder) !void {
     const uninstall_syscall_table = @import("build/syscall_table.zig").uninstall_syscall_table_step(&context);
     _ = @import("build/qemu.zig").add_step_run(&context, install_disk_image);
 
+    const esp_step = b.step("esp", "Generate the esp image");
+
     // Dependencies
     kernel.step.dependOn(&themes.step);
     kernel.step.dependOn(syscall_table);
-    b.getInstallStep().dependOn(&install_disk_image.step);
+    esp_step.dependOn(&install_disk_image.step);
     b.getUninstallStep().dependOn(uninstall_themes);
     b.getUninstallStep().dependOn(uninstall_syscall_table);
 }

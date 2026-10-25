@@ -33,35 +33,35 @@ pub fn install_iso_folder(context: *BuildContext) *Step.InstallDir {
     const limine_install = install(context);
 
     const install_iso = context.builder.addInstallDirectory(.{
-        .source_dir = .{ .cwd_relative = context.iso_source_dir },
+        .source_dir = .{ .cwd_relative = context.esp_source_dir },
         .install_dir = .prefix,
-        .install_subdir = "iso",
+        .install_subdir = "esp",
     });
 
     const limine_bios_sys: *Step.InstallFile = context.builder.addInstallFileWithDir(
         .{ .cwd_relative = "limine/limine-bios.sys" },
-        .{ .custom = "iso/boot/" },
+        .{ .custom = "esp" },
         "limine-bios.sys",
     );
     limine_bios_sys.step.dependOn(&limine_install.step);
 
     const limine_bios_cd: *Step.InstallFile = context.builder.addInstallFileWithDir(
         .{ .cwd_relative = "limine/limine-bios-cd.bin" },
-        .{ .custom = "iso/boot/" },
+        .{ .custom = "esp/" },
         "limine-bios-cd.bin",
     );
     limine_bios_cd.step.dependOn(&limine_install.step);
 
     const limine_uefi_cd: *Step.InstallFile = context.builder.addInstallFileWithDir(
         .{ .cwd_relative = "limine/limine-uefi-cd.bin" },
-        .{ .custom = "iso/boot/" },
+        .{ .custom = "esp/" },
         "limine-uefi-cd.bin",
     );
     limine_uefi_cd.step.dependOn(&limine_install.step);
 
     const limine_bootia32: *Step.InstallFile = context.builder.addInstallFileWithDir(
         .{ .cwd_relative = "limine/BOOTIA32.EFI" },
-        .{ .custom = "iso/boot/" },
+        .{ .custom = "esp/" },
         "EFI/Boot/BOOTIA32.EFI",
     );
     limine_bootia32.step.dependOn(&limine_install.step);
@@ -75,7 +75,7 @@ pub fn install_iso_folder(context: *BuildContext) *Step.InstallDir {
 }
 
 pub fn build_disk_image(context: *BuildContext, install_kernel: *Step.InstallArtifact) *Step.InstallFile {
-    const install_iso_path = context.builder.pathResolve(&.{ context.builder.install_prefix, "iso" });
+    const install_iso_path = context.builder.pathResolve(&.{ context.builder.install_prefix, "esp" });
 
     const xorriso = context.builder.addSystemCommand(&.{
         "xorriso",
@@ -85,7 +85,7 @@ pub fn build_disk_image(context: *BuildContext, install_kernel: *Step.InstallArt
         "-r",
         "-J",
         "-b",
-        "boot/limine-bios-cd.bin",
+        "limine-bios-cd.bin",
         "-no-emul-boot",
         "-boot-load-size",
         "4",
@@ -94,7 +94,7 @@ pub fn build_disk_image(context: *BuildContext, install_kernel: *Step.InstallArt
         "-apm-block-size",
         "2048",
         "--efi-boot",
-        "boot/limine-uefi-cd.bin",
+        "limine-uefi-cd.bin",
         "-efi-boot-part",
         "--efi-boot-image",
         "--protective-msdos-label",
