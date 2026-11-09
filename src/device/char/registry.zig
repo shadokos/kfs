@@ -25,7 +25,7 @@ fn compare(a: *CharDevice, b: *CharDevice) std.math.Order {
     return std.math.order(a.devt.toInt(), b.devt.toInt());
 }
 
-var devices = Treap{};
+pub var devices = Treap{};
 
 // Major number registration
 
@@ -119,8 +119,8 @@ pub fn show_lschar(writer: std.io.AnyWriter, filter: ?[]const u8) void {
         const driver_name = majors[dev.devt.major] orelse "???";
 
         var ops_buf: [3]u8 = .{ '-', '-', '-' };
-        if (dev.ops.read != null) ops_buf[0] = 'R';
-        if (dev.ops.write != null) ops_buf[1] = 'W';
+        // if (dev.ops.read != null) ops_buf[0] = 'R';
+        // if (dev.ops.write != null) ops_buf[1] = 'W';
         if (dev.ops.ioctl != null) ops_buf[2] = 'I';
 
         _ = writer.print(

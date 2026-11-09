@@ -1,4 +1,5 @@
 const std = @import("std");
+const File = @import("../../fs/file.zig");
 
 const CharDevice = @import("cdev.zig");
 
@@ -22,10 +23,10 @@ pub const CharError = error{
 /// Every function receives the `CharDevice` itself. Drivers that need their own
 /// state should embed the CharDevice in their struct and use `@fieldParentPtr`.
 pub const Operations = struct {
-    open: ?*const fn (dev: *CharDevice) CharError!void = null,
+    open: ?*const fn (dev: *CharDevice, file: *File) CharError!void = null,
     release: ?*const fn (dev: *CharDevice) void = null,
-    read: ?*const fn (dev: *CharDevice, buffer: []u8) CharError!usize = null,
-    write: ?*const fn (dev: *CharDevice, data: []const u8) CharError!usize = null,
+    // read: ?*const fn (dev: *CharDevice, buffer: []u8) CharError!usize = null,
+    // write: ?*const fn (dev: *CharDevice, data: []const u8) CharError!usize = null,
     ioctl: ?*const fn (dev: *CharDevice, cmd: u32, arg: usize) CharError!usize = null,
     destroy: ?*const fn (dev: *CharDevice) void = null,
 };

@@ -33,6 +33,7 @@ pub const header_type = get_header_type(
         multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_OLD,
         multiboot2_h.MULTIBOOT_TAG_TYPE_ACPI_NEW,
         multiboot2_h.MULTIBOOT_TAG_TYPE_ELF_SECTIONS,
+        multiboot2_h.MULTIBOOT_TAG_TYPE_CMDLINE,
     })[0..],
 );
 
@@ -140,10 +141,10 @@ pub fn get_tag_type(comptime n: comptime_int) type {
         extern struct { // MULTIBOOT_TAG_TYPE_END
         },
         extern struct { // MULTIBOOT_TAG_TYPE_CMDLINE
-            first_char: u8,
+            str: [0:0]u8,
         },
         extern struct { // MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME
-            first_char: u8,
+            str: [0:0]u8,
         },
         extern struct { // MULTIBOOT_TAG_TYPE_MODULE
             mod_start: u32,
